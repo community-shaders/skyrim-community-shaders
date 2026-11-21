@@ -40,7 +40,7 @@ namespace ExponentialHeightFog
 
 	float GetVolumetricEndDistance()
 	{
-		return max(GetVolumetricStartDistance() + 1.0f, SharedData::exponentialHeightFogSettings.volumetricFogDistance);
+		return max(GetVolumetricStartDistance() + 1.0f, SharedData::viewAtmosphereSettings.localRange);
 	}
 
 	float GetVolumetricNearPlane()
@@ -60,7 +60,7 @@ namespace ExponentialHeightFog
 	{
 		const float nearPlane = GetVolumetricNearPlane();
 		return min(
-			max(max(SharedData::exponentialHeightFogSettings.volumetricNearGridDistance, 0.0f), nearPlane + 1.0f),
+			max(max(SharedData::viewAtmosphereSettings.nearRange, 0.0f), nearPlane + 1.0f),
 			GetVolumetricTotalFarPlane());
 	}
 
@@ -69,18 +69,29 @@ namespace ExponentialHeightFog
 #if defined(EXP_HEIGHT_FOG_GRID_SIZE_Z)
 		return clamp(float(EXP_HEIGHT_FOG_GRID_SIZE_Z), 16.0f, 160.0f);
 #else
-		return clamp(float(SharedData::exponentialHeightFogSettings.volumetricGridSizeZ), 16.0f, 160.0f);
+		return clamp(float(SharedData::viewAtmosphereSettings.nearSlices), 16.0f, 160.0f);
 #endif
 	}
 
 	float GetVolumetricFarGridSizeZ()
 	{
-		return clamp(float(SharedData::exponentialHeightFogSettings.volumetricFarGridSizeZ), 16.0f, 160.0f);
+		return clamp(float(SharedData::viewAtmosphereSettings.middleSlices), 16.0f, 160.0f);
 	}
 
 	float GetVolumetricDepthDistributionScale()
 	{
-		return max(SharedData::exponentialHeightFogSettings.volumetricDepthDistributionScale, GetVolumetricGridSizeZ() / 120.0f);
+		return max(SharedData::viewAtmosphereSettings.depthDistribution, GetVolumetricGridSizeZ() / 120.0f);
+	}
+
+	/** @brief Exponential slice distribution over [nearPlane, farPlane]; mirrors computeGridZParams in ExponentialHeightFog.cpp. */
+	float3 ComputeGridZParams(float nearPlane, float farPlane, float gridSizeZ, float depthDistributionScale)
+	{
+		// The offset must stay inside the slab: a fog start at or past Near Grid End leaves a 1-unit near slab.
+		const float nearWithOffset = nearPlane + min(0.095f * 100.0f, 0.5f * (farPlane - nearPlane));
+		const float farExp = exp2(min(gridSizeZ / depthDistributionScale, 120.0f));
+		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
+		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
+		return float3(gridZScale, gridZOffset, depthDistributionScale);
 	}
 
 	float3 GetVolumetricGridZParams(float gridSizeZ)
@@ -91,11 +102,7 @@ namespace ExponentialHeightFog
 		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
 		const float nearPlane = GetVolumetricNearPlane();
 		const float farPlane = max(GetVolumetricNearGridEndDistance(), nearPlane + 1.0f);
-		const float nearWithOffset = nearPlane + 0.095f * 100.0f;
-		const float farExp = exp2(min(gridSizeZ / GetVolumetricDepthDistributionScale(), 120.0f));
-		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
-		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
-		return float3(gridZScale, gridZOffset, GetVolumetricDepthDistributionScale());
+		return ComputeGridZParams(nearPlane, farPlane, gridSizeZ, GetVolumetricDepthDistributionScale());
 #endif
 	}
 
@@ -110,12 +117,7 @@ namespace ExponentialHeightFog
 		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
 		const float nearPlane = max(GetVolumetricNearGridEndDistance(), GetVolumetricNearPlane() + 1.0f);
 		const float farPlane = max(nearPlane + 1.0f, GetVolumetricTotalFarPlane());
-		const float nearWithOffset = nearPlane + 0.095f * 100.0f;
-		const float depthDistributionScale = max(SharedData::exponentialHeightFogSettings.volumetricDepthDistributionScale, gridSizeZ / 120.0f);
-		const float farExp = exp2(min(gridSizeZ / depthDistributionScale, 120.0f));
-		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
-		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
-		return float3(gridZScale, gridZOffset, depthDistributionScale);
+		return ComputeGridZParams(nearPlane, farPlane, gridSizeZ, max(SharedData::viewAtmosphereSettings.depthDistribution, gridSizeZ / 120.0f));
 	}
 
 	float ComputeVolumetricSliceDepth(float slice)
@@ -210,6 +212,109 @@ namespace ExponentialHeightFog
 			(fogDensity * exp2(-exponent) + fogDensity2 * exp2(-exponent2)) *
 			EvaluateHeightFogNoiseModulation(positionWS, cameraWS);
 		return max(localDensity * SharedData::exponentialHeightFogSettings.volumetricFogExtinctionScale * 0.5f, 0.0f);
+	}
+
+	/** @brief Per-layer height density integral; both fog layers are evaluated together so FXC emits one copy. */
+	float2 HeightDensityIntegral(float2 startHeight, float2 endHeight, float2 heightFalloff)
+	{
+		const float2 lower = min(startHeight, endHeight);
+		const float2 upper = max(startHeight, endHeight);
+		const float2 belowFraction = upper <= 0.0 ? 1.0 : saturate(-lower / max(upper - lower, 1e-6));
+		const float2 falloff = heightFalloff * (max(upper, 0.0) - max(lower, 0.0));
+		const float2 integral = falloff > 0.01 ? (1.0 - exp2(-falloff)) / max(falloff, 1e-6) :
+		                                         0.69314718056 - 0.24022650695 * falloff;
+		return lerp(exp2(-heightFalloff * max(lower, 0.0)) * integral, 0.69314718056, belowFraction);
+	}
+
+	float HeightFogVerticalOpticalDepth(float height, float baseHeight, float falloff, float density)
+	{
+		if (density <= 0.0f)
+			return 0.0f;
+		const float slope = falloff * 0.001f * 0.69314718056f;
+		return density * 0.001f * (max(baseHeight - height, 0.0f) + exp(-slope * max(height - baseHeight, 0.0f)) / slope);
+	}
+
+	float HeightFogScaledErfc(float x)
+	{
+		if (x >= 4.0f) {
+			const float q = rcp(x * x);
+			return 0.56418958355f / x * (1.0f + q * (-0.5f + q * (0.75f + q * (-1.875f + q * 6.5625f))));
+		}
+		const float t = rcp(1.0f + 0.3275911f * x);
+		return t * (0.254829592f + t * (-0.284496736f + t * (1.421413741f + t * (-1.453152027f + t * 1.061405429f))));
+	}
+
+	float HeightFogCurvedOpticalDepth(float height, float baseHeight, float falloff, float density, float cosine, float radius)
+	{
+		if (density <= 0.0f)
+			return 0.0f;
+		if (falloff <= 0.0f)
+			return 1e20f;
+		const float slope = falloff * 0.001f * 0.69314718056f;
+		const float curvature = max(1.0f - cosine * cosine, 0.0f) / (2.0f * radius);
+		if (curvature <= 1e-12f * slope)
+			return cosine > 0.0f ? HeightFogVerticalOpticalDepth(height, baseHeight, falloff, density) / cosine : 1e20f;
+
+		// The tangent expansion makes the exponential height integral Gaussian.
+		const float root = sqrt(slope * curvature);
+		const float x = cosine * slope / (2.0f * root);
+		const float factor = 0.88622692545f / root;
+		const float startTail = exp(-slope * max(height - baseHeight, 0.0f)) * HeightFogScaledErfc(abs(x)) * factor;
+		float column;
+		if (cosine >= 0.0f && height >= baseHeight) {
+			column = startTail;
+		} else {
+			const float minimumHeight = height - cosine * cosine / (4.0f * curvature);
+			if (minimumHeight >= baseHeight) {
+				column = 2.0f * factor * exp(-slope * (minimumHeight - baseHeight)) - startTail;
+			} else {
+				const float edge = sqrt(slope * (baseHeight - minimumHeight));
+				const float tail = factor * HeightFogScaledErfc(edge);
+				if (height <= baseHeight) {
+					const float exitCosine = sqrt(cosine * cosine + 4.0f * curvature * (baseHeight - height));
+					const float flatDistance = cosine >= 0.0f ?
+					                               2.0f * (baseHeight - height) / max(exitCosine + cosine, 1e-20f) :
+					                               (exitCosine - cosine) / (2.0f * curvature);
+					column = flatDistance + tail;
+				} else {
+					column = 2.0f * (tail + edge / root) - startTail;
+				}
+			}
+		}
+		return density * 0.001f * max(column, 0.0f);
+	}
+
+	float EvaluateHeightFogLightTransmittance(float3 positionWS, float3 cameraWS, float3 lightDirection)
+	{
+		const SharedData::ExponentialHeightFogSettings fog = SharedData::exponentialHeightFogSettings;
+		const float scale = fog.volumetricFogEnabled ? fog.volumetricFogExtinctionScale * 0.5f : 0.48045301392f;
+		if (scale <= 0.0f || fog.sunlightAttenuationAmount <= 0.0f || max(fog.fogDensity, fog.fogDensity2) <= 0.0f)
+			return 1.0f;
+		float height = positionWS.z + cameraWS.z;
+		float cosine = lightDirection.z;
+		float radius = 6371000.0f / 0.01428f;
+#if defined(PHYSICAL_SKY)
+		const bool physicalSky = SharedData::physSkyData.enabled != 0u;
+		const float groundHeight = physicalSky ? SharedData::physSkyData.zBottom : 0.0f;
+		const float planetRadius = physicalSky ? SharedData::physSkyData.rPlanet : radius;
+#else
+		const float groundHeight = 0.0f;
+		const float planetRadius = radius;
+#endif
+		const float tangentHeight = height - groundHeight;
+		const float verticalRadius = planetRadius + tangentHeight;
+		const float3 planetPosition = float3(positionWS.xy, verticalRadius);
+		radius = length(planetPosition);
+		const float radialHeight = tangentHeight + dot(positionWS.xy, positionWS.xy) / max(radius + verticalRadius, 1.0f);
+		height = groundHeight + radialHeight;
+		cosine = clamp(dot(planetPosition, lightDirection) / max(radius, 1.0f), -1.0f, 1.0f);
+		const float horizonSquared = max(radialHeight * (2.0f * planetRadius + radialHeight), 0.0f);
+		if (cosine < 0.0f && radius * radius * cosine * cosine >= horizonSquared)
+			return 1.0f - saturate(fog.sunlightAttenuationAmount);
+		const float opticalDepth = HeightFogCurvedOpticalDepth(height, fog.fogHeight, fog.fogHeightFalloff, fog.fogDensity, cosine, radius) +
+		                           HeightFogCurvedOpticalDepth(height, fog.fogHeight2, fog.fogHeightFalloff2, fog.fogDensity2, cosine, radius);
+		const float transmittance = exp(-min(scale * opticalDepth, 80.0f));
+		return lerp(1.0f, transmittance, saturate(fog.sunlightAttenuationAmount));
 	}
 }
 

@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 /// Bloom/Flare/Glare/Exposure Composite pass
 /// Combines bloom, lens flare, physical glare, and auto exposure results with the main color texture.
 /// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
@@ -9,7 +10,26 @@
 
 #include "Common/Color.hlsli"
 
+#ifdef COMPOSITE_APPLY_LUT
+#	include "PostProcessing/ColorGrading/Apply.hlsli"
+#elif defined(COMPOSITE_CONVERT_OUTPUT)
+#	include "PostProcessing/ConvertColor.hlsli"
+cbuffer CopyConstants : register(b0)
+{
+	uint InputGamut;
+	uint OutputGamut;
+	float OutputGamma;
+	float OutputScale;
+};
+#endif
+
 Texture2D<float4> TexColor : register(t0);
+#ifdef HAS_PHYSICAL_LENS
+Texture2DArray<float> TexPhysicalFlare : register(t8);
+Texture2DArray<float4> TexPhysicalLens : register(t9);
+#	include "PostProcessing/PhysicalLensImaging/diffraction_composite.hlsli"
+#	include "PostProcessing/PhysicalLensImaging/mapping.hlsli"
+#endif
 
 #ifdef HAS_BLOOM
 Texture2D<float4> TexBloom : register(t1);
@@ -72,11 +92,11 @@ float RemapBaseContrast(float centeredBase)
 	return isHighlight ? remappedMagnitude : -remappedMagnitude;
 }
 
-float ComputeLocalExposure(float3 sceneColor, float baseLogLuminance, float globalExposure, float middleGreyCompensation)
+float ComputeLocalExposure(float3 sceneColor, float baseLogLuminance, float globalExposure, float exposedMiddleGrey)
 {
-	float logGlobalExposure = log2(max(globalExposure, 1e-5));
+	float logGlobalExposure = log2(max(globalExposure, FLT_MIN));
 	float exposedBase = baseLogLuminance + logGlobalExposure;
-	float middleGrey = log2(0.18 * middleGreyCompensation) + MiddleGreyBias;
+	float middleGrey = log2(exposedMiddleGrey) + MiddleGreyBias;
 	float centeredBase = exposedBase - middleGrey;
 	float logAdjustment = RemapBaseContrast(centeredBase) - centeredBase;
 
@@ -101,8 +121,9 @@ cbuffer AutoExposureCB : register(b1)
 	float PurkinjeStartEV;
 	float PurkinjeMaxEV;
 	float PurkinjeStrength;
+	float ExposureTarget;
 
-	float pad[3];
+	float2 pad;
 };
 
 // ==================== Purkinje Effect ====================
@@ -182,7 +203,12 @@ cbuffer CompositeCB : register(b3)
 	float FlareIntensity;
 	float BloomRadius;
 	float BloomIntensity;
+#ifdef HAS_PHYSICAL_LENS
+	float HasPhysicalFlare;
+	float HasPhysicalLens;
+#else
 	float2 CompositePadding;
+#endif
 };
 
 #ifdef HAS_BLOOM
@@ -196,7 +222,6 @@ float3 SampleBloom(float2 uv, float2 pixelSize)
 }
 #endif
 
-#ifdef HAS_LENS_FLARE
 float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
 {
 	float2 samplePos = uv * texSize;
@@ -228,6 +253,23 @@ float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 
 	return max(result, 0.0);
 }
 
+#ifdef HAS_PHYSICAL_LENS
+#	include "PostProcessing/PhysicalLensFlare/reconstruction.hlsli"
+float3 SamplePhysicalFlare(float2 uv, float2 texSize)
+{
+	// Include the filter halo, including partial tiles at odd render sizes.
+	int2 first = clamp(int2(floor((uv * texSize - 2) / 8)), 0, int2(ceil(texSize / 8)) - 1);
+	int2 last = clamp(int2(floor((uv * texSize + 2) / 8)), 0, int2(ceil(texSize / 8)) - 1);
+	uint width = (uint(texSize.x) + 7) / 8;
+	uint occupied = TexWaveTiles[first.y * width + first.x] | TexWaveTiles[first.y * width + last.x] |
+	                TexWaveTiles[last.y * width + first.x] | TexWaveTiles[last.y * width + last.x];
+	float3 result = 0;
+	[branch] if ((occupied & (1u << 17)) != 0) result = max(SamplePhysicalMip(TexPhysicalFlare, LinearSampler, uv, texSize, 0), 0);
+	return result;
+}
+#endif
+
+#ifdef HAS_LENS_FLARE
 float3 SampleFlare(uint2 tid)
 {
 	float2 uv = (float2(tid) + 0.5) / OutputSize;
@@ -264,17 +306,35 @@ float ResolveBaseLuminance(uint2 tid)
 
 #endif
 
-float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
+float4 PSComposite(FullscreenTriangleVSOutput input) :
+	SV_Target
 {
 	uint2 tid = uint2(input.Position.xy);
 
+#ifdef HAS_PHYSICAL_LENS
+	float2 sceneUV = input.TexCoord;
+	float3 sceneColor;
+	[branch] if (DiffractionEnabled > 0)
+		sceneColor = SamplePhysicalLensWave(TexColor, TexPhysicalLens, LinearSampler, input.TexCoord, sceneUV);
+	else if (HasPhysicalLens > 0)
+		sceneColor = SamplePhysicalLensImage(TexColor, TexPhysicalLens, LinearSampler, input.TexCoord, sceneUV);
+	else sceneColor = TexColor[tid].rgb;
+	uint2 sceneTid = min(uint2(saturate(sceneUV) * OutputSize), uint2(OutputSize) - 1);
+#else
 	float3 sceneColor = TexColor[tid].rgb;
+	uint2 sceneTid = tid;
+#endif
+	sceneColor = PreExposure::Decode(sceneColor);
 
 	// Accumulate bloom/flare/glare contributions (separate from scene)
 	float3 bloomContrib = 0;
 
 #ifdef HAS_BLOOM
+#	ifdef HAS_PHYSICAL_LENS
+	bloomContrib += SampleBloom(sceneUV, fwidth(input.TexCoord));
+#	else
 	bloomContrib += SampleBloom(input.TexCoord, fwidth(input.TexCoord));
+#	endif
 #endif
 
 #ifdef HAS_LENS_FLARE
@@ -285,16 +345,26 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 	bloomContrib += TexGlare[tid].rgb;
 #endif
 
+#ifdef HAS_PHYSICAL_LENS
+	[branch] if (HasPhysicalFlare > 0)
+	{
+		uint w, h, layers;
+		TexPhysicalFlare.GetDimensions(w, h, layers);
+		bloomContrib += SamplePhysicalFlare(input.TexCoord, float2(w, h));
+	}
+#endif
+	bloomContrib = PreExposure::Decode(bloomContrib);
+
 #ifdef HAS_EXPOSURE
 	// Compute global exposure value
 	float avgLuma = TexAdaptation[0];
-	float globalExposure = 0.18 * ExposureCompensation / clamp(avgLuma, AdaptationRange.x, AdaptationRange.y);
+	float globalExposure = ExposureTarget * ExposureCompensation / clamp(avgLuma, AdaptationRange.x, AdaptationRange.y);
 
 	// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
 	// LocalExposure multiplier derived from the base luminance pass (1.0 if not enabled)
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = ResolveBaseLuminance(tid);
-	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureCompensation);
+	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
+	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, globalExposure, ExposureTarget * ExposureCompensation);
 #	else
 	float localExposure = 1.0;
 #	endif
@@ -313,8 +383,8 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 #else
 	// No global exposure
 #	ifdef HAS_LOCAL_EXPOSURE
-	float baseLogLuminance = ResolveBaseLuminance(tid);
-	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 1.0);
+	float baseLogLuminance = ResolveBaseLuminance(sceneTid);
+	float localExposure = ComputeLocalExposure(sceneColor, baseLogLuminance, ManualExposure, 0.18);
 	float3 result = (sceneColor * localExposure + bloomContrib) * ManualExposure;
 #	else
 	// No exposure at all: simple additive composite
@@ -322,5 +392,11 @@ float4 PSComposite(FullscreenTriangleVSOutput input) : SV_Target
 #	endif
 #endif
 
+#ifdef COMPOSITE_APPLY_LUT
+	return ApplyGradeOutput(ApplyLUT(ApplyGameCinematic(result)));
+#elif defined(COMPOSITE_CONVERT_OUTPUT)
+	return ConvertColor(float4(result, 1), InputGamut, OutputGamut, OutputGamma, OutputScale);
+#else
 	return float4(result, 1);
+#endif
 }

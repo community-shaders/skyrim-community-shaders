@@ -39,21 +39,6 @@ namespace
 		return volumetricLighting;
 	}
 
-	/** @brief Angular half-size of a sky billboard as seen from the viewer, as tan(angle); a_fallback when it has no usable bound. */
-	float GetBillboardHalfTan(const RE::NiAVObject* a_billboard, const RE::NiPoint3& a_viewer, float a_fallback)
-	{
-		if (!a_billboard)
-			return a_fallback;
-
-		const auto& bound = a_billboard->worldBound;
-		const float distance = bound.center.GetDistance(a_viewer);
-		if (bound.radius <= 0.0f || distance <= bound.radius)
-			return a_fallback;
-
-		// The bound sphere encloses the square billboard, so its half-width is radius / sqrt(2)
-		return bound.radius * 0.70710678f / distance;
-	}
-
 	/** @brief Largest radiance the main render target can hold; the procedural sun is encoded below it for alpha blending. */
 	float GetMainTargetRadianceLimit()
 	{
@@ -299,11 +284,11 @@ void Effects11::UpdateSkyScattering(PerFrame& a_data)
 	if (sky && sky->root) {
 		const auto& viewer = sky->root->world.translate;
 		if (sky->sun && sky->sun->sunBase)
-			a_data.SunBillboardTan = GetBillboardHalfTan(sky->sun->sunBase.get(), viewer, a_data.SunBillboardTan);
+			a_data.SunBillboardTan = Util::GetBillboardHalfTan(sky->sun->sunBase.get(), viewer, a_data.SunBillboardTan);
 		if (sky->masser && sky->masser->moonMesh)
-			a_data.MasserBillboardTan = GetBillboardHalfTan(sky->masser->moonMesh.get(), viewer, 0.0f);
+			a_data.MasserBillboardTan = Util::GetBillboardHalfTan(sky->masser->moonMesh.get(), viewer, 0.0f);
 		if (sky->secunda && sky->secunda->moonMesh)
-			a_data.SecundaBillboardTan = GetBillboardHalfTan(sky->secunda->moonMesh.get(), viewer, 0.0f);
+			a_data.SecundaBillboardTan = Util::GetBillboardHalfTan(sky->secunda->moonMesh.get(), viewer, 0.0f);
 	}
 }
 
@@ -501,20 +486,28 @@ void Effects11::SetupResources()
 void Effects11::PostSetupResources()
 {
 	resourcesReady = true;
-	Reset();
+	// No shader has compiled against presetActive yet, so boot skips the Reload and its wait on queued compiles.
+	SyncPresetActive(false);
 }
 
 void Effects11::Reset()
 {
-	if (!resourcesReady)
-		return;
+	if (resourcesReady)
+		SyncPresetActive(true);
+}
+
+void Effects11::SyncPresetActive(bool a_reloadShaders)
+{
 	PostProcessingMode::ApplyPending();
 	const bool enabled = IsPresetEnabled();
 	if (enabled != presetActive) {
 		// UseEffect can also turn on from an ini reload or preset switch; Post Processing must still yield.
 		if (enabled)
 			PostProcessingMode::Set(PostProcessingMode::Mode::Effects11);
-		globals::shaderCache->Reload([this, enabled] { presetActive = enabled; });
+		if (a_reloadShaders)
+			globals::shaderCache->Reload([this, enabled] { presetActive = enabled; });
+		else
+			presetActive = enabled;
 	} else if (!enabled && IsUseEffectEnabled() && EffectManager::GetSingleton().IsInitialized()) {
 		// UseEffect with no compiled preset has nothing to run, so fall back to the game's own post processing.
 		PostProcessingMode::Set(PostProcessingMode::Mode::Vanilla);

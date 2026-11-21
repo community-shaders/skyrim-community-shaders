@@ -11,82 +11,20 @@
 
 #define SNOWDEF_SETTINGS_FIELDS(X) \
 	X(EnableSnowDeformation)       \
-	X(SlumpRate)                   \
 	X(RefillRateMultiplier)        \
-	X(RefillOnlyWhenSnowing)       \
 	X(EnableSnowAccumulation)      \
-	X(AccumulationPeak)            \
-	X(AccumulationHours)           \
-	X(AccumulationMeltHours)       \
-	X(AccumulationFadeDays)        \
-	X(MeltPersistence)             \
-	X(MeltBowlFloor)               \
-	X(MeltEdgeIrregularity)        \
-	X(CrustPrintDepth)             \
-	X(CrustBreakRadius)            \
-	X(CrustThawMinutes)            \
-	X(CrustBreakOnCarve)           \
-	X(NoCarveFloatingActors)       \
-	X(FloatingActorBand)           \
-	X(IncorporealMode)             \
-	X(ShoutMarkWaist)              \
-	X(ShoutMarkRoundness)          \
-	X(ShoutMarkFadeStart)          \
-	X(ShoutMarkFarDepth)           \
-	X(ShoutChurn)                  \
-	X(ShoutStreakSize)             \
-	X(ShoutStreakLength)           \
-	X(SnowClassDepths)             \
 	X(TextureDepths)               \
-	X(ObjectRasterReachM)          \
 	X(SnowTexturePath)             \
-	X(SnowPBRConfig)               \
-	X(TrampleZoneScale)            \
-	X(TrampleZoneHeight)           \
-	X(UndulationStrength)          \
-	X(UndulationSpacing)           \
-	X(Tessellation)                \
 	X(ParallaxShadowStrength)      \
 	X(ParallaxDepth)               \
-	X(BermHeight)                  \
-	X(BermSteepness)               \
 	X(SnowResistance)              \
-	X(FreshSnowSoftness)           \
-	X(SnowClimateStrength)         \
-	X(TrackAgeing)                 \
-	X(TrampledFlattening)          \
-	X(RimLip)                      \
-	X(RimTeeth)                    \
-	X(TrenchDetailRelief)          \
-	X(TrenchDetailRoughness)       \
-	X(TrenchDetailCoverage)        \
-	X(ImpactReach)                 \
-	X(SpeedSpoil)                  \
-	X(SpeedSpoilSize)              \
 	X(ShellHorizonMarch)           \
 	X(SnowGlints)                  \
 	X(SnowScreenSpaceShadows)      \
 	X(SnowCastsShadows)            \
-	X(CameraAboveSnow)             \
 	X(DeformMapResolution)         \
-	X(VRAMAwareTrenchMap)          \
 	X(RangeTrenchesM)              \
-	X(RangeActorTrenchesM)         \
-	X(SlopeDrape)                  \
-	X(CityShells)                  \
-	X(LODSnowSensitivity)          \
-	X(HorizonSnow)                 \
-	X(ProjSnowMatch)               \
-	X(SeasonsSnowMaxAngle)         \
-	X(MultipassSnowFollowsPaint)   \
-	X(ShelterMaxHeight)            \
-	X(ShelterDriftAngle)           \
-	X(LODObjectSnow)               \
-	X(SnowTexturedRecolor)         \
-	X(ProjSnowNormals)             \
-	X(UnprojectedShapesBare)       \
-	X(SnowFollowsParallax)         \
-	X(FlattenParallaxUnderSnow)
+	X(RangeActorTrenchesM)
 
 void to_json(nlohmann::json& j, const SnowDeformation::Settings& s)
 {
@@ -132,11 +70,11 @@ void SnowDeformation::CreateDeformationTextures()
 		deformationTextures[i] = nullptr;
 	}
 
-	deformationTextures[0] = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16G16B16A16_FLOAT, "SnowDeformation::DeformationMap");
-	deformationTextures[1] = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16G16_FLOAT, "SnowDeformation::EvolveScratch");
+	deformationTextures[0] = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16G16_FLOAT, "SnowDeformation::DeformationMap");
+	deformationTextures[1] = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16_FLOAT, "SnowDeformation::EvolveScratch");
 
 	delete bermFieldTexture;
-	bermFieldTexture = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16G16B16A16_FLOAT, "SnowDeformation::BermField");
+	bermFieldTexture = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16G16_FLOAT, "SnowDeformation::BermField");
 
 	{
 		delete passStateTexture;
@@ -149,11 +87,6 @@ void SnowDeformation::CreateDeformationTextures()
 	delete bodyReachTexture;
 	bodyReachTexture = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R8_UNORM, "SnowDeformation::BodyReach");
 	globals::d3d::context->ClearUnorderedAccessViewFloat(bodyReachTexture->uav.get(), zero);
-
-	delete trackClockTexture;
-	trackClockTexture = SD_MakeTexture2D(deformMapDim, deformMapDim, DXGI_FORMAT_R16_FLOAT, "SnowDeformation::TrackClock");
-	globals::d3d::context->ClearUnorderedAccessViewFloat(trackClockTexture->uav.get(), zero);
-	snowClimate.ageingRebase = 0.0f;
 
 	{
 		auto device = globals::d3d::device;
@@ -453,26 +386,16 @@ SnowDeformation::SettingsGPU SnowDeformation::GetCommonBufferData(bool a_inWorld
 	EnsureShellSnowTextures();
 	data.LODReplaceStart = 0.0f;
 	data.LODReplaceFadeInv = 1.0f / 2048.0f;
-	data.LODSnowSensitivity = std::clamp(settings.LODSnowSensitivity, 0.0f, 1.0f);
 	data.SnowIsLinear = shellSnowTextureIsPBR ? 1.0f : 0.0f;
 	data.SnowRoughnessScale = snowRoughnessScale;
-	data.LODReplaceEnable = (settings.EnableSnowDeformation && settings.HorizonSnow && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
+	data.LODReplaceEnable = (settings.EnableSnowDeformation && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
 	data.SnowHasNormal = shellSnowNormalSRV ? 1.0f : 0.0f;
-	data.ProjSnowEnable = (settings.EnableSnowDeformation && settings.ProjSnowMatch && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
-	data.ProjUnauthoredThreshold = std::cos(std::clamp(settings.SeasonsSnowMaxAngle, 0.0f, 90.0f) * (DirectX::XM_PI / 180.0f));
-	data.LODObjectEnable = (settings.EnableSnowDeformation && settings.LODObjectSnow && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
-	data.SnowTexturedEnable = (settings.EnableSnowDeformation && settings.SnowTexturedRecolor && settings.ProjSnowMatch && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
-	data.ProjSnowNormalEnable = settings.ProjSnowNormals ? 1.0f : 0.0f;
-	data.ParallaxFollow = settings.SnowFollowsParallax ? 1.0f : 0.0f;
-	data.ParallaxFlatten = settings.FlattenParallaxUnderSnow ? 1.0f : 0.0f;
+	data.ProjSnowEnable = (settings.EnableSnowDeformation && shellSnowDiffuseSRV) ? 1.0f : 0.0f;
 	data.SnowSpecularLevel = snowSpecularLevel;
 	data.LandRecolorLumLo = kLandRecolorLumLo;
-	data.LandWetPrint = std::clamp(settings.SnowClimateStrength, 0.0f, 1.0f) * GetSnowCondition().wetness;
 	if (globals::state->isMapMenuOpen) {
 		data.LODReplaceEnable = 0.0f;
 		data.ProjSnowEnable = 0.0f;
-		data.LODObjectEnable = 0.0f;
-		data.SnowTexturedEnable = 0.0f;
 		data.DebugTerrainOverlay &= ~(256u | 512u);
 	}
 	return data;
@@ -492,7 +415,7 @@ void SnowDeformation::ApplyRangeSettings()
 	if (deformMapDimDirty || !rangeInitApplied) {
 		const uint desired = settings.DeformMapResolution >= 4096u ? 4096u : (settings.DeformMapResolution >= 2048u ? 2048u : 1024u);
 		settings.DeformMapResolution = desired;
-		const uint effective = settings.VRAMAwareTrenchMap && deformMapVramCap ? std::min(desired, deformMapVramCap) : desired;
+		const uint effective = deformMapVramCap ? std::min(desired, deformMapVramCap) : desired;
 		if (effective != deformMapDim) {
 			deformMapDim = effective;
 			CreateDeformationTextures();
@@ -749,13 +672,13 @@ void SnowDeformation::PrepassSimulation()
 	const size_t capturedLast = capturedStatics.size();
 	capturedStatics.clear();
 	capturedStaticsSet.clear();
+	driftCoats.clear();
 	capturedStaticsSet.reserve(capturedLast);
 
 	UpdateActiveWorldspace();
 	snowfallIntensity = ComputeSnowfallIntensity();
 	weatherClock.Read(weatherClockUnarm);
 	TickAccumulation();
-	TickSnowClimate();
 
 	if (SnowShadersPending(1))
 		return;
@@ -803,25 +726,13 @@ void SnowDeformation::PrepassSimulation()
 	perFrameData.MapOrigin = mapOrigin;
 	perFrameData.WindowOrigin = windowOrigin;
 	perFrameData.TexelSize = deformWorldSize / deformMapDim;
-	perFrameData.BermReach = BermReachScale();
 	perFrameData.BodyPrint = BodyPrintScale();
-	{
-		const SnowClimateLook look = ComputeSnowClimateLook();
-		const float wallEase = std::lerp(std::lerp(1.0f, 0.3f, GetSnowSoftness()), std::lerp(1.0f, 0.3f, look.slough), look.strength);
-		perFrameData.StampFalloffStart = std::clamp(kTrenchWallSharpness * 0.01f * wallEase, 0.0f, 0.98f);
-	}
-	perFrameData.SlumpRate = std::clamp(settings.SlumpRate, 0.0f, 1.0f);
-	perFrameData.ShoutShape = { std::clamp(settings.ShoutMarkWaist, 0.05f, 0.95f), std::clamp(settings.ShoutMarkRoundness, 1.0f, 4.0f),
-		std::clamp(settings.ShoutMarkFadeStart, 0.0f, 0.98f), std::clamp(settings.ShoutMarkFarDepth, 0.0f, 1.0f) };
-	perFrameData.ShoutChurn = { std::clamp(settings.ShoutChurn, 0.0f, 1.0f), std::max(settings.ShoutStreakSize, 4.0f),
-		std::max(settings.ShoutStreakLength, 1.0f), 0.0f };
-	perFrameData.UndulationAmp = std::max(settings.UndulationStrength, 0.0f);
-	perFrameData.UndulationScale = std::max(settings.UndulationSpacing, 0.05f);
+	perFrameData.StampFalloffStart = std::clamp(kTrenchWallSharpness * 0.01f, 0.0f, 0.98f);
 	perFrameData.AccumulationScale = GetAccumulationDepthScale();
 
 	float deltaTime = *globals::game::deltaTime;
 	TickGameClock();
-	float refillIntensity = settings.RefillOnlyWhenSnowing ? snowfallIntensity : 1.0f;
+	const float refillIntensity = snowfallIntensity;
 	const float refillSeconds = gameClock.lastHours >= 0.0f ?
 	                                gameClock.elapsedHours * 3600.0f / std::max(gameClock.timescale, 1.0f) :
 	                                deltaTime;
@@ -832,21 +743,10 @@ void SnowDeformation::PrepassSimulation()
 		perFrameData.RefillAmount = refillBank;
 		refillBank = 0.0f;
 	}
-	bloodBurialClock += frameRefill;
 	perFrameData.GameDeltaTime = refillSeconds;
 
-	perFrameData.DeltaTime = deltaTime;
 	passClockSeconds += deltaTime;
 	perFrameData.PassClock = static_cast<uint32_t>(std::fmod(passClockSeconds * 2.0, 1024.0));
-	perFrameData.PassGap = 4;
-	perFrameData.MeltPersistence = std::clamp(settings.MeltPersistence, 0.0f, 1.0f);
-	perFrameData.MeltFloorStart = std::clamp(settings.MeltBowlFloor, 0.0f, 0.98f);
-	perFrameData.MeltEdgeNoise = std::max(settings.MeltEdgeIrregularity, 0.0f);
-	perFrameData.CrustPrintDepth = std::clamp(settings.CrustPrintDepth, 0.0f, 1.0f);
-	perFrameData.CrustThaw = settings.CrustThawMinutes > 0.01f ?
-	                             1.0f / (settings.CrustThawMinutes * 60.0f) :
-	                             0.0f;
-	perFrameData.CrustBreakOnCarve = std::max(settings.CrustBreakOnCarve, 0.0f);
 
 	perFrameData.WindBias = { 0.0f, 0.0f };
 	if (auto* sky = globals::game::sky) {
@@ -854,12 +754,12 @@ void SnowDeformation::PrepassSimulation()
 		perFrameData.WindBias = { std::sin(sky->windAngle) * windStrength, std::cos(sky->windAngle) * windStrength };
 	}
 
-	perFrameData.ClearMap = clearRequested;
+	const bool clearMap = clearRequested;
 	clearRequested = false;
 
 	{
 		ArrivalRect arriving[2];
-		const int arrivingCount = ComputeArrivalRects(scroll, perFrameData.ClearMap != 0, arriving);
+		const int arrivingCount = ComputeArrivalRects(scroll, clearMap, arriving);
 		perFrameData.RingRectCount = (uint)arrivingCount;
 		perFrameData.RingTotalTexels = 0;
 		for (int i = 0; i < arrivingCount; i++) {
@@ -867,10 +767,6 @@ void SnowDeformation::PrepassSimulation()
 			perFrameData.RingTotalTexels += (uint)(arriving[i].w * arriving[i].h);
 		}
 	}
-
-	TickSnowAgeing();
-	perFrameData.AgeingClock = snowClimate.ageingClock;
-	perFrameData.TrackRebase = trackClockTexture && bermFieldTexture ? snowClimate.ageingRebase : 0.0f;
 
 	GatherStamps(perFrameData);
 	stampGatherFrame = globals::state->frameCount;
@@ -928,11 +824,10 @@ void SnowDeformation::PrepassSimulation()
 		scroll.x == 0 && scroll.y == 0 &&
 		stampsQuiet &&
 		perFrameData.RefillAmount <= 0.0f &&
-		perFrameData.ClearMap == 0 &&
+		!clearMap &&
 		perFrameData.ContactDim < 0.5f;
 	const bool mapQuiet = !deformFlagActive && deformFlagSeq > deformLastNonIdleSeq;
-	const bool bermReachStale = perFrameData.BermReach != bermReachBaked;
-	deformIdleSkipped = inputsIdle && mapQuiet && !bermReachStale && perFrameData.TrackRebase <= 0.0f;
+	deformIdleSkipped = inputsIdle && mapQuiet && !tileGridsNeedInit;
 
 	if (deformIdleSkipped) {
 		globals::profiler->MarkPassSkipped("SnowDeformation::Trails - Map Update");
@@ -955,7 +850,7 @@ void SnowDeformation::PrepassSimulation()
 
 			ID3D11ShaderResourceView* nullPS = nullptr;
 			context->PSSetShaderResources(101, 1, &nullPS);
-			context->PSSetShaderResources(kLandBermSlot, 1, &nullPS);
+			context->PSSetShaderResources(kBodyReachSlot, 1, &nullPS);
 
 			const UINT zeroFlag[4] = { 0, 0, 0, 0 };
 			context->ClearUnorderedAccessViewUint(deformActivityUAV.get(), zeroFlag);
@@ -969,23 +864,6 @@ void SnowDeformation::PrepassSimulation()
 				context->ClearUnorderedAccessViewUint(untouchedTilesUAV.get(), allTouched);
 				tileGridsNeedInit = false;
 			}
-			if (perFrameData.BermReach != bermReachBaked) {
-				const UINT allDirty[4] = { 1, 1, 1, 1 };
-				context->ClearUnorderedAccessViewUint(bermDirtyUAV.get(), allDirty);
-				bermReachBaked = perFrameData.BermReach;
-			}
-
-			if (perFrameData.TrackRebase > 0.0f) {
-				if (auto* rebaseCS = GetSnowCS(kTrackRebaseCS)) {
-					ID3D11UnorderedAccessView* rebaseUavs[2] = { trackClockTexture->uav.get(), bermFieldTexture->uav.get() };
-					context->CSSetUnorderedAccessViews(0, 2, rebaseUavs, nullptr);
-					context->CSSetShader(rebaseCS, nullptr, 0);
-					context->Dispatch((deformMapDim + 7) / 8, (deformMapDim + 7) / 8, 1);
-					ID3D11UnorderedAccessView* nullRebase[2] = {};
-					context->CSSetUnorderedAccessViews(0, 2, nullRebase, nullptr);
-				}
-				snowClimate.ageingRebase = 0.0f;
-			}
 
 			ID3D11UnorderedAccessView* uavs[] = { map->uav.get(), deformActivityUAV.get(),
 				nullptr,
@@ -993,21 +871,18 @@ void SnowDeformation::PrepassSimulation()
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 			ID3D11UnorderedAccessView* dirtyUAV = bermDirtyUAV.get();
 			context->CSSetUnorderedAccessViews(6, 1, &dirtyUAV, nullptr);
-			ID3D11UnorderedAccessView* clockUAV = trackClockTexture ? trackClockTexture->uav.get() : nullptr;
-			ID3D11UnorderedAccessView* nullClockUAV = nullptr;
+			ID3D11UnorderedAccessView* nullReachUAV = nullptr;
 			ID3D11UnorderedAccessView* reachUAV = bodyReachTexture ? bodyReachTexture->uav.get() : nullptr;
 
 			if (perFrameData.RingTotalTexels > 0) {
 				ID3D11ShaderResourceView* nullRingSrv = nullptr;
 				context->CSSetShaderResources(0, 1, &nullRingSrv);
-				context->CSSetUnorderedAccessViews(4, 1, &clockUAV, nullptr);
 				context->CSSetUnorderedAccessViews(5, 1, &reachUAV, nullptr);
 				context->CSSetShader(GetSnowCS(kDeformationRingCS), nullptr, 0);
 				globals::profiler->BeginPass("SnowDeformation::Trails - Map Update");
 				context->Dispatch((perFrameData.RingTotalTexels + 63) / 64, 1, 1);
 				globals::profiler->EndPass();
-				context->CSSetUnorderedAccessViews(4, 1, &nullClockUAV, nullptr);
-				context->CSSetUnorderedAccessViews(5, 1, &nullClockUAV, nullptr);
+				context->CSSetUnorderedAccessViews(5, 1, &nullReachUAV, nullptr);
 			} else {
 				globals::profiler->MarkPassSkipped("SnowDeformation::Trails - Map Update");
 			}
@@ -1085,7 +960,6 @@ void SnowDeformation::PrepassSimulation()
 				context->CSSetShaderResources(7, 2, contactSRVs);
 				ID3D11UnorderedAccessView* passUAV = passStateTexture ? passStateTexture->uav.get() : nullptr;
 				context->CSSetUnorderedAccessViews(7, 1, &passUAV, nullptr);
-				context->CSSetUnorderedAccessViews(4, 1, &clockUAV, nullptr);
 				context->CSSetUnorderedAccessViews(5, 1, &reachUAV, nullptr);
 			}
 			if (stampRan) {
@@ -1124,8 +998,7 @@ void SnowDeformation::PrepassSimulation()
 				context->CSSetShaderResources(7, 2, nullContact);
 				ID3D11UnorderedAccessView* nullPass = nullptr;
 				context->CSSetUnorderedAccessViews(7, 1, &nullPass, nullptr);
-				context->CSSetUnorderedAccessViews(4, 1, &nullClockUAV, nullptr);
-				context->CSSetUnorderedAccessViews(5, 1, &nullClockUAV, nullptr);
+				context->CSSetUnorderedAccessViews(5, 1, &nullReachUAV, nullptr);
 			}
 		}
 
@@ -1151,10 +1024,8 @@ void SnowDeformation::PrepassSimulation()
 
 			if (auto* bermCS = GetSnowCS(kBermFieldTiledCS)) {
 				context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
-				ID3D11ShaderResourceView* bermSrvs[3] = { map->srv.get(), bermTileSRV.get(), trackClockTexture ? trackClockTexture->srv.get() : nullptr };
+				ID3D11ShaderResourceView* bermSrvs[2] = { map->srv.get(), bermTileSRV.get() };
 				context->CSSetShaderResources(0, ARRAYSIZE(bermSrvs), bermSrvs);
-				ID3D11SamplerState* clockSampler = shellSnowSampler.get();
-				context->CSSetSamplers(0, 1, &clockSampler);
 				ID3D11UnorderedAccessView* bermUavs[] = { bermFieldTexture->uav.get() };
 				context->CSSetUnorderedAccessViews(0, ARRAYSIZE(bermUavs), bermUavs, nullptr);
 				ID3D11UnorderedAccessView* bermOccUAV = bermOccupancyUAV.get();
@@ -1166,8 +1037,6 @@ void SnowDeformation::PrepassSimulation()
 				bermBakeSeq++;
 				context->CSSetUnorderedAccessViews(2, 1, &nullUav, nullptr);
 				context->CSSetUnorderedAccessViews(6, 1, &nullUav, nullptr);
-				ID3D11SamplerState* nullSampler = nullptr;
-				context->CSSetSamplers(0, 1, &nullSampler);
 			} else {
 				const UINT zeroMarks[4] = { 0, 0, 0, 0 };
 				context->ClearUnorderedAccessViewUint(bermDirtyUAV.get(), zeroMarks);
@@ -1238,7 +1107,6 @@ ID3D11ComputeShader* SnowDeformation::GetSnowCS(SnowCS a_which)
 	static constexpr Shader kShaders[kSnowCSCount] = {
 		{ L"Data\\Shaders\\SnowDeformation\\ExclusionFieldCS.hlsl", "main", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "RingCS", nullptr },
-		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "TrackRebaseCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "EvolveCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "StampCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "StampAllCS", nullptr },
@@ -1311,11 +1179,7 @@ void SnowDeformation::UpdateUndulationField()
 		std::round(eye.x / kUndulationFieldSnap) * kUndulationFieldSnap,
 		std::round(eye.y / kUndulationFieldSnap) * kUndulationFieldSnap
 	};
-	const float scale = std::max(settings.UndulationSpacing, 0.05f);
-
-	const bool dirty = !undulationFieldValid ||
-	                   snapped.x != undulationFieldCenter.x || snapped.y != undulationFieldCenter.y ||
-	                   scale != undulationFieldBakedScale;
+	const bool dirty = !undulationFieldValid || snapped.x != undulationFieldCenter.x || snapped.y != undulationFieldCenter.y;
 	if (!dirty) {
 		globals::profiler->MarkPassSkipped("SnowDeformation::Ground - Field Bakes");
 		return;
@@ -1331,7 +1195,6 @@ void SnowDeformation::UpdateUndulationField()
 	cbData.FieldOriginWorld = { snapped.x - kUndulationFieldHalfExtent + 0.5f * kUndulationFieldTexel,
 		snapped.y - kUndulationFieldHalfExtent + 0.5f * kUndulationFieldTexel };
 	cbData.FieldTexel = kUndulationFieldTexel;
-	cbData.FieldScale = scale;
 	undulationFieldCB->Update(cbData);
 
 	ID3D11Buffer* cb = undulationFieldCB->CB();
@@ -1346,7 +1209,6 @@ void SnowDeformation::UpdateUndulationField()
 	globals::profiler->EndPass();
 
 	undulationFieldCenter = snapped;
-	undulationFieldBakedScale = scale;
 	undulationFieldValid = true;
 }
 
@@ -1406,9 +1268,8 @@ uint32_t SnowDeformation::BuildStampTileList(const PerFrame& a_data)
 					}
 	};
 
-	const float gateScale = std::max(1.31f, 1.0f + a_data.MeltEdgeNoise);
 	for (uint i = 0; i < a_data.StampCount && !overflow; i++) {
-		const float reach = a_data.Stamps[i].w * gateScale;
+		const float reach = a_data.Stamps[i].w * kStampGate;
 		addWorldBox(std::min(a_data.Stamps[i].x, a_data.StampEnds[i].x) - reach,
 			std::min(a_data.Stamps[i].y, a_data.StampEnds[i].y) - reach,
 			std::max(a_data.Stamps[i].x, a_data.StampEnds[i].x) + reach,
@@ -1453,8 +1314,8 @@ void SnowDeformation::ClearShaderCache()
 	for (auto& key : heightRasterKey)
 		key.clear();
 	auto release = [](auto&... a_shaders) { ((a_shaders = nullptr), ...); };
-	release(shellPSDeferred, shellPSPrepassEarly, shellPSEarlyResolve, shellFillVS, shellFillPS, shellFillPSClaim);
-	release(heightVS, heightPS, heightScrollRasterCS, heightRasterCompareCS, heightCombineCS);
+	release(shellPSDeferred, shellPSPrepassEarly, shellPSEarlyResolve, shellFillVS, shellFillPS, shellFillPSClaim, driftCoatVS, driftCoatPS);
+	release(heightVS, heightPS, heightScrollRasterCS, heightCombineCS);
 }
 
 void SnowDeformation::LoadSettings(json& o_json)
@@ -1499,7 +1360,7 @@ void SnowDeformation::QueryAdapterVRAM(uint64_t& a_usageMB, uint64_t& a_budgetMB
 
 void SnowDeformation::TickVRAMLog()
 {
-	if (settings.VRAMAwareTrenchMap && !deformMapVramCap && deformMapDim > 2048u) {
+	if (!deformMapVramCap && deformMapDim > 2048u) {
 		uint64_t nowMB = 0, nowBudgetMB = 0;
 		QueryAdapterVRAM(nowMB, nowBudgetMB);
 		auto bytes = [](Texture2D* a_wrap) { return a_wrap ? Util::ResourceBytes(a_wrap->resource.get()) : uint64_t(0); };

@@ -66,39 +66,9 @@ void Vignette::SaveSettings(json& o_json)
 
 void Vignette::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
 	logger::debug("Creating buffers...");
 	{
 		vignetteCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<VignetteCB>());
-	}
-
-	logger::debug("Creating 2D textures...");
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc);
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateRTV(rtvDesc);
 	}
 
 	CompileRasterShaders();
@@ -120,7 +90,6 @@ void Vignette::ClearShaderCache()
 			}
 	}
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/Vignette");
 	CompileRasterShaders();
 }
 
@@ -138,6 +107,10 @@ void Vignette::Draw(TextureInfo& inout_tex)
 	if (!owner || !owner->GetFullscreenVS())
 		return;
 	if (!AllShadersReady({ &vignettePS }))
+		return;
+
+	auto* texOutput = owner->GetColorTarget(inout_tex.tex);
+	if (!texOutput)
 		return;
 
 	globals::profiler->BeginPass("PostProcessing::Vignette");

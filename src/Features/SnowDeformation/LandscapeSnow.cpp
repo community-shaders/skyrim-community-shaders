@@ -21,34 +21,20 @@ namespace
 		kLsShadowLocal,
 		kLsDepth,
 		kLsUtilityOther,
-		kLsSkyOcclusion,
-		kLsCategories
+		kLsSkyOcclusion
 	};
-	constexpr const char* kLsNames[kLsCategories] = { "mainDeferred", "lightingOther", "shadowSun", "shadowLocal", "depthPrepass", "utilityOther", "skyOcclusion" };
-	constexpr uint32_t kLsMaxTargets = 8;
-	constexpr uint32_t kLsSlots = 6;
-	constexpr uint32_t kLsMaxDraws = 1024;
 	constexpr uint32_t kLsSRVCount = SnowDeformation::kShellSurfaceSRVs;
 
 	bool LsShadowPass(uint32_t a_cat) { return a_cat == kLsShadowSun || a_cat == kLsShadowLocal || a_cat == kLsSkyOcclusion; }
 
-	struct LsConfig
-	{
-		bool tessellate = true;
-		bool gate = true;
-		int gateMask = 23;
-		bool cull = true;
-		bool measure = false;
-		bool stats = false;
-		float maxFactor = 64.0f;
-		float guard = 0.05f;
-		float lift = 512.0f;
-		float tessReach = 2600.0f;
-		float shadowTessReach = 2000.0f;
-		float blendBonus = 6.0f;
-		float blendPenalty = 16.0f;
-		bool culledLand = true;
-	};
+	constexpr int kLsGateMask = 23;
+	constexpr float kLsMaxFactor = 64.0f;
+	constexpr float kLsGuard = 0.05f;
+	constexpr float kLsLift = 512.0f;
+	constexpr float kLsTessReach = 2600.0f;
+	constexpr float kLsShadowTessReach = 2000.0f;
+	constexpr float kLsBlendBonus = 6.0f;
+	constexpr float kLsBlendPenalty = 16.0f;
 
 	constexpr uint32_t kLsMaxSmallExclusions = 16;
 
@@ -64,10 +50,9 @@ namespace
 
 	constexpr float kLsSmallExclusionReach = 100.0f;
 
-	int LsFillSmallExclusions(LsCBData& a_data, const std::vector<std::pair<float4, float4>>& a_exclusions, float2 a_boundXY, float a_boundRadius, float2 a_gridOrigin)
+	void LsFillSmallExclusions(LsCBData& a_data, const std::vector<std::pair<float4, float4>>& a_exclusions, float2 a_boundXY, float a_boundRadius, float2 a_gridOrigin)
 	{
 		uint32_t n = 0;
-		bool overflow = false;
 		for (const auto& [posRadius, dirExtType] : a_exclusions) {
 			const bool sealed = dirExtType.w > 2.5f;
 			const float reach = 1.4f * std::max(posRadius.w, 1.0f) * (1.0f + std::sqrt(dirExtType.x * dirExtType.x + dirExtType.y * dirExtType.y)) +
@@ -82,7 +67,6 @@ namespace
 			if (n == kLsMaxSmallExclusions) {
 				a_data.tess[2] = 0.0f;
 				n = 0;
-				overflow = true;
 				break;
 			}
 			auto& c = a_data.exclusion[n];
@@ -98,7 +82,6 @@ namespace
 			n++;
 		}
 		a_data.cull[2] = float(n);
-		return overflow ? -1 : int(n);
 	}
 
 	struct LsShaders
@@ -116,61 +99,6 @@ namespace
 		int state = 0;
 		std::future<LsShaders> pending;
 		LsShaders shaders;
-		uint64_t tessAttaches = 0;
-		uint64_t raiseAttaches = 0;
-	};
-
-	struct LsSlot
-	{
-		bool open = false;
-		bool pendingRead = false;
-		winrt::com_ptr<ID3D11Query> disjoint;
-		std::vector<winrt::com_ptr<ID3D11Query>> ts;
-		std::vector<winrt::com_ptr<ID3D11Query>> stats;
-		std::array<uint8_t, kLsMaxDraws> cat{};
-		std::array<uint8_t, kLsMaxDraws> hasStats{};
-		std::array<uint8_t, kLsMaxDraws> target{};
-		uint32_t drawCount = 0;
-		uint32_t overflow = 0;
-		uint32_t draws[kLsCategories]{};
-		uint32_t tess[kLsCategories]{};
-		uint32_t raise[kLsCategories]{};
-		uint64_t tris[kLsCategories]{};
-		uint32_t targetDraws[kLsMaxTargets]{};
-		uint64_t targetTris[kLsMaxTargets]{};
-	};
-
-	struct LsTarget
-	{
-		void* texture = nullptr;
-		uint32_t slice = 0;
-		uint32_t width = 0;
-		uint32_t height = 0;
-		uint32_t arraySize = 0;
-		uint32_t category = 0;
-	};
-
-	struct LsTotals
-	{
-		uint64_t frames = 0;
-		uint64_t lost = 0;
-		uint64_t disjoint = 0;
-		uint64_t overflow = 0;
-		double gpuMs[kLsCategories]{};
-		uint64_t draws[kLsCategories]{};
-		uint64_t tess[kLsCategories]{};
-		uint64_t raise[kLsCategories]{};
-		uint64_t tris[kLsCategories]{};
-		uint64_t statFrames = 0;
-		uint64_t ia[kLsCategories]{};
-		uint64_t vs[kLsCategories]{};
-		uint64_t hs[kLsCategories]{};
-		uint64_t ds[kLsCategories]{};
-		uint64_t cinv[kLsCategories]{};
-		uint64_t cprim[kLsCategories]{};
-		double targetMs[kLsMaxTargets]{};
-		uint64_t targetDraws[kLsMaxTargets]{};
-		uint64_t targetTris[kLsMaxTargets]{};
 	};
 
 	enum class LsMode : uint8_t
@@ -197,56 +125,11 @@ namespace
 		uint64_t vertexDesc = 0;
 	};
 
-	struct LssShaders
-	{
-		winrt::com_ptr<ID3D11VertexShader> vs;
-		winrt::com_ptr<ID3D11HullShader> hs;
-		winrt::com_ptr<ID3D11DomainShader> ds;
-		double compileMs = 0.0;
-	};
-
-	struct LsExclCounts
-	{
-		uint32_t draws = 0;
-		uint32_t rects = 0;
-		uint32_t overflow = 0;
-		void Add(int a_filled)
-		{
-			if (a_filled < 0)
-				overflow++;
-			else if (a_filled > 0) {
-				draws++;
-				rects += uint32_t(a_filled);
-			}
-		}
-	};
-
-	struct LsShadeCounts
-	{
-		uint32_t captures = 0;
-		uint32_t mainDraws = 0;
-		uint32_t mainMissed = 0;
-		uint32_t replayCalls = 0;
-		uint32_t replayDraws = 0;
-		uint32_t replayTess = 0;
-		uint32_t replayCulled = 0;
-		LsExclCounts replayExcl;
-		LsExclCounts raiseExcl;
-	};
-
 	struct LsState
 	{
-		LsConfig cfg;
 		std::unordered_map<uint64_t, LsEntry> entries;
 		std::unique_ptr<ConstantBuffer> drawCB;
 		std::unique_ptr<ConstantBuffer> shellCB;
-		LsSlot slots[kLsSlots];
-		uint32_t slotIndex = 0;
-		uint32_t lastFrame = UINT32_MAX;
-		LsTotals totals;
-		int curDraw = -1;
-		LsTarget targets[kLsMaxTargets];
-		uint32_t targetCount = 0;
 
 		uint32_t cbFrame = UINT32_MAX;
 		uint32_t cbCategory = UINT32_MAX;
@@ -254,8 +137,6 @@ namespace
 		ID3D11ShaderResourceView* srvs[kLsSRVCount]{};
 		ID3D11SamplerState* sampler = nullptr;
 		float4 liveRect{};
-		float4 camUsed[kLsCategories]{};
-		float4 camFrame[kLsCategories]{};
 
 		LsMode mode = LsMode::kNone;
 		winrt::com_ptr<ID3D11VertexShader> savedVS;
@@ -268,16 +149,12 @@ namespace
 		bool capturePending = false;
 		LsCapture pendingCapture;
 		int shadeState = 0;
-		std::future<LssShaders> shadePending;
-		LssShaders shade;
-		LsShadeCounts shadeFrame;
-		LsShadeCounts shadeLast;
-		uint64_t shadeFallbacks = 0;
+		std::future<LsShaders> shadePending;
+		LsShaders shade;
 	};
 
 	LsState ls;
 	SnowDeformation::ShellCB lsCB{};
-	std::mutex lsMutex;
 
 	LsShaders LsCompile(std::string a_defines)
 	{
@@ -303,9 +180,9 @@ namespace
 		return out;
 	}
 
-	LssShaders LssCompile()
+	LsShaders LssCompile()
 	{
-		LssShaders out;
+		LsShaders out;
 		const auto t0 = std::chrono::steady_clock::now();
 		const wchar_t* path = L"Data\\Shaders\\SnowDeformation\\LandscapeSnowShell.hlsl";
 		std::vector<std::pair<const char*, const char*>> defs;
@@ -341,12 +218,8 @@ namespace
 			ls.captureFrame = a_frame;
 		}
 		const void* geometry = a_pass->geometry;
-		if (a_cat == kLsMain) {
-			ls.shadeFrame.mainDraws++;
-			if (!ls.captured.contains(geometry))
-				ls.shadeFrame.mainMissed++;
+		if (a_cat == kLsMain)
 			return;
-		}
 		auto* triShape = a_pass->geometry->AsTriShape();
 		if (!triShape || ls.captured.contains(geometry))
 			return;
@@ -452,148 +325,6 @@ namespace
 		ls.mode = LsMode::kNone;
 	}
 
-	bool LsRead(LsSlot& a_slot)
-	{
-		auto* context = globals::d3d::context;
-		D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj{};
-		if (!a_slot.disjoint || context->GetData(a_slot.disjoint.get(), &dj, sizeof(dj), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
-			return false;
-		double ms[kLsCategories]{};
-		double tms[kLsMaxTargets]{};
-		uint64_t ia[kLsCategories]{}, vs[kLsCategories]{}, hs[kLsCategories]{}, ds[kLsCategories]{}, cinv[kLsCategories]{}, cprim[kLsCategories]{};
-		bool anyStats = false;
-		for (uint32_t i = 0; i < a_slot.drawCount; i++) {
-			UINT64 a = 0, b = 0;
-			if (context->GetData(a_slot.ts[2 * i].get(), &a, sizeof(a), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-				context->GetData(a_slot.ts[2 * i + 1].get(), &b, sizeof(b), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
-				return false;
-			const uint32_t c = a_slot.cat[i];
-			if (b > a && dj.Frequency) {
-				ms[c] += double(b - a) * 1000.0 / double(dj.Frequency);
-				if (a_slot.target[i] < kLsMaxTargets)
-					tms[a_slot.target[i]] += double(b - a) * 1000.0 / double(dj.Frequency);
-			}
-			if (a_slot.hasStats[i]) {
-				D3D11_QUERY_DATA_PIPELINE_STATISTICS ps{};
-				if (context->GetData(a_slot.stats[i].get(), &ps, sizeof(ps), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK) {
-					anyStats = true;
-					ia[c] += ps.IAPrimitives;
-					vs[c] += ps.VSInvocations;
-					hs[c] += ps.HSInvocations;
-					ds[c] += ps.DSInvocations;
-					cinv[c] += ps.CInvocations;
-					cprim[c] += ps.CPrimitives;
-				}
-			}
-		}
-		std::lock_guard lock(lsMutex);
-		auto& t = ls.totals;
-		if (dj.Disjoint) {
-			t.disjoint++;
-			return true;
-		}
-		t.frames++;
-		t.overflow += a_slot.overflow;
-		if (anyStats)
-			t.statFrames++;
-		for (uint32_t k = 0; k < kLsMaxTargets; k++) {
-			t.targetMs[k] += tms[k];
-			t.targetDraws[k] += a_slot.targetDraws[k];
-			t.targetTris[k] += a_slot.targetTris[k];
-		}
-		for (uint32_t c = 0; c < kLsCategories; c++) {
-			t.gpuMs[c] += ms[c];
-			t.draws[c] += a_slot.draws[c];
-			t.tess[c] += a_slot.tess[c];
-			t.raise[c] += a_slot.raise[c];
-			t.tris[c] += a_slot.tris[c];
-			t.ia[c] += ia[c];
-			t.vs[c] += vs[c];
-			t.hs[c] += hs[c];
-			t.ds[c] += ds[c];
-			t.cinv[c] += cinv[c];
-			t.cprim[c] += cprim[c];
-		}
-		return true;
-	}
-
-	void LsNewFrame(uint32_t a_frame)
-	{
-		ls.lastFrame = a_frame;
-		ls.shadeLast = ls.shadeFrame;
-		ls.shadeLast.captures = ls.captureFrame + 1 == a_frame ? uint32_t(ls.captures.size()) : 0;
-		ls.shadeFrame = {};
-		auto* context = globals::d3d::context;
-		auto& cur = ls.slots[ls.slotIndex];
-		if (cur.open) {
-			context->End(cur.disjoint.get());
-			cur.open = false;
-			cur.pendingRead = true;
-		}
-		ls.slotIndex = (ls.slotIndex + 1) % kLsSlots;
-		auto& next = ls.slots[ls.slotIndex];
-		if (next.pendingRead) {
-			if (!LsRead(next)) {
-				std::lock_guard lock(lsMutex);
-				ls.totals.lost++;
-			}
-			next.pendingRead = false;
-		}
-		next.drawCount = 0;
-		next.overflow = 0;
-		std::fill(std::begin(next.draws), std::end(next.draws), 0u);
-		std::fill(std::begin(next.tess), std::end(next.tess), 0u);
-		std::fill(std::begin(next.raise), std::end(next.raise), 0u);
-		std::fill(std::begin(next.tris), std::end(next.tris), 0ull);
-		std::fill(std::begin(next.targetDraws), std::end(next.targetDraws), 0u);
-		std::fill(std::begin(next.targetTris), std::end(next.targetTris), 0ull);
-		if (!ls.cfg.measure)
-			return;
-		if (!next.disjoint) {
-			D3D11_QUERY_DESC qd{ D3D11_QUERY_TIMESTAMP_DISJOINT, 0 };
-			globals::d3d::device->CreateQuery(&qd, next.disjoint.put());
-		}
-		if (next.disjoint) {
-			context->Begin(next.disjoint.get());
-			next.open = true;
-		}
-	}
-
-	uint32_t LsTargetIndex(uint32_t a_cat)
-	{
-		auto* context = globals::d3d::context;
-		ID3D11DepthStencilView* dsv = nullptr;
-		context->OMGetRenderTargets(0, nullptr, &dsv);
-		if (!dsv)
-			return kLsMaxTargets;
-		D3D11_DEPTH_STENCIL_VIEW_DESC dd{};
-		dsv->GetDesc(&dd);
-		ID3D11Resource* res = nullptr;
-		dsv->GetResource(&res);
-		const uint32_t sliceIdx = dd.ViewDimension == D3D11_DSV_DIMENSION_TEXTURE2DARRAY ? dd.Texture2DArray.FirstArraySlice : 0;
-		uint32_t index = kLsMaxTargets;
-		for (uint32_t k = 0; k < ls.targetCount; k++)
-			if (ls.targets[k].texture == res && ls.targets[k].slice == sliceIdx && ls.targets[k].category == a_cat)
-				index = k;
-		if (index == kLsMaxTargets && ls.targetCount < kLsMaxTargets) {
-			auto& tg = ls.targets[ls.targetCount];
-			tg.texture = res;
-			tg.slice = sliceIdx;
-			tg.category = a_cat;
-			D3D11_TEXTURE2D_DESC td{};
-			if (auto* tex = static_cast<ID3D11Texture2D*>(res))
-				tex->GetDesc(&td);
-			tg.width = td.Width;
-			tg.height = td.Height;
-			tg.arraySize = td.ArraySize;
-			index = ls.targetCount++;
-		}
-		if (res)
-			res->Release();
-		dsv->Release();
-		return index;
-	}
-
 	struct LS_Lighting_RestoreGeometry
 	{
 		static void thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_flags)
@@ -639,7 +370,7 @@ void SnowDeformation::InstallLandscapeSnow()
 
 float SnowDeformation::LsRiseReach() const
 {
-	return std::max(ls.cfg.lift, 0.0f);
+	return kLsLift;
 }
 
 bool SnowDeformation::LsCascadeMeetsSnow()
@@ -678,8 +409,6 @@ bool SnowDeformation::LandscapeSnowRefresh()
 
 	auto& fb = globals::game::frameBufferCached;
 	ShellCB cb = *lastShellCBData;
-	const uint32_t cat = std::min(ls.cbCategory, kLsCategories - 1);
-	ls.camFrame[cat] = fb.GetCameraPosAdjust();
 	cb.CameraViewProj = fb.GetCameraViewProj();
 	cb.CameraViewProjUnjittered = fb.GetCameraViewProjUnjittered();
 	cb.CameraPreviousViewProjUnjittered = fb.GetCameraPreviousViewProjUnjittered();
@@ -694,7 +423,6 @@ bool SnowDeformation::LandscapeSnowRefresh()
 		}
 	}
 	PlaceShellFields(cb);
-	ls.camUsed[cat] = cb.CameraPosAdjust;
 
 	if (!ls.shellCB)
 		ls.shellCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ShellCB>(), "SnowDeformation::LandscapeShellCB");
@@ -719,7 +447,6 @@ void SnowDeformation::PlaceShellFields(ShellCB& a_cb)
 	a_cb.ObjectHeightCenter = heightWindowCenter;
 	a_cb.ObjectHeightHalfExtent = ObjectRasterHalfExtent();
 	a_cb.BermBakeActive = bermFieldTexture ? 1.0f : 0.0f;
-	a_cb.TrackAge = TrackAgeConstants();
 	a_cb.UndulationFieldWindow = { undulationFieldCenter.x, undulationFieldCenter.y, 1.0f / kUndulationFieldHalfExtent,
 		undulationFieldValid ? 1.0f : 0.0f };
 	a_cb.ExclusionFieldWindow = { exclusionFieldCenter.x, exclusionFieldCenter.y, 1.0f / kExclusionFieldHalfExtent,
@@ -754,24 +481,18 @@ bool SnowDeformation::LandscapeShadeReady()
 {
 	if (!settings.EnableSnowDeformation)
 		return false;
-	const bool ready = ls.shadeState == 2 && ls.captureFrame == globals::state->frameCount;
-	if (!ready)
-		ls.shadeFallbacks++;
-	return ready;
+	return ls.shadeState == 2 && ls.captureFrame == globals::state->frameCount;
 }
 
 float2 SnowDeformation::LandBlendContest() const
 {
-	return { std::max(ls.cfg.blendBonus, 0.0f), std::max(ls.cfg.blendPenalty, 0.0f) };
+	return { kLsBlendBonus, kLsBlendPenalty };
 }
 
 uint32_t SnowDeformation::DrawLandscapeSnowPrepass(ID3D11DeviceContext* a_context, const ShellCB& a_cb, ID3D11Buffer* a_shellCB)
 {
-	auto& counts = ls.shadeFrame;
-	counts.replayCalls++;
 	if (ls.captures.empty())
 		return 0;
-	const auto& cfg = ls.cfg;
 	if (!ls.drawCB)
 		ls.drawCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<LsCBData>(), "SnowDeformation::LandscapeSnowCB");
 
@@ -806,10 +527,10 @@ uint32_t SnowDeformation::DrawLandscapeSnowPrepass(ID3D11DeviceContext* a_contex
 	a_context->DSSetConstantBuffers(11, 1, &drawCB);
 
 	std::vector<LsCapture> culled;
-	auto* grid = cfg.culledLand && !InInteriorCell() && globals::game::tes ? globals::game::tes->gridCells : nullptr;
+	auto* grid = !InInteriorCell() && globals::game::tes ? globals::game::tes->gridCells : nullptr;
 	if (grid) {
 		const LsViewPlanes view = LsOffViewPlanes(a_cb, 0.0f);
-		const LsViewPlanes guarded = LsOffViewPlanes(a_cb, std::max(cfg.guard, 0.0f));
+		const LsViewPlanes guarded = LsOffViewPlanes(a_cb, kLsGuard);
 		const double rise = double(LsRiseReach());
 		constexpr double kCell = kShellVertexSpacing * 32.0;
 		constexpr double kQuad = kCell * 0.5;
@@ -905,24 +626,23 @@ uint32_t SnowDeformation::DrawLandscapeSnowPrepass(ID3D11DeviceContext* a_contex
 
 	const float4 live = LsLiveRect(a_cb);
 	const auto& cam = a_cb.CameraPosAdjust;
-	const int gateMask = cfg.gate ? std::clamp(cfg.gateMask, 0, 31) : 0;
 	ID3D11InputLayout* boundLayout = nullptr;
 	uint32_t issued = 0;
 	const auto replay = [&](const LsCapture& cap) {
 		const auto& c = cap.boundXY;
 		const float r = cap.boundRadius;
 		if (c.x + r < live.x || c.y + r < live.y || c.x - r > live.z || c.y - r > live.w)
-			return false;
+			return;
 		const float dx = c.x - cam.x;
 		const float dy = c.y - cam.y;
-		const bool tessNear = cfg.tessellate && settings.Tessellation && std::sqrt(dx * dx + dy * dy) - r < cfg.tessReach;
+		const bool tessNear = std::sqrt(dx * dx + dy * dy) - r < kLsTessReach;
 		LsCBData data{
-			{ float(cap.translate[0] - double(a_cb.GridOrigin.x)), float(cap.translate[1] - double(a_cb.GridOrigin.y)), float(cap.translate[2]), std::max(cfg.lift, 0.0f) },
-			{ 1.0f, tessNear ? std::clamp(cfg.maxFactor, 1.0f, 64.0f) : 1.0f, float(gateMask), cfg.cull ? 1.0f : 0.0f },
-			{ std::max(cfg.guard, 0.0f), 0.0f, 0.0f, 0.0f }
+			{ float(cap.translate[0] - double(a_cb.GridOrigin.x)), float(cap.translate[1] - double(a_cb.GridOrigin.y)), float(cap.translate[2]), kLsLift },
+			{ 1.0f, tessNear ? kLsMaxFactor : 1.0f, float(kLsGateMask), 1.0f },
+			{ kLsGuard, 0.0f, 0.0f, 0.0f }
 		};
 		if (tessNear && (uint32_t(data.tess[2]) & 16) != 0)
-			counts.replayExcl.Add(LsFillSmallExclusions(data, staticExclusions, cap.boundXY, cap.boundRadius, a_cb.GridOrigin));
+			LsFillSmallExclusions(data, staticExclusions, cap.boundXY, cap.boundRadius, a_cb.GridOrigin);
 		ls.drawCB->Update(data);
 		if (cap.layout.get() != boundLayout) {
 			boundLayout = cap.layout.get();
@@ -933,14 +653,11 @@ uint32_t SnowDeformation::DrawLandscapeSnowPrepass(ID3D11DeviceContext* a_contex
 		a_context->IASetIndexBuffer(cap.ib.get(), cap.ibFormat, cap.ibOffset);
 		a_context->DrawIndexed(cap.indexCount, 0, 0);
 		issued++;
-		counts.replayTess += tessNear ? 1 : 0;
-		return true;
 	};
 	for (const auto& cap : ls.captures)
 		replay(cap);
 	for (const auto& cap : culled)
-		counts.replayCulled += replay(cap) ? 1 : 0;
-	counts.replayDraws += issued;
+		replay(cap);
 
 	a_context->IASetInputLayout(prevLayout.get());
 	ID3D11Buffer* vb = prevVB.get();
@@ -959,11 +676,8 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 {
 	if (ls.mode != LsMode::kNone)
 		LsDetach();
-	ls.curDraw = -1;
 	ls.capturePending = false;
-	const auto& cfg = ls.cfg;
-	const bool snowOn = settings.EnableSnowDeformation && !SnowShadersPending(1) && !GroundShellsSuspended();
-	if (!snowOn && !cfg.measure)
+	if (!settings.EnableSnowDeformation || SnowShadersPending(1) || GroundShellsSuspended())
 		return;
 	if (!a_pass || !a_pass->shaderProperty || !a_pass->geometry)
 		return;
@@ -993,18 +707,11 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 	}
 
 	const uint32_t frame = state->frameCountAtomic.load(std::memory_order_relaxed);
-	if (frame != ls.lastFrame)
-		LsNewFrame(frame);
-	auto& slot = ls.slots[ls.slotIndex];
-	if (snowOn && (cat == kLsDepth || cat == kLsMain) && LssPoll())
+	if ((cat == kLsDepth || cat == kLsMain) && LssPoll())
 		LsShadeTrack(a_pass, cat, frame);
-	slot.draws[cat]++;
-	auto* triShape = a_pass->geometry->AsTriShape();
-	if (triShape)
-		slot.tris[cat] += triShape->GetTrishapeRuntimeData().triangleCount;
 
 	LsMode want = LsMode::kNone;
-	if (snowOn && cat == kLsShadowSun && settings.SnowCastsShadows) {
+	if (cat == kLsShadowSun && settings.SnowCastsShadows) {
 		want = LsMode::kRaise;
 		const auto& world = a_pass->geometry->world;
 		if (std::abs(world.scale - 1.0f) > 1e-4f)
@@ -1033,11 +740,11 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 		if (boundXY.x + boundRadius < r.x || boundXY.y + boundRadius < r.y || boundXY.x - boundRadius > r.z || boundXY.y - boundRadius > r.w)
 			want = LsMode::kNone;
 	}
-	if (want == LsMode::kRaise && cfg.tessellate && settings.Tessellation) {
+	if (want == LsMode::kRaise) {
 		const auto& cam = lsCB.CameraPosAdjust;
 		const float dx = boundXY.x - cam.x;
 		const float dy = boundXY.y - cam.y;
-		if (std::sqrt(dx * dx + dy * dy) - boundRadius < cfg.shadowTessReach)
+		if (std::sqrt(dx * dx + dy * dy) - boundRadius < kLsShadowTessReach)
 			want = LsMode::kTess;
 	}
 	LsEntry* entry = nullptr;
@@ -1066,12 +773,12 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 		const auto& t = a_pass->geometry->world.translate;
 		const auto& grid = lsCB.GridOrigin;
 		LsCBData data{
-			{ float(double(t.x) - double(grid.x)), float(double(t.y) - double(grid.y)), t.z, std::max(cfg.lift, 0.0f) },
-			{ 0.0f, std::clamp(cfg.maxFactor, 1.0f, 64.0f), cfg.gate ? float(std::clamp(cfg.gateMask, 0, 31)) : 0.0f, cfg.cull ? 1.0f : 0.0f },
-			{ std::max(cfg.guard, 0.0f), 0.0f, 0.0f, 0.0f }
+			{ float(double(t.x) - double(grid.x)), float(double(t.y) - double(grid.y)), t.z, kLsLift },
+			{ 0.0f, kLsMaxFactor, float(kLsGateMask), 1.0f },
+			{ kLsGuard, 0.0f, 0.0f, 0.0f }
 		};
 		if (want == LsMode::kTess && (uint32_t(data.tess[2]) & 16) != 0)
-			ls.shadeFrame.raiseExcl.Add(LsFillSmallExclusions(data, staticExclusions, boundXY, boundRadius, grid));
+			LsFillSmallExclusions(data, staticExclusions, boundXY, boundRadius, grid);
 		ls.drawCB->Update(data);
 		ID3D11Buffer* own[2] = { ls.drawCB->CB(), ls.shellCB->CB() };
 
@@ -1099,8 +806,6 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 			globals::game::shadowState->GetRuntimeData().topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 			globals::game::stateUpdateFlags->reset(RE::BSGraphics::ShaderFlags::DIRTY_PRIMITIVE_TOPO);
 			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
-			slot.tess[cat]++;
-			entry->tessAttaches++;
 		} else {
 			context->VSGetShaderResources(0, kLsSRVCount, ls.savedVSSRVs);
 			context->VSGetConstantBuffers(11, 1, &ls.savedVSCB[0]);
@@ -1109,53 +814,9 @@ void SnowDeformation::LandscapeSnowSetup(RE::BSRenderPass* a_pass, bool a_lighti
 			context->VSSetConstantBuffers(11, 1, &own[0]);
 			context->VSSetConstantBuffers(13, 1, &own[1]);
 			context->VSSetShader(entry->shaders.vsRaise.get(), nullptr, 0);
-			slot.raise[cat]++;
-			entry->raiseAttaches++;
 		}
 		ls.mode = want;
 	}
-
-	if (!cfg.measure || !slot.open)
-		return;
-	uint32_t targetIndex = kLsMaxTargets;
-	if (!a_lighting) {
-		targetIndex = LsTargetIndex(cat);
-		if (targetIndex < kLsMaxTargets) {
-			slot.targetDraws[targetIndex]++;
-			if (triShape)
-				slot.targetTris[targetIndex] += triShape->GetTrishapeRuntimeData().triangleCount;
-		}
-	}
-	if (slot.drawCount >= kLsMaxDraws) {
-		slot.overflow++;
-		return;
-	}
-	const uint32_t i = slot.drawCount;
-	auto* device = globals::d3d::device;
-	while (slot.ts.size() < 2 * (i + 1)) {
-		D3D11_QUERY_DESC qd{ D3D11_QUERY_TIMESTAMP, 0 };
-		winrt::com_ptr<ID3D11Query> q;
-		device->CreateQuery(&qd, q.put());
-		slot.ts.push_back(q);
-	}
-	if (cfg.stats) {
-		while (slot.stats.size() < i + 1) {
-			D3D11_QUERY_DESC qd{ D3D11_QUERY_PIPELINE_STATISTICS, 0 };
-			winrt::com_ptr<ID3D11Query> q;
-			device->CreateQuery(&qd, q.put());
-			slot.stats.push_back(q);
-		}
-	}
-	if (!slot.ts[2 * i] || !slot.ts[2 * i + 1])
-		return;
-	slot.cat[i] = uint8_t(cat);
-	slot.target[i] = uint8_t(targetIndex);
-	slot.hasStats[i] = cfg.stats && slot.stats.size() > i && slot.stats[i] ? 1 : 0;
-	context->End(slot.ts[2 * i].get());
-	if (slot.hasStats[i])
-		context->Begin(slot.stats[i].get());
-	slot.drawCount++;
-	ls.curDraw = int(i);
 }
 
 void SnowDeformation::NoteMainViewport()
@@ -1178,15 +839,6 @@ void SnowDeformation::LandscapeSnowRestore()
 {
 	if (ls.capturePending)
 		LsShadeCapture();
-	if (ls.curDraw >= 0) {
-		auto* context = globals::d3d::context;
-		auto& slot = ls.slots[ls.slotIndex];
-		const uint32_t i = uint32_t(ls.curDraw);
-		context->End(slot.ts[2 * i + 1].get());
-		if (slot.hasStats[i])
-			context->End(slot.stats[i].get());
-		ls.curDraw = -1;
-	}
 	if (ls.mode != LsMode::kNone)
 		LsDetach();
 }

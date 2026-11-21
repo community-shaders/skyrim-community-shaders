@@ -60,7 +60,7 @@ struct SnowMaterialCtx
 	float3x3 tbnTr;
 };
 
-SnowMaterialCtx SnowBuildMaterial(float3 normalWS,
+SnowMaterialCtx SnowBuildMaterial(float3 normalWS, float3 V,
 	float3 albedo, float roughness, float3 F0, float ao,
 	float4 glintParams, float glintActive,
 	float2 glintUV, float2 uvDDX, float2 uvDDY, float2 pixelPos)
@@ -69,6 +69,7 @@ SnowMaterialCtx SnowBuildMaterial(float3 normalWS,
 	material.BaseColor = albedo;
 	material.Roughness = roughness;
 	material.F0 = F0;
+	material.DirectSpecularEnergyCompensation = BRDF::GGXEnergyCompensation(roughness, PBR::GetDirectSpecularNdotV(dot(normalWS, V)), F0);
 	material.AO = ao;
 	material.CoatColor = 1.0;
 

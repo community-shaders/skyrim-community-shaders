@@ -8,8 +8,6 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
-#include <sstream>
-
 #define I18N_KEY_PREFIX "feature.cloud_shadows."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -18,8 +16,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
-	const Util::LockedSection enbLock(globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows),
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows);
+	const Util::LockedSection enbLock(managedByEffects11,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByEffects11);
 
 	ImGui::SliderFloat(T(TKEY("opacity"), "Opacity"), &settings.Opacity, 0.0f, 4.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -50,9 +50,10 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData()
 	if (!loaded)
 		return settings;
 
-	auto data = settings;
+	const bool managedByEffects11 = globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows);
+	Settings data = managedByEffects11 ? Settings{} : settings;
 
-	if (globals::features::effects11.OwnsFeature(E11Handoff::Feature::CloudShadows)) {
+	if (managedByEffects11) {
 		auto& settingManager = SettingManager::GetSingleton();
 		if (settingManager.GetValue<bool>("EnableCloudShadows", "EFFECT")) {
 			data.Opacity = settingManager.GetInterpolatedTimeOfDayValue("Amount", "CLOUDSHADOWS");
@@ -254,47 +255,6 @@ void CloudShadows::ModifySky(RE::BSRenderPass* Pass)
 	}
 }
 
-ID3D11VertexShader* CloudShadows::GetCaptureVertexShader()
-{
-	const auto state = globals::state;
-	if (!state->currentShader)
-		return nullptr;
-
-	const uint32_t descriptor = state->currentVertexDescriptor;
-	auto& entry = captureVertexShaders[descriptor];
-	if (entry.checkedFrame == state->frameCount)
-		return entry.shader.get();
-	entry.checkedFrame = state->frameCount;
-
-	// Same defines as the bound sky vertex shader, so the capture variant matches its input layout and the bound pixel shader
-	const auto shaderDefines = SIE::ShaderCache::GetDefinesString(*state->currentShader, descriptor);
-	const auto defines = shaderDefines + ";" + state->GetDefinesString();
-	if (entry.defines == defines)
-		return entry.shader.get();
-	entry.defines = defines;
-	entry.shader = nullptr;
-
-	std::vector<std::string> names;
-	std::vector<std::string> values;
-	std::istringstream tokens(shaderDefines);
-	for (std::string token; tokens >> token;) {
-		const auto separator = token.find('=');
-		names.push_back(token.substr(0, separator));
-		values.push_back(separator == std::string::npos ? std::string{} : token.substr(separator + 1));
-	}
-	std::vector<std::pair<const char*, const char*>> macros;
-	for (size_t i = 0; i < names.size(); i++)
-		macros.emplace_back(names[i].c_str(), values[i].c_str());
-	macros.emplace_back("CLOUD_SHADOWS_CAPTURE", "");
-
-	entry.shader.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Sky.hlsl", macros, "vs_5_0")));
-	if (entry.shader)
-		Util::SetResourceName(entry.shader.get(), "CloudShadows::CaptureVS[%X]", descriptor);
-	else
-		logger::warn("[Cloud Shadows] Capture vertex shader for sky descriptor {:X} failed to compile; the main view does not capture it", descriptor);
-	return entry.shader.get();
-}
-
 void CloudShadows::CaptureLayerFromView()
 {
 	auto* geometry = std::exchange(captureGeometry, nullptr);
@@ -313,9 +273,17 @@ void CloudShadows::CaptureLayerFromView()
 	if (!indexBuffer)
 		return;
 
-	auto* captureVS = GetCaptureVertexShader();
-	if (!captureVS)
+	// The bound sky vertex shader's capture variant, null until the shader cache has compiled it
+	const auto state = globals::state;
+	if (!state->currentShader || state->currentShader->shaderType.get() != RE::BSShader::Type::Sky)
 		return;
+	constexpr auto captureFlag = static_cast<uint32_t>(SIE::ShaderCache::SkyShaderFlags::CloudShadowsCapture);
+	auto* captureShader = globals::shaderCache->GetVertexShader(*state->currentShader, state->modifiedVertexDescriptor | captureFlag);
+	if (!captureShader)
+		return;
+	auto* captureVS = reinterpret_cast<ID3D11VertexShader*>(captureShader->shader);
+
+	globals::profiler->BeginPass("CloudShadows::Capture");
 
 	const uint32_t frame = globals::state->frameCount;
 	const int layer = currentLayerForDraw;
@@ -336,8 +304,6 @@ void CloudShadows::CaptureLayerFromView()
 		}
 		viewCapturePending = true;
 	}
-
-	globals::state->BeginPerfEvent("CloudShadows::Capture");
 
 	ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
 	ID3D11DepthStencilView* savedDSV = nullptr;
@@ -406,7 +372,7 @@ void CloudShadows::CaptureLayerFromView()
 			object->Release();
 	}
 
-	globals::state->EndPerfEvent();
+	globals::profiler->EndPass();
 }
 
 void CloudShadows::PropagateViewCapture()
@@ -464,8 +430,11 @@ void CloudShadows::EarlyPrepass()
 	// Draws outside the reflections pass read t25 too; an occlusion older than one cube of captures belongs to another sky
 	auto context = globals::d3d::context;
 	const bool current = globals::state->frameCount - lastCaptureFrame <= kCaptureFramesPerCube;
-	if (current)
+	if (current) {
+		globals::profiler->BeginPass("CloudShadows::OcclusionCopy");
 		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
+		globals::profiler->EndPass();
+	}
 
 	ID3D11ShaderResourceView* srv = current ? texCubemapCloudOccCopy->srv.get() : nullptr;
 	context->PSSetShaderResources(25, 1, &srv);
@@ -541,11 +510,13 @@ void CloudShadows::SetupResources()
 		Util::SetResourceName(captureRasterizerState.get(), "CloudShadows::CaptureRasterizerState");
 	}
 	{
-		struct alignas(16) CaptureFace
+		// CreateBuffer reads the whole ByteWidth, which ConstantBufferDesc rounds up
+		struct CaptureFace
 		{
 			uint32_t index;
-			uint32_t pad[3];
+			uint32_t pad[15];
 		};
+		static_assert(sizeof(CaptureFace) == GetCBufferSize(sizeof(CaptureFace)));
 
 		for (uint32_t face = 0; face < 6; ++face) {
 			const CaptureFace data = { face, {} };

@@ -24,77 +24,44 @@ cbuffer ShellCB : register(SNOW_SHELL_CB_REGISTER)
 	float2 GridToDeformOffset;
 
 	float WarpedHalfSpan;
-	uint LayoutKeeper6;
 	uint TerrainDim;
-	uint LayoutKeeper15;
-
 	float DeformInvWorldSize;
+	float ShellCullBare;
+
 	uint HasSnowTexture;
 	float SnowTextureIsLinear;
 	float HasSnowNormal;
-
 	float HasSnowRmaos;
+
 	float SnowRoughnessScale;
+	float SnowSpecularLevel;
 	float2 SnowUVOffset;
 
 	float4 SnowGlintParams;
 
-	float SnowSpecularLevel;
 	float EnableGlints;
+	float HasSnowHeight;
 	float TrenchDetailRelief;
-	float TrenchDetailRoughness;
+	float TrenchDetailShadow;
 
-	float LayoutKeeper5;
-	float TrenchDetailCoverage;
-	float ShellCullBare;
-	float LayoutKeeper11;
-
-	float LayoutKeeper12;
-	float ObjectLiftCap;
 	float2 ObjectHeightCenter;
-
 	float ObjectHeightHalfExtent;
+	float BermBakeActive;
+
 	float CrispShadows;
 	float ScreenSpaceShadowsActive;
-	float UndulationAmp;
-
-	float UndulationScale;
-	float LayoutKeeper13;
 	float PointLightsActive;
 	float SkylightingActive;
 
-	float HasSnowHeight;
-	float SnowReliefDepth;
-	float StaticsDebugView;
-	float BermHeightAmp;
+	float2 SunCascadeSlices;
+	float2 LandContest;
 
-	float SpeedSpoil;
-	float LayoutKeeper9;
-	float DebugNoFarPad;
-	float LayoutKeeper4;
-
-	float LayoutKeeper7;
-	float TrenchDetailShadow;
-	float LayoutKeeper3;
-	float LayoutKeeper14;
-
-	float BermReach;
-	uint LayoutKeeper10;
+	float3 SnowParallax;
 	float SeamRampInv;
-	float BermBakeActive;
 
 	float4 SeamBounds;
 
 	float4 ExclusionFieldWindow;
-
-	float4 SnowParallax;
-
-	float4 padSpellShading;
-	float4 TrackAge;
-	float4 padCrustLook2;
-	float4 BorderStyle;
-	float4 CompactLook;
-	float4 RimStyle;
 
 	float4 UndulationFieldWindow;
 
@@ -102,19 +69,20 @@ cbuffer ShellCB : register(SNOW_SHELL_CB_REGISTER)
 	int2 ShellFlags;
 
 	float4 FineWindow;
-	float4 SlopeDrape;
-	float4 padDebugSkinDepth;
-	float4 BloodLook;
-	float4 BloodLook2;
-	float4 BloodLook3;
-	float4 TrampleStyle;
 	float4 TessScreen;
 	float4 FieldDims;
-	float4 SnowClimate;
-	float4 SnowClimate2;
-	float4 SnowClimateOverride;
-	float4 SnowClimateLUT[3];
+
+	float AccumulationDepthScale;
+	float BodyPrint;
+	float2 pad0;
 }
+
+// The trench look's fixed values.
+static const float kTrenchDetailCoverage = 1.75;
+static const float kBermHeight = 0.5;
+static const float kRimLip = 0.05;
+static const float kRimTeeth = 0.5;
+static const float kTrampledFlattening = 0.5;
 
 int3 DeformTexel(int2 t, int2 dims)
 {

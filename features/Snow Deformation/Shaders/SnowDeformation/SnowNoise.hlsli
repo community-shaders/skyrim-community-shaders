@@ -31,9 +31,13 @@ float ShapeNoiseTorus(float2 p, float a_cells)
 		lerp(ShapeNoiseHash(float2(c0.x, c1.y)), ShapeNoiseHash(c1), f.x), f.y);
 }
 
-float UndulationNorm(float2 worldXY, float scale)
+// Height and spacing of the wind-worked dunes in deep snow.
+static const float kUndulationAmp = 8.0;
+static const float kUndulationScale = 0.5;
+
+float UndulationNorm(float2 worldXY)
 {
-	float2 p = worldXY / max(scale, 0.05);
+	float2 p = worldXY / kUndulationScale;
 	float n = ShapeNoise(p / 340.0) * 0.72 + ShapeNoise(p / 110.0) * 0.28;
 	return (n - 0.5) * 2.0;
 }

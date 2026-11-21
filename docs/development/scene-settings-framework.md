@@ -392,12 +392,60 @@ are **blocked** rather than clobbering it, and unknown fields on an entry are pr
     - `ScreenSpaceGI`'s `ResolutionMode`, `EnableGI`, `EnableTemporalDenoiser` and
       `EnableExperimentalSpecularGI`: each is a shader define, so a change recompiles every SSGI compute
       shader on the render thread and a location transition would hitch.
-- `kLocationFeatureWhitelist` (7) and `kTimeOfDayFeatureWhitelist` (10): which features those scene types
+- `kLocationFeatureWhitelist` (8) and `kTimeOfDayFeatureWhitelist` (11): which features those scene types
   may target.
 
 `PostProcessing` defers its load: `LoadSettings` stores the JSON and `ProcessSettings` applies it in
 `Prepass`. Its per-load path must stay cheap because a blend reloads every frame, so sub-features reconcile
 settings-sized resources in `Draw` and Color Grading recompiles only when the tonemapper changes.
+
+### Physical Sky
+
+Physical Sky participates in interior, location, time-of-day and weather settings. Its scene surface
+controls weather state, cloud shape and cloud lighting, while map resources, quality and world setup
+remain global:
+
+| Settings                                                                                                                                                                                      | Scene behavior                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sun/moon colors, sunlight and aerial-perspective mixes, sky-static brightness, atmospheric scattering and absorption, sun disk radius                                                         | Blend as floats, including each color component.                                                                                                                                                |
+| Low-cloud altitude, height span, map scale, curvature, density and vertical profile; cirrus altitude and density                                                                              | Blend as floats.                                                                                                                                                                                |
+| NDF coverage and type gains, height remapping, frequencies, offsets, base heights and local influence weights                                                                                 | Blend as floats over fixed noise sources. The existing 2D map generator updates changed parameters during rendering.                                                                            |
+| Cirrus weather state: coverage, type and an optional local map                                                                                                                                | Stored as one blendable state. Transitions crossfade the generated endpoint maps, including changes of noise input or local texture.                                                            |
+| Cloud lighting: brightness, directional and view extinction, droplet diameter, multiple-scattering strength/albedo/boundary, ambient response, source integration, cirrus phase and thickness | Blend as floats. Actual cloud brightness still changes with illumination, density and shape.                                                                                                    |
+| Low/high cloud X/Y velocities, development and disturbance                                                                                                                                    | Blend vector components, then integrate the live velocity into the existing wind state. The renderer caps travel speed at 80 m/s; loading an override does not restart wind motion.             |
+| Feature, directional-light, sky-static, sun-disk and cloud switches                                                                                                                           | Available to interior and non-periodic location contexts. Weather and periodic contexts require transitionable floats, so fade cloud density instead of toggling clouds during a weather blend. |
+| Worldspace whitelist, exterior/interior eligibility, fallback ground height, planet/atmosphere radii                                                                                          | Global world setup. A scene cannot bypass the whitelist or enable rendering in an interior unless the global interior opt-in allows it.                                                         |
+| Half-resolution shadows, tracing/shadow range and march step                                                                                                                                  | Global quality settings.                                                                                                                                                                        |
+| Vanilla-cloud relighting and silver-lining mixes, cloud-shadow remapping                                                                                                                      | Global optical and artistic response.                                                                                                                                                           |
+| NDF source mode, noise slots/seeds and noise-source parameters, texture paths, local blend mode, height driver, cirrus UV size, 3D cloud-noise parameters                                     | Global resource authoring. In particular, 3D noise generation spans multiple frames; blending its parameters would keep restarting that work.                                                   |
+
+The Clouds page follows the order an artist builds a weather sky in: **Weather Map** defines where
+clouds form, **Low Clouds** sets their altitude, silhouette and density, **Local Cloud** places hero
+shapes, **Cirrus** adds the high veil, **Cloud Motion** animates the pattern, and **Cloud Lighting** is
+tuned last. **Quality & Performance** and **Vanilla Clouds** sit at the end because they are global or
+legacy controls rather than part of the weather look. A compact altitude profile at the top of the
+page updates with the live values so the deck and cirrus heights can be read at a glance.
+
+The scene replica hides every global-only block: worldspace editing, map source/noise/texture
+authoring, the weather-map preview, quality and performance, the vanilla relighting mixes, and the
+debug tab. It leaves a note saying those settings are global. The vanilla on/off switch stays because
+the policy allows cloud switches in interior and non-periodic location contexts; a scene page draws it
+without the global relighting mixes. Wind uses direct X/Y controls in both the feature page and scene
+replicas so the catalog and baseline editor bind the same stored values, without ambiguous angle
+wraparound.
+
+Cloud-map fields are discovered from their direct-member JSON initializer, preserving the versioned
+payload. `DragFloat2` interception binds input and output intervals separately to the same persisted
+four-component range. The scene stores cirrus weather as one `SceneBlend` value rather than one entry
+per coverage/type field.
+
+`PhysicalSky::LoadSettings` only restores the serialized settings. Atmosphere LUTs and cloud constants
+already update during rendering; no resource reload or shader compilation is added to the scene apply
+path. Cloud shape/map changes retain existing temporal-history invalidation, including during blends;
+wind-only changes keep motion reprojection. Existing settings paths and the versioned cloud-map payload
+remain unchanged, so normal scene baseline capture/restore also preserves global cloud resources.
+Interior appearance overrides follow
+Physical Sky's existing global interior opt-in.
 
 When adding a feature to a whitelist, run `tests/test_scene_settings_policy.py`; it fails if a name is not
 discovered in the generated catalog.

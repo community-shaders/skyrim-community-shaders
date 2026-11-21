@@ -25,14 +25,14 @@ struct HistogramAutoExposure : public PostProcessFeature
 		float ExposureCompensation = 0.f;
 
 		// auto exposure
-		float2 AdaptationRange = { -2.f, 6.f };  // EV100 (0 EV100 = 0.125 linear luminance)
+		float2 AdaptationRange = { -2.f, 6.f };  // Scene EV100: L = 2^(EV100 - 3) cd/m^2, K = 12.5.
 		float2 AdaptArea = { .6f, .6f };
 
 		float AdaptSpeed = 1.5f;
 
 		// purkinje
-		float PurkinjeStartEV = 1.5f;  // EV100 (0 EV100 = 0.125 linear luminance)
-		float PurkinjeMaxEV = -1.f;    // EV100 (0 EV100 = 0.125 linear luminance)
+		float PurkinjeStartEV = 1.5f;  // Scene EV100 before exposure, same calibration as AdaptationRange.
+		float PurkinjeMaxEV = -1.f;    // Scene EV100 before exposure.
 		float PurkinjeStrength = 0.f;
 	} settings;
 
@@ -46,9 +46,12 @@ struct HistogramAutoExposure : public PostProcessFeature
 		float PurkinjeStartEV;
 		float PurkinjeMaxEV;
 		float PurkinjeStrength;
+		float ExposureTarget;  // Metered luminance after exposure, before tone mapping.
 
-		float pad[3];
+		float pad[2];
 	};
+	static_assert(sizeof(AutoExposureCB) == 48);
+	static_assert(offsetof(AutoExposureCB, ExposureTarget) == 36);
 	std::unique_ptr<ConstantBuffer> autoExposureCB = nullptr;
 	std::unique_ptr<StructuredBuffer> histogramSB = nullptr;
 	std::unique_ptr<StructuredBuffer> adaptationSB = nullptr;
@@ -92,6 +95,14 @@ struct HistogramAutoExposure : public PostProcessFeature
 		float2 LuminanceRange;
 		float CompensationEV = 0.0f;
 		float ExposureAtISO100 = 1.0f;
+		float ExposureTarget = 0.18f;
 	};
 	ExposureParameters GetExposureParameters() const;
+	/// Last completed GPU metering result; never waits for the GPU.
+	float GetPreExposure();
+	std::array<winrt::com_ptr<ID3D11Buffer>, 3> preExposureReadback;
+	std::array<bool, 3> preExposureReadbackPending{};
+	std::array<uint, 3> preExposureReadbackFrames{};
+	uint preExposureCompletedFrame = 0;
+	float preExposureLuminance = 0.18f;
 };

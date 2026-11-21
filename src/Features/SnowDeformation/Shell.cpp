@@ -1,7 +1,5 @@
 #include "Features/SnowDeformation.h"
 
-#include <DDSTextureLoader.h>
-
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/ExponentialHeightFog.h"
@@ -16,6 +14,7 @@
 #include "TruePBR.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 void SnowDeformation::CopySRVResource(ID3D11ShaderResourceView* a_srcSRV, const char* a_name,
 	winrt::com_ptr<ID3D11Texture2D>& a_tex, winrt::com_ptr<ID3D11ShaderResourceView>& a_srv, const D3D11_BOX* a_box, const D3D11_BOX* a_extent)
@@ -76,44 +75,18 @@ bool SnowDeformation::LoadGameDDS(const std::string& a_dataRelativePath, winrt::
 		return false;
 
 	std::string path = a_dataRelativePath;
-	{
-		const size_t dot = path.find_last_of('.');
-		const size_t sep = path.find_last_of("\\/");
-		if (dot == std::string::npos || (sep != std::string::npos && dot < sep))
-			path += ".dds";
-	}
-	auto nameLoaded = [&a_srv, &path] {
-		winrt::com_ptr<ID3D11Resource> texture;
-		a_srv->GetResource(texture.put());
-		Util::SetResourceName(texture.get(), "SnowDeformation::%s", path.c_str());
-	};
-
-	RE::BSResourceNiBinaryStream stream(path);
-	if (stream.good() && stream.stream) {
-		const uint32_t total = stream.stream->totalSize;
-		if (total > 0) {
-			std::vector<uint8_t> bytes(total);
-			if (stream.read(reinterpret_cast<char*>(bytes.data()), total) &&
-				SUCCEEDED(DirectX::CreateDDSTextureFromMemory(globals::d3d::device, bytes.data(), bytes.size(),
-					nullptr, a_srv.put()))) {
-				logger::debug("SnowDeformation: loaded {} through the game ({} bytes)", a_dataRelativePath, total);
-				nameLoaded();
-				return true;
-			}
-		}
-		a_srv = nullptr;
-	}
-
-	const std::string diskPath = "Data\\" + path;
-	const std::wstring wide(diskPath.begin(), diskPath.end());
-	if (SUCCEEDED(DirectX::CreateDDSTextureFromFile(globals::d3d::device, wide.c_str(), nullptr, a_srv.put()))) {
-		logger::debug("SnowDeformation: loaded {} off disk", path);
-		nameLoaded();
-		return true;
-	}
-	a_srv = nullptr;
-	logger::debug("SnowDeformation: could not load {} from archives or disk", a_dataRelativePath);
-	return false;
+	const size_t dot = path.find_last_of('.');
+	const size_t sep = path.find_last_of("\\/");
+	if (dot == std::string::npos || (sep != std::string::npos && dot < sep))
+		path += ".dds";
+	ImVec2 size;
+	if (!Util::LoadDDSTextureFromFile(globals::d3d::device, path.c_str(), a_srv.put(), size, true))
+		return false;
+	winrt::com_ptr<ID3D11Resource> texture;
+	a_srv->GetResource(texture.put());
+	Util::SetResourceName(texture.get(), "SnowDeformation::%s", path.c_str());
+	Util::SetResourceName(a_srv.get(), "SnowDeformation::%s SRV", path.c_str());
+	return true;
 }
 
 void SnowDeformation::EnsureTrenchDetailTextures()
@@ -121,8 +94,17 @@ void SnowDeformation::EnsureTrenchDetailTextures()
 	if (trenchDetailAttempted)
 		return;
 	trenchDetailAttempted = true;
-	if (!LoadGameDDS("Shaders\\SnowDeformation\\TrenchDetailN.dds", trenchDetailNormalSRV) ||
-		!LoadGameDDS("Shaders\\SnowDeformation\\TrenchDetailH.dds", trenchDetailHeightSRV)) {
+	// Two-slice arrays, which LoadGameDDS's loader refuses.
+	auto load = [](const char* a_name, winrt::com_ptr<ID3D11ShaderResourceView>& a_srv) {
+		winrt::com_ptr<ID3D11Texture2D> texture;
+		if (FAILED(Util::LoadTextureFromFile(globals::d3d::device, std::format("Data\\Shaders\\SnowDeformation\\{}.dds", a_name),
+				texture.put(), a_srv.put())))
+			return false;
+		Util::SetResourceName(texture.get(), "SnowDeformation::%s", a_name);
+		Util::SetResourceName(a_srv.get(), "SnowDeformation::%s SRV", a_name);
+		return true;
+	};
+	if (!load("TrenchDetailN", trenchDetailNormalSRV) || !load("TrenchDetailH", trenchDetailHeightSRV)) {
 		trenchDetailNormalSRV = nullptr;
 		trenchDetailHeightSRV = nullptr;
 		logger::info("[SNOW DEFORMATION] trench detail textures not found; the trench detail stays off");
@@ -142,10 +124,6 @@ void SnowDeformation::EnsureShellSnowTextures()
 	shellSnowHeightSRV = nullptr;
 	shellSnowTextureIsPBR = false;
 
-	auto tryLoadDDS = [](const std::string& a_path, winrt::com_ptr<ID3D11ShaderResourceView>& a_srv) {
-		return LoadGameDDS(a_path, a_srv);
-	};
-
 	std::string chosenPath = settings.SnowTexturePath.empty() ? "Textures\\Landscape\\snow01.dds" : settings.SnowTexturePath;
 	for (auto& pathChar : chosenPath)
 		if (pathChar == '/')
@@ -160,12 +138,12 @@ void SnowDeformation::EnsureShellSnowTextures()
 	else if (size_t texPos = loweredPath.find("textures\\"); texPos != std::string::npos)
 		pbrPath = chosenPath.substr(0, texPos + 9) + "PBR\\" + chosenPath.substr(texPos + 9);
 
-	if (!pbrPath.empty() && pbrPath.size() > 4 && tryLoadDDS(pbrPath, shellSnowDiffuseSRV)) {
+	if (!pbrPath.empty() && pbrPath.size() > 4 && LoadGameDDS(pbrPath, shellSnowDiffuseSRV)) {
 		shellSnowTextureIsPBR = true;
 		std::string base = pbrPath.substr(0, pbrPath.size() - 4);
-		bool hasNormal = tryLoadDDS(base + "_n.dds", shellSnowNormalSRV);
-		bool hasRmaos = tryLoadDDS(base + "_rmaos.dds", shellSnowRmaosSRV);
-		bool hasHeight = tryLoadDDS(base + "_p.dds", shellSnowHeightSRV);
+		bool hasNormal = LoadGameDDS(base + "_n.dds", shellSnowNormalSRV);
+		bool hasRmaos = LoadGameDDS(base + "_rmaos.dds", shellSnowRmaosSRV);
+		bool hasHeight = LoadGameDDS(base + "_p.dds", shellSnowHeightSRV);
 		logger::info("[SNOW DEFORMATION] PBR snow set: {} (normal={} rmaos={} height={})", pbrPath, hasNormal, hasRmaos, hasHeight);
 
 		snowGlintLogDensity = 6.0f;
@@ -183,26 +161,6 @@ void SnowDeformation::EnsureShellSnowTextures()
 			[](unsigned char c) { return (char)std::tolower(c); });
 		const auto& pbrSets = globals::features::truePBR.pbrTextureSets;
 		size_t matchCount = 0;
-		if (!settings.SnowPBRConfig.empty()) {
-			if (pbrSets.find(settings.SnowPBRConfig) != pbrSets.end()) {
-				snowPBRSetName = settings.SnowPBRConfig;
-			} else {
-				std::string pinLower = settings.SnowPBRConfig;
-				std::transform(pinLower.begin(), pinLower.end(), pinLower.begin(),
-					[](unsigned char c) { return (char)std::tolower(c); });
-				for (const auto& [setName, setData] : pbrSets) {
-					std::string keyLower = setName;
-					std::transform(keyLower.begin(), keyLower.end(), keyLower.begin(),
-						[](unsigned char c) { return (char)std::tolower(c); });
-					if (keyLower == pinLower) {
-						snowPBRSetName = setName;
-						break;
-					}
-				}
-				if (snowPBRSetName.empty())
-					logger::info("[SNOW DEFORMATION] pinned TruePBR config '{}' is not loaded; falling back to the automatic match", settings.SnowPBRConfig);
-			}
-		}
 		std::string bestKey;
 		bool bestHasGlints = false;
 		size_t bestExtra = 0;
@@ -213,7 +171,7 @@ void SnowDeformation::EnsureShellSnowTextures()
 			if (keyLower.find(baseName) == std::string::npos)
 				continue;
 			++matchCount;
-			if (keyLower == baseName && snowPBRSetName.empty()) {
+			if (keyLower == baseName) {
 				snowPBRSetName = setName;
 				bestKey.clear();
 				break;
@@ -245,11 +203,11 @@ void SnowDeformation::EnsureShellSnowTextures()
 		}
 	} else {
 		snowPBRSetName.clear();
-		bool ok = tryLoadDDS(chosenPath, shellSnowDiffuseSRV);
+		bool ok = LoadGameDDS(chosenPath, shellSnowDiffuseSRV);
 		if (!ok && chosenPath != "Textures\\Landscape\\snow01.dds") {
 			logger::info("[SNOW DEFORMATION] Snow diffuse not loose-file loadable: {}", chosenPath);
 			chosenPath = "Textures\\Landscape\\snow01.dds";
-			ok = tryLoadDDS(chosenPath, shellSnowDiffuseSRV);
+			ok = LoadGameDDS(chosenPath, shellSnowDiffuseSRV);
 		}
 		logger::info("[SNOW DEFORMATION] Snow diffuse load ({}): {}", ok ? "ok (legacy)" : "missing, using fallback color", chosenPath);
 	}
@@ -448,6 +406,24 @@ ID3D11PixelShader* SnowDeformation::GetShellPSDeferred()
 	return shellPSDeferred.get();
 }
 
+ID3D11VertexShader* SnowDeformation::GetDriftCoatVS()
+{
+	if (!driftCoatVS)
+		driftCoatVS.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\SnowDeformation\\SnowShell.hlsl", { { "SNOW_DRIFT_COAT", "" } }, "vs_5_0")));
+	return driftCoatVS.get();
+}
+
+ID3D11PixelShader* SnowDeformation::GetDriftCoatPS()
+{
+	if (!driftCoatPS) {
+		auto defines = ShellPSDefines();
+		defines.emplace_back("SNOW_SHELL_DEFERRED", "");
+		defines.emplace_back("SNOW_DRIFT_COAT", "");
+		driftCoatPS.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\SnowDeformation\\SnowShell.hlsl", defines, "ps_5_0")));
+	}
+	return driftCoatPS.get();
+}
+
 ID3D11PixelShader* SnowDeformation::GetShellPSPrepassAttr(bool a_keepHidden)
 {
 	auto& slot = shellPSPrepassAttr[a_keepHidden ? 1 : 0];
@@ -557,7 +533,6 @@ void SnowDeformation::RefreshShellGridPlacement(ShellCB& a_cb, const float4* a_c
 	const bool fine = shellFineValid && shellTerrainFine && shellTerrainFine->srv;
 	a_cb.FineWindow = { a_cb.GridOrigin.x - shellFineOriginX, a_cb.GridOrigin.y - shellFineOriginY,
 		fine ? float(kShellFineDim) : 0.0f, kShellFineTexel };
-	a_cb.SlopeDrape = { std::clamp(settings.SlopeDrape, 0.0f, 1.0f), 0.5f, 0.866f, 0.0f };
 	constexpr float kSnowUVTile = 4096.0f / 24.0f;
 	a_cb.SnowUVOffset = {
 		std::fmod(a_cb.GridOrigin.x, kSnowUVTile),
@@ -622,7 +597,6 @@ void SnowDeformation::DrawShellEarlyPrepass()
 	cb.ObjectHeightCenter = heightWindowCenter;
 	cb.ObjectHeightHalfExtent = ObjectRasterHalfExtent();
 	cb.BermBakeActive = bermFieldTexture ? 1.0f : 0.0f;
-	cb.TrackAge = TrackAgeConstants();
 	cb.UndulationFieldWindow = { undulationFieldCenter.x, undulationFieldCenter.y,
 		1.0f / kUndulationFieldHalfExtent,
 		undulationFieldValid ? 1.0f : 0.0f };
@@ -966,54 +940,27 @@ void SnowDeformation::DrawShell()
 	cbData.HasSnowTexture = shellSnowDiffuseSRV != nullptr;
 	cbData.SnowTextureIsLinear = shellSnowTextureIsPBR ? 1.0f : 0.0f;
 	cbData.HasSnowHeight = shellSnowHeightSRV ? 1.0f : 0.0f;
-	cbData.SnowReliefDepth = 0.0f;
 	cbData.SnowParallax = {
 		snowDisplacementScale,
 		std::clamp(settings.ParallaxShadowStrength, 0.0f, 2.0f),
-		std::clamp(settings.ParallaxDepth, 0.0f, 2.0f),
-		0.0f
+		std::clamp(settings.ParallaxDepth, 0.0f, 2.0f)
 	};
-	cbData.TrackAge = TrackAgeConstants();
-	const float snowSoftness = GetSnowSoftness();
-	const SnowClimateLook look = ComputeSnowClimateLook();
-	const float bermSlider = std::clamp(settings.BermHeight, 0.0f, 1.0f);
-	const float lipSlider = std::clamp(settings.RimLip, 0.0f, 0.3f);
-	const float teethSlider = std::clamp(settings.RimTeeth, 0.0f, 1.0f);
-	cbData.BermHeightAmp = std::lerp(bermSlider * std::lerp(1.0f, 0.35f, snowSoftness), bermSlider * look.berm, look.strength);
-	cbData.BermReach = BermReachScale();
-	cbData.RimStyle = { std::lerp(lipSlider * (1.0f - snowSoftness), lipSlider * look.lip, look.strength),
-		std::lerp(teethSlider * (1.0f - snowSoftness), teethSlider * look.teeth, look.strength),
-		0.0f,
-		GetAccumulationDepthScale() };
-	cbData.TrampleStyle = { 0.0f, std::clamp(settings.TrampledFlattening, 0.0f, 1.0f), BodyPrintScale(), 0.0f };
+	cbData.AccumulationDepthScale = GetAccumulationDepthScale();
+	cbData.BodyPrint = BodyPrintScale();
 	EnsureTrenchDetailTextures();
 	const bool trenchDetail = trenchDetailNormalSRV && trenchDetailHeightSRV;
-	cbData.TrenchDetailRelief = trenchDetail ? std::clamp(settings.TrenchDetailRelief, 0.0f, 2.0f) : 0.0f;
-	cbData.TrenchDetailRoughness = trenchDetail ? std::clamp(settings.TrenchDetailRoughness, 0.3f, 1.5f) : 1.0f;
-	cbData.TrenchDetailCoverage = std::clamp(settings.TrenchDetailCoverage, 0.0f, 2.5f);
+	cbData.TrenchDetailRelief = trenchDetail ? 1.0f : 0.0f;
 	cbData.TrenchDetailShadow = trenchDetail ? std::clamp(settings.ParallaxDepth, 0.0f, 1.0f) : 0.0f;
-	cbData.SpeedSpoil = trenchDetail && settings.SpeedSpoil ? 1.0f : 0.0f;
 	cbData.HasSnowNormal = shellSnowNormalSRV ? 1.0f : 0.0f;
 	cbData.HasSnowRmaos = shellSnowRmaosSRV ? 1.0f : 0.0f;
 	cbData.SnowRoughnessScale = snowRoughnessScale;
 	cbData.SnowGlintParams = { snowGlintLogDensity, snowGlintMicroRoughness, snowGlintDensityRandomization, snowGlintScreenSpaceScale };
 	cbData.SnowSpecularLevel = snowSpecularLevel;
 	cbData.EnableGlints = (settings.SnowGlints && globals::features::truePBR.glintsNoiseTexture) ? 1.0f : 0.0f;
-	cbData.BorderStyle = { 0.0f, 0.0f, (float)sunCascadeSlice[0], (float)sunCascadeSlice[1] };
+	cbData.SunCascadeSlices = { (float)sunCascadeSlice[0], (float)sunCascadeSlice[1] };
 	const auto& dynRes = globals::game::frameBufferCached.GetDynamicResolutionParams1();
-	const float2 landContest = LandBlendContest();
-	cbData.CompactLook = { 0.0f, landContest.x, landContest.y, look.strength * look.slough };
-	{
-		const SnowCondition condition = GetSnowCondition();
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		cbData.SnowClimate = { condition.temperature, kClimateLapse, player ? player->GetPosition().z : 0.0f, condition.freshness };
-		cbData.SnowClimate2 = { condition.windPacking, condition.wetness, 0.0f, 1.0f - look.strength };
-		cbData.SnowClimateOverride = { -1.0f, -1.0f, -1.0f, 0.0f };
-		std::copy(look.lut.begin(), look.lut.end(), cbData.SnowClimateLUT);
-	}
-	cbData.DebugNoFarPad = 0.0f;
+	cbData.LandContest = LandBlendContest();
 	cbData.ShellCullBare = shellTerrainTexture ? 1.0f : 0.0f;
-	cbData.ObjectLiftCap = 0.5f;
 	cbData.ObjectHeightCenter = heightWindowCenter;
 	cbData.ObjectHeightHalfExtent = ObjectRasterHalfExtent();
 
@@ -1023,8 +970,6 @@ void SnowDeformation::DrawShell()
 	                                      (shellSssSyncFrame == globals::state->frameCount ? 2.0f : 1.0f) :
 	                                      0.0f;
 
-	cbData.UndulationAmp = std::max(settings.UndulationStrength, 0.0f);
-	cbData.UndulationScale = std::max(settings.UndulationSpacing, 0.05f);
 	cbData.BermBakeActive = bermFieldTexture ? 1.0f : 0.0f;
 	cbData.UndulationFieldWindow = { undulationFieldCenter.x, undulationFieldCenter.y,
 		1.0f / kUndulationFieldHalfExtent,
@@ -1373,6 +1318,12 @@ void SnowDeformation::DrawShell()
 			context->PSSetShader(fillPS, nullptr, 0);
 			context->Draw(3, 0);
 			context->PSSetShaderResources(9, 1, nullResolveSRVs);
+		}
+		if (!driftCoats.empty()) {
+			splitRow("SnowDeformation::Ground - Drift Coat");
+			context->OMSetRenderTargets(8, rtvs, dsv);
+			DrawDriftCoats(context, cbData);
+			splitRow("SnowDeformation::Ground - Shell Shading");
 		}
 		context->OMSetRenderTargets(8, rtvs, shellTestDepthDSV.get());
 		context->OMSetDepthStencilState(shellDeferredDepthState.get(), 0);

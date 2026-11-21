@@ -44,7 +44,6 @@ void SnowDeformation::RunShaderPrime()
 		[&] { GetSnowCS(kBermFieldTiledCS); },
 		[&] { GetSnowCS(kUntouchedTilesCS); },
 		[&] { GetSnowCS(kDeformationRingCS); },
-		[&] { GetSnowCS(kTrackRebaseCS); },
 		[&] { GetSnowCS(kDeformationEvolveCS); },
 		[&] { GetSnowCS(kDeformationStampCS); },
 		[&] { GetSnowCS(kDeformationStampAllCS); },
@@ -58,6 +57,8 @@ void SnowDeformation::RunShaderPrime()
 	};
 	const std::function<void()> objectSteps[] = {
 		[&] { EnsureHeightRasterShaders(); },
+		[&] { GetDriftCoatVS(); },
+		[&] { GetDriftCoatPS(); },
 	};
 	const std::function<void()> effectSteps[] = {
 		[] {},

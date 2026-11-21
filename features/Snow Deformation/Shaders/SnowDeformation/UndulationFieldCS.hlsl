@@ -4,7 +4,7 @@ cbuffer UndulationFieldCB : register(b0)
 {
 	float2 FieldOriginWorld;
 	float FieldTexel;
-	float FieldScale;
+	float padFieldScale;
 }
 
 RWTexture2D<float4> UndulationField : register(u0);
@@ -18,10 +18,10 @@ RWTexture2D<unorm float> NoiseHashTable : register(u1);
 {
 	float2 w = FieldOriginWorld + float2(id.xy) * FieldTexel;
 	const float uStep = kUndulationGradStep;
-	float h = UndulationNorm(w, FieldScale);
+	float h = UndulationNorm(w);
 	float2 g = float2(
-				   UndulationNorm(w + float2(uStep, 0.0), FieldScale) - UndulationNorm(w - float2(uStep, 0.0), FieldScale),
-				   UndulationNorm(w + float2(0.0, uStep), FieldScale) - UndulationNorm(w - float2(0.0, uStep), FieldScale)) /
+				   UndulationNorm(w + float2(uStep, 0.0)) - UndulationNorm(w - float2(uStep, 0.0)),
+				   UndulationNorm(w + float2(0.0, uStep)) - UndulationNorm(w - float2(0.0, uStep))) /
 	           (2.0 * uStep);
 	UndulationField[id.xy] = float4(h, g, 0.0);
 }

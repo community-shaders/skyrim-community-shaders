@@ -6,6 +6,8 @@
 
 #include "Utils/Moon.h"
 
+struct PhysicalSky;
+
 /** @brief Synchronizes volumetric lighting and shadow direction with actual sun and moon positions. */
 struct SkySync : Feature
 {
@@ -13,6 +15,8 @@ private:
 	static constexpr std::string_view MOD_ID = "153543";
 
 public:
+	friend struct PhysicalSky;
+
 	virtual inline std::string GetName() override { return "Sky Sync"; }
 	virtual std::string GetDisplayName() override { return T("feature.sky_sync.name", "Sky Sync"); }
 	virtual inline std::string GetShortName() override { return "SkySync"; }
@@ -116,6 +120,20 @@ public:
 	 */
 	Caster GetMoonLightCaster(const RE::Sky* sky) const;
 
+	/** @brief The bodies the directional light blends between while it swings from one to the other. */
+	struct DirectionalLightBlend
+	{
+		Caster source;
+		Caster target;
+		float targetWeight;      // follows the swing's progress, 1 when settled
+		RE::NiPoint3 direction;  // sky-local, between the two bodies' real directions; zero when neither has one
+		Caster discBody;         // the source for the first half of the swing, then the target
+		float discWeight;        // fades the disc out at the source and back in at the target, 1 when settled
+	};
+
+	/** @brief Blend of the bodies the directional light comes from, for discs and transmittance that should follow the light rather than the shadow direction. */
+	DirectionalLightBlend GetDirectionalLightBlend() const;
+
 private:
 	enum class CellFlagExt : uint16_t
 	{
@@ -151,14 +169,15 @@ private:
 		bool transitioning = false;
 		float intensityFactor = 1.0f;  // scales directional light and VL while the caster changes
 		float startIntensityFactor = 1.0f;
-		float casterFade = 1.0f;  // additionally scales directional light and VL, fading them out towards the zenith fallback
+		float sourceShare = 0.0f;  // weight of the source body in the light's colour and disc, falling with the swing's progress
+		float casterFade = 1.0f;   // additionally scales directional light and VL, fading them out towards the zenith fallback
 		float startCasterFade = 1.0f;
 
 		/** @brief Fraction of the current transition completed, 0 to 1. */
 		float Progress(float fadeDuration) const { return fadeDuration > 0.0f ? fadeTimer / fadeDuration : 1.0f; }
 
-		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], std::optional<std::array<RE::NiColor, 3>> colors, float fadeDuration, float fadeAdvance, bool a_immediateTransition);
-		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir, float intensity, std::optional<RE::NiColor> color);
+		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration, float fadeAdvance, bool a_immediateTransition);
+		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
 		static void SetDirection(RE::NiPoint3& dir, float headingRadians, float elevRadians);
 		static void SetElevation(RE::NiPoint3& dir, float elevRadians);
 		static void ClampDirection(RE::NiPoint3& dir);
@@ -221,6 +240,15 @@ private:
 	void PreparePendingTransitions();
 
 	bool Update(const RE::Sky* sky);
+
+	/** @brief Scale on the directional light and VL from the caster swap, the zenith fade and, when dimmed, the horizon dim. */
+	float GetLightFactor(bool dimmed) const { return shadowFader.intensityFactor * shadowFader.casterFade * (dimmed ? currentDim : 1.0f); }
+
+	/** @brief Writes Physical Sky's caster colour to the sun light, scaled like the weather sunlight in OnSkyUpdateColors. */
+	void ApplyLightColor(const RE::Sky* sky) const;
+
+	/** @brief The fade's { source, target } bodies, with a zenith end replaced by the body at the other end, and the sun when both are the zenith. */
+	std::pair<Caster, Caster> GetLightBodies() const;
 
 	/** @brief Signed angle in radians of a sky-local direction above the effective horizon. */
 	float GetHeightAboveHorizon(const RE::NiPoint3& dir) const;

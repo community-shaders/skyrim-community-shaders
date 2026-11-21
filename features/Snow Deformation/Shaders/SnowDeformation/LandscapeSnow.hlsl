@@ -37,7 +37,7 @@ float3 LsRaise(float3 p, out bool a_raised)
 	[branch] if (a_raised)
 	{
 		float3 raised = float3(0.0, 0.0, z);
-		[branch] if (SlopeDrape.x > 0.001 && z > terrainHeight)
+		[branch] if (z > terrainHeight)
 		{
 			float2 slope = ShellVertexSlope(gridLocal);
 			float3 terrainNormal = SHELL_TERRAIN_NORMAL(slope.x, slope.y);

@@ -38,6 +38,18 @@
 	float lumLo = lo;                                                     \
 	float score = smoothstep(lumLo, lumLo + span, luminance) * (1.0 - smoothstep(0.10, 0.22, saturation))
 
+// How readily a far LOD texel counts as snow: 0 only bright white, 1 pale gray rock too.
+static const float kLODSnowSensitivity = 0.5;
+
+float ClassifyLODSnow(float3 color)
+{
+	SNOW_TEXEL_SCORE(score, color, 0.62 - 0.64 * kLODSnowSensitivity, 0.12);
+	return score;
+}
+
+// Scale of the berm's reach beside a trench (2^0.25).
+static const float kBermReach = 1.18920708;
+
 float TerrainWindowHeight(Texture2D<float4> a_window, float2 a_t, uint a_dim)
 {
 	TERRAIN_WINDOW_TEXEL(a_t, a_dim);

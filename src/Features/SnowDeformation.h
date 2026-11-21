@@ -49,14 +49,10 @@ public:
 	static constexpr uint kContactMaxActors = 16;
 	static constexpr uint kContactMaxCorpses = 8;
 	static constexpr float kStampModeCarve = 0.0f;
-	static constexpr float kStampModeMelt = 1.0f;
-	static constexpr float kStampModePit = 2.0f;
-	static constexpr float kStampModeCrust = 3.0f;
-	static constexpr float kStampModeCone = 10.0f;
-	static constexpr float kStampModeBowl = 20.0f;
 	static constexpr float kStampModeBody = 40.0f;
 	static constexpr float kStampImpactScale = 0.45f;
-	static constexpr float kStampModeShove = kStampImpactScale;
+	/** @brief A stamp reaches no texel past this many radii: the carve ends at 1, the impact ring at 1.3. Mirrors STAMP_GATE in DeformationUpdateCS.hlsl. */
+	static constexpr float kStampGate = 1.3f;
 	static constexpr uint kSpellStampReserve = 48;
 
 	static constexpr float kUnitsPerMeter = 70.0f;
@@ -184,132 +180,79 @@ public:
 	struct Settings
 	{
 		bool EnableSnowDeformation = true;
-		float SlumpRate = 0.1f;
 		float RefillRateMultiplier = 1.0f;
-		bool RefillOnlyWhenSnowing = true;
-		float AccumulationPeak = 1.5f;
 		bool EnableSnowAccumulation = true;
-		float AccumulationHours = 1.0f;
-		float AccumulationMeltHours = 1.0f;
-		float AccumulationFadeDays = 3.0f;
-		float MeltPersistence = 0.50f;
-		float MeltBowlFloor = 0.11f;
-		float CrustPrintDepth = 0.20f;
-		float CrustThawMinutes = 4.0f;
-		float CrustBreakOnCarve = 6.0f;
-		float CrustBreakRadius = 30.0f;
-		bool NoCarveFloatingActors = true;
-		float FloatingActorBand = 20.0f;
-		int IncorporealMode = 1;
-		float ShoutMarkWaist = 0.5f;
-		float ShoutMarkRoundness = 1.5f;
-		float ShoutMarkFadeStart = 0.25f;
-		float ShoutMarkFarDepth = 0.25f;
-		float ShoutChurn = 1.0f;
-		float ShoutStreakSize = 8.0f;
-		float ShoutStreakLength = 1.0f;
-		float MeltEdgeIrregularity = 0.15f;
-		std::array<float, kSnowClassCount> SnowClassDepths = { 14.0f, 18.0f, 30.0f, 30.0f, 30.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f };
 		std::map<std::string, float> TextureDepths;
-		bool CityShells = false;
 		std::string SnowTexturePath = "Textures\\PBR\\Landscape\\snow01.dds";
-		std::string SnowPBRConfig = "";
-		float TrampleZoneScale = 0.75f;
-		float TrampleZoneHeight = 50.0f;
-		float UndulationStrength = 8.0f;
-		float UndulationSpacing = 0.5f;
-		bool Tessellation = true;
 		float ParallaxShadowStrength = 0.25f;
 		float ParallaxDepth = 0.5f;
-		float BermHeight = 0.50f;
-		float BermSteepness = 0.75f;
-		float RimLip = 0.05f;
-		float RimTeeth = 0.50f;
 		float SnowResistance = 33.0f;
-		float SnowClimateStrength = 0.75f;
-		float TrackAgeing = 1.0f;
-		float FreshSnowSoftness = 0.66f;
-		float TrampledFlattening = 0.5f;
-		float TrenchDetailRelief = 1.0f;
-		float TrenchDetailRoughness = 1.0f;
-		float TrenchDetailCoverage = 1.75f;
-		float ImpactReach = 0.75f;
-		bool SpeedSpoil = true;
-		float SpeedSpoilSize = 0.25f;
 		bool ShellHorizonMarch = true;
 		bool SnowGlints = true;
 		bool SnowScreenSpaceShadows = true;
 		bool SnowCastsShadows = true;
-		bool CameraAboveSnow = true;
 		uint32_t DeformMapResolution = 4096;
-		bool VRAMAwareTrenchMap = true;
 		float RangeTrenchesM = 200.0f;
 		float RangeActorTrenchesM = 200.0f;
-		float ObjectRasterReachM = 100.0f;
-		float SlopeDrape = 1.0f;
-		float LODSnowSensitivity = 0.5f;
-		bool HorizonSnow = true;
-		bool ProjSnowMatch = true;
-		float SeasonsSnowMaxAngle = 87.0f;
-		bool MultipassSnowFollowsPaint = true;
-		bool SnowTexturedRecolor = true;
-		bool ProjSnowNormals = true;
-		bool UnprojectedShapesBare = true;
-		bool SnowFollowsParallax = true;
-		bool FlattenParallaxUnderSnow = true;
-		float ShelterMaxHeight = 275.0f;
-		float ShelterDriftAngle = 30.0f;
-		bool LODObjectSnow = true;
 	};
 
-	static constexpr uint32_t kIceHistoryBins = 128;
+	static constexpr float kAccumulationPeak = 1.5f;
+	static constexpr float kAccumulationHours = 1.0f;
+	static constexpr float kAccumulationMeltHours = 1.0f;
+	static constexpr float kAccumulationFadeDays = 3.0f;
+	static constexpr float kFloatingActorBand = 20.0f;
+	/** @brief Snow depth of each texture family, in world units; a texture's own depth (TextureDepths, shipped defaults) wins. */
+	static constexpr std::array<float, kSnowClassCount> kSnowClassDepths = { 14.0f, 18.0f, 30.0f, 30.0f, 30.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f, -8.0f };
+	static constexpr float kTrampleZoneScale = 0.75f;
+	/** @brief Share of the surrounding snow a workspace bowl melts away. */
+	static constexpr float kTrampleZoneMelt = 0.5f;
+	static constexpr float kUndulationStrength = 8.0f;
+	static constexpr float kImpactReach = 0.75f;
+	static constexpr float kSpeedSpoilSize = 0.25f;
+	static constexpr float kObjectRasterReachM = 100.0f;
 
 	/** @brief GPU-side settings, appended to the shared FeatureData cbuffer (b6). Layout must match SnowDeformationSettings in SharedData.hlsli. */
 	struct alignas(16) SettingsGPU
 	{
 		float2 WindowOrigin;
 		float InvWorldSize;
-		float ParallaxFollow;
+		float padParallaxFollow;
 
 		uint DebugTerrainOverlay;
 		float LODReplaceStart;
 		float LODReplaceFadeInv;
-		float LODSnowSensitivity;
+		float padLODSnowSensitivity;
 
 		float SnowIsLinear;
 		float SnowRoughnessScale;
 		float LODReplaceEnable;
 		float SnowHasNormal;
 
-		float SnowTexturedEnable;
+		float padSnowTexturedEnable;
 		float ProjSnowEnable;
-		float LODObjectEnable;
-		float ProjUnauthoredThreshold;
+		float padLODObjectEnable;
+		float padProjUnauthoredThreshold;
 
 		DirectX::XMINT2 DeformMapOrigin;
-		float LandWetPrint;
+		float padLandWetPrint;
 		float padPrintFullDepth;
 
 		float2 WaterWindowOrigin;
 		float WaterWindowTexel;
 		float WaterWindowDim;
 
-		float LandIce;
-		float ProjSnowNormalEnable;
+		float padLandIce;
+		float padProjSnowNormalEnable;
 		float SnowSpecularLevel;
 		float LandRecolorLumLo;
 
 		DirectX::XMINT4 padPrintRect;
 
-		float ParallaxFlatten;
-		float IceClock;
-		float padIceClock[2];
-
-		float4 IceHistory[kIceHistoryBins];
+		float padParallaxFlatten;
+		float padIceClock[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(SettingsGPU);
-	static_assert(offsetof(SettingsGPU, IceClock) == 132 && offsetof(SettingsGPU, IceHistory) == 144 && sizeof(SettingsGPU) == 2192,
-		"SettingsGPU must match the fxc-reflected SnowDeformationSettings in SharedData.hlsli");
+	static_assert(sizeof(SettingsGPU) == 144, "SettingsGPU must match the fxc-reflected SnowDeformationSettings in SharedData.hlsli");
 
 	/**
 	 * @brief Returns this frame's GPU settings for the shared FeatureData buffer.
@@ -328,60 +271,33 @@ public:
 
 		float TexelSize;
 		uint StampCount;
-		float RefillAmount;
-		uint ClearMap;
-
 		float StampFalloffStart;
-		float BermReach;
+		float RefillAmount;
+
 		float2 WindBias;
-
-		float DeltaTime;
-		float MeltPersistence;
-		float MeltFloorStart;
-		float MeltEdgeNoise;
-		float CrustPrintDepth;
-		float CrustThaw;
-		float CrustBreakOnCarve;
-		float SlumpRate;
-
-		uint FramePad;
 		float GameDeltaTime;
-		uint DebugActivityView;
-		float AgeingClock;
+		float BodyPrint;
 
 		DirectX::XMINT4 RingRects[2];
 		uint RingRectCount;
 		uint RingTotalTexels;
-		uint ForceAllDirty;
-		float TrackRebase;
+		uint PassClock;
+		float AccumulationScale;
 
 		float4 Stamps[kMaxStamps];
 		float4 StampEnds[kMaxStamps];
-		float4 StampCones[kMaxStamps];
 
 		float2 ContactCenter;
 		float ContactHalfExtent;
 		float ContactDim;
+
 		float2 TerrainWindowOrigin;
 		float TerrainTexelSize;
 		float TerrainDim;
-		float2 ViewCenter;
-		float ViewHalf;
-		float BodyPrint;
-		float RoadRasterPad[4];
-		uint PassClock;
-		uint PassGap;
-		uint PassPad[2];
-		float4 ShoutShape;
-		float4 ShoutChurn;
-		float UndulationAmp;
-		float UndulationScale;
-		float AccumulationScale;
-		float DrawnPad;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
-	static_assert(offsetof(PerFrame, ContactCenter) == 12432, "PerFrame tail must match the fxc-reflected layout of DeformationUpdateCS");
-	static_assert(offsetof(PerFrame, UndulationAmp) == 12544, "PerFrame tail must match the fxc-reflected layout of DeformationUpdateCS");
+	static_assert(offsetof(PerFrame, ContactCenter) == 8288, "PerFrame tail must match the fxc-reflected layout of DeformationUpdateCS");
+	static_assert(offsetof(PerFrame, TerrainWindowOrigin) == 8304 && sizeof(PerFrame) == 8320, "PerFrame tail must match the fxc-reflected layout of DeformationUpdateCS");
 
 	static constexpr float kTrenchWallSharpness = 66.0f;
 
@@ -442,21 +358,11 @@ public:
 
 	Texture2D* passStateTexture = nullptr;
 	Texture2D* bodyReachTexture = nullptr;
-	Texture2D* trackClockTexture = nullptr;
-	static constexpr float kTrackAgeSpan = 24.0f;
-	/** @brief ShellCB::TrackAge: the ageing clock now and the age per clock unit (Track Ageing / kTrackAgeSpan; 0 = tracks never age). */
-	float4 TrackAgeConstants() const;
-	/** @brief The ageing clock in the frame the track dates stand in now: ahead of ageingClock by a rebase the next update has yet to apply. */
-	float TrackDateClock() const { return snowClimate.ageingClock + snowClimate.ageingRebase; }
-	static constexpr float kTrackAgeHorizon = 128.0f;
 	double passClockSeconds = 256.0;
 	static constexpr UINT kUntouchedTilesSlot = 57;
 	static constexpr UINT kBodyReachSlot = 56;
 	static constexpr UINT kTerrainWetSlot = 58;
 
-	Texture2D* bloodMapTexture = nullptr;
-	Texture2D* bloodClockTexture = nullptr;
-	float bloodBurialClock = 0.0f;
 	static constexpr float kRefillStep = 1.0f / 1024.0f;
 	float refillBank = 0.0f;
 
@@ -481,14 +387,13 @@ public:
 	{
 		float2 FieldOriginWorld;
 		float FieldTexel;
-		float FieldScale;
+		float padFieldScale;
 	};
 	STATIC_ASSERT_ALIGNAS_16(UndulationFieldCB);
 	ConstantBuffer* undulationFieldCB = nullptr;
 	float2 undulationFieldCenter = { 0.0f, 0.0f };
 	bool undulationFieldValid = false;
-	float undulationFieldBakedScale = -1.0f;
-	/** @brief Rebakes on recenter/Spacing change; no-ops when current. Called once per frame from Prepass. */
+	/** @brief Rebakes when the field recenters; no-ops when current. Called once per frame from Prepass. */
 	void UpdateUndulationField();
 	ID3D11ShaderResourceView* GetUndulationFieldSRV() const { return undulationFieldTexture ? undulationFieldTexture->srv.get() : nullptr; }
 
@@ -512,7 +417,6 @@ public:
 	{
 		kExclusionFieldCS,
 		kDeformationRingCS,
-		kTrackRebaseCS,
 		kDeformationEvolveCS,
 		kDeformationStampCS,
 		kDeformationStampAllCS,
@@ -650,9 +554,6 @@ public:
 	/** @brief kShellTessTargetPx in this frame's render pixels (TessScreen.x): an upscaler's render scale applied. */
 	float ShellTessTargetRenderPx() const;
 
-	static constexpr uint32_t kClimateLUTRows = 3;
-	static constexpr float kClimateLUTStep = 2.0f;
-
 	/** @brief Per-draw constants for the shell pass. Layout must match ShellCB in SnowShell.hlsl. */
 	struct alignas(16) ShellCB
 	{
@@ -672,100 +573,61 @@ public:
 		float2 GridToDeformOffset;
 
 		float WarpedHalfSpan;
-		uint LayoutKeeper6;
 		uint TerrainDim;
-		uint LayoutKeeper15;
-
 		float DeformInvWorldSize;
+		float ShellCullBare;
+
 		uint HasSnowTexture;
 		float SnowTextureIsLinear;
 		float HasSnowNormal;
-
 		float HasSnowRmaos;
+
 		float SnowRoughnessScale;
+		float SnowSpecularLevel;
 		float2 SnowUVOffset;
 
 		float4 SnowGlintParams;
 
-		float SnowSpecularLevel;
 		float EnableGlints;
+		float HasSnowHeight;
 		float TrenchDetailRelief;
-		float TrenchDetailRoughness;
+		float TrenchDetailShadow;
 
-		float LayoutKeeper5;
-		float TrenchDetailCoverage;
-		float ShellCullBare;
-		float LayoutKeeper11;
-
-		float LayoutKeeper12;
-		float ObjectLiftCap;
 		float2 ObjectHeightCenter;
-
 		float ObjectHeightHalfExtent;
+		float BermBakeActive;
+
 		float CrispShadows;
 		float ScreenSpaceShadowsActive;
-		float UndulationAmp;
-
-		float UndulationScale;
-		float LayoutKeeper13;
 		float PointLightsActive;
 		float SkylightingActive;
 
-		float HasSnowHeight;
-		float SnowReliefDepth;
-		float StaticsDebugView;
-		float BermHeightAmp;
+		float2 SunCascadeSlices;
+		float2 LandContest;
 
-		float SpeedSpoil;
-		float LayoutKeeper9;
-		float DebugNoFarPad;
-		float LayoutKeeper4;
-
-		float LayoutKeeper7;
-		float TrenchDetailShadow;
-		float LayoutKeeper3;
-		float LayoutKeeper14;
-
-		float BermReach;
-		uint LayoutKeeper10;
+		float3 SnowParallax;
 		float SeamRampInv;
-		float BermBakeActive;
 
 		float4 SeamBounds;
 
 		float4 ExclusionFieldWindow;
 
-		float4 SnowParallax;
-
-		float4 padSpellShading;
-		float4 TrackAge;
-		float4 padCrustLook2;
-		float4 BorderStyle;
-		float4 CompactLook;
-		float4 RimStyle;
-
 		float4 UndulationFieldWindow;
 
 		DirectX::XMINT2 DeformMapOrigin;
 		DirectX::XMINT2 ShellFlags;
+
 		float4 FineWindow;
-		float4 SlopeDrape;
-		float4 padDebugSkinDepth;
-		float4 BloodLook;
-		float4 BloodLook2;
-		float4 BloodLook3;
-		float4 TrampleStyle;
 		float4 TessScreen;
 		float4 FieldDims;
-		float4 SnowClimate;
-		float4 SnowClimate2;
-		float4 SnowClimateOverride;
-		float4 SnowClimateLUT[kClimateLUTRows];
+
+		float AccumulationDepthScale;
+		float BodyPrint;
+		float pad0[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(ShellCB);
-	static_assert(offsetof(ShellCB, TrampleStyle) == 800, "ShellCB tail must match the fxc-reflected layout of both shells");
-	static_assert(offsetof(ShellCB, SnowClimate) == 848, "ShellCB tail must match the fxc-reflected layout of SnowShell.hlsl");
-	static_assert(offsetof(ShellCB, SnowClimateLUT) == 896 && sizeof(ShellCB) == 944, "ShellCB tail must match the fxc-reflected layout of SnowShell.hlsl");
+	static_assert(offsetof(ShellCB, AccumulationDepthScale) == 576, "ShellCB tail must match the fxc-reflected layout of SnowShell.hlsl");
+	static_assert(sizeof(ShellCB) == 592, "ShellCB tail must match the fxc-reflected layout of SnowShell.hlsl");
 
 	struct PointShadowLightData
 	{
@@ -795,6 +657,14 @@ public:
 	winrt::com_ptr<ID3D11PixelShader> shellPSDeferred;
 	ID3D11PixelShader* GetShellPSDeferred();
 
+	/** @brief Shades this frame's drift meshes as ground snow, with the deferred pass's own shading on their surface. Before that pass, which keeps the pixels the ground claimed. Implemented in SnowDeformation/Statics.cpp. */
+	void DrawDriftCoats(ID3D11DeviceContext* a_context, const ShellCB& a_cb);
+	winrt::com_ptr<ID3D11VertexShader> driftCoatVS;
+	winrt::com_ptr<ID3D11PixelShader> driftCoatPS;
+	winrt::com_ptr<ID3D11DepthStencilState> driftCoatDepthState;
+	ID3D11VertexShader* GetDriftCoatVS();
+	ID3D11PixelShader* GetDriftCoatPS();
+
 	Texture2D* marchHeight[3] = {};
 	Texture2D* marchSunEnvelope = nullptr;
 	enum MarchCS : uint32_t
@@ -821,7 +691,6 @@ public:
 	bool marchFarValid = false;
 	uint64_t marchCacheKey = 0;
 	uint32_t marchCacheTerrainVersion = 0;
-	float marchCacheAgeingClock = 0.0f;
 	float marchCacheFineOrigin[2] = {};
 	uint32_t marchCacheRowCursor = 0;
 	uint32_t marchFarRowCursor = 0;
@@ -907,7 +776,7 @@ public:
 
 	ConstantBuffer* shellCB = nullptr;
 
-	/** @brief Loads a DDS through the GAME's resource system, so archives resolve and a modlist override still wins. Shared by the snow and trench detail textures - a second copy would drift. */
+	/** @brief Loads a single 2D DDS through the GAME's resource system, so archives resolve and a modlist override still wins. */
 	static bool LoadGameDDS(const std::string& a_dataRelativePath, winrt::com_ptr<ID3D11ShaderResourceView>& a_srv);
 	winrt::com_ptr<ID3D11RasterizerState> shellRasterState;
 	winrt::com_ptr<ID3D11DepthStencilState> shellDepthState;
@@ -976,12 +845,12 @@ public:
 		float2 HeightMapOffset;
 
 		float2 HeightRange;
-		float SnowDepthUnits;
+		float padSnowDepthUnits;
 		float padFill;
 
 		float2 LODTileBase;
 		float LODTileSpan;
-		float LODSnowSensitivity;
+		float padLODSnowSensitivity;
 
 		float4 LODTileValid;
 	};
@@ -1013,6 +882,12 @@ public:
 	};
 
 	std::vector<CapturedSnowStatic> capturedStatics;
+	struct DriftCoatDraw
+	{
+		RE::NiPointer<RE::BSGeometry> geometry;
+		RE::NiTransform world;
+	};
+	std::vector<DriftCoatDraw> driftCoats;
 	struct CapturedWater
 	{
 		RE::NiPointer<RE::BSGeometry> geometry;
@@ -1084,15 +959,15 @@ public:
 	/** @brief Uploads the pending point-shadow table (t38). The table stays empty until mask-time snapshots exist. Implemented in SnowDeformation/Shadows.cpp. */
 	void UpdatePointShadowLights();
 
-	/** @brief Per-object constants for the height, water and contact captures. Layout must match StaticCB in StaticCBFields.hlsli and SnowContactCapture.hlsl. */
+	/** @brief Per-object constants for the height, water and contact captures. Layout must match StaticCBFields.hlsli. */
 	struct alignas(16) StaticsCB
 	{
 		float4 WorldRow0;
 		float4 WorldRow1;
 		float4 WorldRow2;
-		float ObjectsDepth;
 		float2 HeightWindowCenter;
 		float HeightHalfExtent;
+		float pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(StaticsCB);
 	static_assert(sizeof(StaticsCB) == 64, "StaticsCB must match the fxc-reflected StaticCB of SnowHeightCapture and SnowContactCapture");
@@ -1104,13 +979,11 @@ public:
 	}
 
 	static constexpr uint kHeightMapDim = 2048;
-	/** @brief The live half-extent: Settings::ObjectRasterReachM in world units. Every window fill, texel derivation and shader mirror must take it from here - the texel size is derived from it, so a call site left on the constant addresses a different grid. */
-	float ObjectRasterHalfExtent() const { return std::clamp(settings.ObjectRasterReachM, 29.0f, 234.0f) * kUnitsPerMeter; }
+	/** @brief The object height map's half-extent in world units. Every window fill, texel derivation and shader mirror must take it from here: the texel size is derived from it. */
+	static constexpr float ObjectRasterHalfExtent() { return kObjectRasterReachM * kUnitsPerMeter; }
 	bool cityWorldspace = false;
-	/** @brief Landscape shell and road class are off this frame (city, CityShells off). */
-	bool GroundShellsSuspended() const { return cityWorldspace && !settings.CityShells; }
-	/** @brief 2^(1 - Berm Steepness): the berm tap reach both the bake and the shells use. Exactly 1 at the default. */
-	float BermReachScale() const { return std::exp2(1.0f - std::clamp(settings.BermSteepness, 0.0f, 2.0f)); }
+	/** @brief Landscape shell and road class are off this frame: the walled cities keep the game's own ground. */
+	bool GroundShellsSuspended() const { return cityWorldspace; }
 	/** @brief 1 - Snow Resistance: the share of a body's reach into the layer that carves. */
 	float BodyPrintScale() const { return 1.0f - std::clamp(settings.SnowResistance, 0.0f, 100.0f) * 0.01f; }
 	/** @brief Interior cell: no landscape exists, so no ground shell and no trench can; object snow is unaffected. */
@@ -1124,16 +997,11 @@ public:
 	static constexpr float kHeightMapEmptyTop = -100000.0f;
 	static constexpr float kHeightMapEmptyBottom = 100000.0f;
 
-	static constexpr float kShelterBandHeight = 250.0f;
-
 	Texture2D* heightTopRaw[2] = { nullptr, nullptr };
 	Texture2D* heightBottomRaw[2] = { nullptr, nullptr };
 	Texture2D* heightRaster = nullptr;
 	Texture2D* heightBottomFiltered = nullptr;
 	Texture2D* heightTileEmpty = nullptr;
-	bool combineVerify = false;
-	Texture2D* combineVerifyTex = nullptr;
-	bool EnsureCombineVerify();
 	static constexpr int kQualityPresetCount = 3;
 	/** @brief Quality presets, Low (0) to High (2); High is the shipped defaults. Sets every preset lever; the rest of the settings keep their values. */
 	void ApplyQualityPreset(int a_preset);
@@ -1186,68 +1054,30 @@ public:
 	winrt::com_ptr<ID3D11PixelShader> heightPS;
 	winrt::com_ptr<ID3D11ComputeShader> heightScrollRasterCS;
 	std::vector<uint8_t> heightRasterKey[3];
-	bool heightRasterCacheOff = false;
-	bool heightRasterVerify = false;
-	bool heightRasterVerifyMiss = false;
-	uint32_t heightRasterKeptBits = 0;
-	uint32_t heightRasterRuns = 0;
-	uint32_t heightRasterKept[3] = {};
-	uint32_t heightRasterVerified[6] = {};
-	uint64_t heightRasterMismatch[7] = {};
-	Texture2D* heightRasterVerifyTex[4] = {};
-	winrt::com_ptr<ID3D11Buffer> heightRasterVerifyCount;
-	winrt::com_ptr<ID3D11UnorderedAccessView> heightRasterVerifyAllUAV;
-	winrt::com_ptr<ID3D11UnorderedAccessView> heightRasterVerifySlotUAV[7];
-	winrt::com_ptr<ID3D11Buffer> heightRasterVerifyStaging[3];
-	uint32_t heightRasterVerifyStagingLevels[3] = {};
-	uint32_t heightRasterVerifyRing = 0;
-	winrt::com_ptr<ID3D11ComputeShader> heightRasterCompareCS;
-	struct HeightRasterSample
-	{
-		uint32_t target, x, y;
-		float keptX, keptY, freshX, freshY;
-	};
-	std::vector<HeightRasterSample> heightRasterSamples;
-	std::mutex heightRasterDebugLock;
-	bool EnsureHeightRasterVerify();
 	winrt::com_ptr<ID3D11ComputeShader> heightCombineCS;
 	winrt::com_ptr<ID3D11ComputeShader> heightWaterCoverCS;
 
-	/** @brief Per-dispatch constants for the height-window processing. Layout must match HeightProcessCB in HeightMapProcessCS.hlsl. */
+	/** @brief Per-dispatch constants for the height-window processing and the height capture PS. Layout must match HeightProcessFields.hlsli. */
 	struct alignas(16) HeightProcessCB
 	{
 		DirectX::XMINT2 ScrollDelta;
 		uint ClearAll;
-		uint padConeStep;
+		uint pad0;
 
 		float2 HeightWindowCenter;
 		float HeightHalfExtent;
-		float padSlopePerUnit;
+		float pad1;
 
 		float2 TerrainWindowOrigin;
 		float TerrainTexelSize;
 		uint TerrainDim;
-
-		float GhostDecay;
-		float padObjectSnowDepth;
-		float padRimStep;
-		float padOverheadIgnore;
-
-		float ShelterBandHeight;
-		float padDiffuseLambda;
-		float ShelterMaxHeight;
-		float ShelterConeTan;
-
-		uint keeper;
-		uint DeadGhostTiles;
-		uint pad1;
-		uint pad2;
 	};
 	STATIC_ASSERT_ALIGNAS_16(HeightProcessCB);
+	static_assert(sizeof(HeightProcessCB) == 48, "HeightProcessCB must match the fxc-reflected layout of HeightProcessFields.hlsli");
 
 	ConstantBuffer* heightProcessCB = nullptr;
 
-	/** @brief ScrollCS only: the camera clip transform, so the ghost merge can ask whether the surface that wrote a stale texel would still have been submitted this frame. Its own buffer, not a HeightProcessCB growth - that block is prefix-mirrored by the capture PS. Layout must match GhostCB in HeightMapProcessCS.hlsl. */
+	/** @brief ScrollCS only: the camera clip transform, so the ghost merge can ask whether the surface that wrote a stale texel would still have been submitted this frame. Layout must match GhostCB in HeightMapProcessCS.hlsl. */
 	struct alignas(16) HeightGhostCB
 	{
 		Matrix GhostViewProj;
@@ -1530,25 +1360,6 @@ public:
 	static constexpr float kLandRecolorLumLo = 0.48f;
 	/** @brief The recolor runs this frame: the ground snow draws here and the snow set is loaded. */
 	bool LandRecolorActive() const { return settings.EnableSnowDeformation && !GroundShellsSuspended() && shellSnowDiffuseSRV != nullptr; }
-	static constexpr uint32_t kTrenchMarkSettleFrames = 60;
-	static constexpr uint32_t kTrenchMarkRefreshFrames = 600;
-	static constexpr float kTrenchMarkTolTexels = 2.0f;
-	struct TrenchStampAnchor
-	{
-		float4 s;
-		float2 e;
-		uint32_t age;
-	};
-	std::vector<TrenchStampAnchor> trenchStampAnchors;
-	std::vector<TrenchStampAnchor> trenchStampAnchorsNext;
-	std::vector<uint8_t> trenchStampAnchorClaimed;
-	struct TrenchRectAnchor
-	{
-		float minX, minY, maxX, maxY;
-		uint32_t age;
-	};
-	std::unordered_map<uint32_t, TrenchRectAnchor> trenchRectAnchors;
-	std::unordered_map<uint32_t, TrenchRectAnchor> trenchRectAnchorsNext;
 
 protected:
 	void GatherStamps(PerFrame& perFrameData);
@@ -1648,7 +1459,6 @@ protected:
 	bool evolveFlagActive = true;
 	uint64_t evolveVerdictSeq = 0;
 	uint64_t evolveLastArmSeq = 0;
-	float bermReachBaked = 1.0f;
 	std::vector<float4> lastStampSet;
 	std::vector<float4> lastStampEnds;
 	std::vector<uint8_t> stampMatchUsed;
@@ -1660,66 +1470,6 @@ protected:
 	std::atomic<float> snowAccumulation{ 0.0f };
 	void TickAccumulation();
 	float GetAccumulationDepthScale() const;
-
-	static constexpr float kFreshenHours = 2.0f;
-	std::atomic<float> snowFreshness{ 0.0f };
-	float debugFreshnessOverride = -1.0f;
-	float GetSnowSoftness() const;
-
-	static constexpr float kAgeingClockStart = 1024.0f;
-	static constexpr float kClimateLapse = 0.0005f;
-	struct SnowClimateState
-	{
-		float temperature = 0.0f;
-		float wetness = 0.0f;
-		float windPacking = 0.0f;
-		float landSnowShare = -1.0f;
-		float rainHeld = 0.0f;
-		std::array<float, kClimateLUTRows> rowWater{};
-		std::array<float, kClimateLUTRows> rowIce{};
-		std::array<std::array<float, kClimateLUTRows>, kIceHistoryBins> iceHistory{};
-		int32_t iceHistoryUnit = -1;
-		float ageingClock = kAgeingClockStart;
-		float ageingRate = 0.0f;
-		double ageingTotal = 0.0;
-		float ageingRebase = 0.0f;
-		float targetTemperature = 0.0f;
-		float termRegion = 0.0f;
-		float termWeather = 0.0f;
-		float termSun = 0.0f;
-		bool primed = false;
-		uint32_t shareFrame = 0;
-	};
-	SnowClimateState snowClimate;
-	struct SnowCondition
-	{
-		float temperature;
-		float wetness;
-		float stickiness;
-		float firmness;
-		float density;
-		float freshness;
-		float windPacking;
-	};
-	SnowCondition GetSnowCondition() const;
-	float SnowIceShown(uint32_t a_row) const;
-	float SnowIceSinceCut(uint32_t a_row, uint32_t a_units) const;
-	float SnowWetIceStrength() const;
-	static constexpr uint32_t kIceRecord = 'SNIC';
-	static constexpr uint32_t kIceRecordVersion = 2;
-	struct SnowClimateLook
-	{
-		float strength = 0.0f;
-		float berm = 1.0f;
-		float lip = 1.0f;
-		float teeth = 1.0f;
-		float slough = 0.0f;
-		std::array<float4, kClimateLUTRows> lut{};
-	};
-	SnowClimateLook ComputeSnowClimateLook() const;
-	void TickSnowClimate();
-	void TickSnowAgeing();
-	float LandSnowShareAround(float a_x, float a_y);
 
 	uint32_t stampGatherFrame = UINT32_MAX;
 
@@ -1746,9 +1496,8 @@ public:
 protected:
 	static constexpr UINT kHorizonSnowAlbedoSlot = 33;
 	static constexpr UINT kHorizonSnowNormalSlot = 23;
-	static constexpr UINT kWaterWindowSlot = 63;
+	static constexpr UINT kWaterWindowSlot = 75;
 	static constexpr UINT kHorizonSnowRmaosSlot = 68;
-	static constexpr UINT kLandBermSlot = kBodyReachSlot;
 
 public:
 	/** @brief Applies pending range-setting changes (trench window resize + map clear). Called at Prepass start; the first call applies loaded settings. */
@@ -1759,49 +1508,10 @@ protected:
 
 	std::unordered_map<uint32_t, StampBones> stampBoneCache;
 
-	float CrustBreakForce(float a_radius) const;
-
 	bool ActorIsFloating(RE::Actor* a_actor, RE::NiAVObject* a_root, const StampBones* a_bones, bool a_useFeet, float a_groundZ, float* a_gapOut = nullptr, bool* a_byFeetOut = nullptr) const;
 
-	bool ActorIsIncorporeal(RE::Actor* a_actor, RE::NiAVObject* a_root, StampBones* a_bones,
-		float* a_alphaOut = nullptr, bool* a_flagOut = nullptr) const;
+	bool ActorIsIncorporeal(RE::Actor* a_actor, RE::NiAVObject* a_root, StampBones* a_bones, float* a_alphaOut = nullptr) const;
 	static bool IsProxyOrOverlayGeometry(const RE::BSGeometry* a_geometry, const RE::BSShaderProperty* a_property);
-
-	struct StampStats
-	{
-		uint feet = 0;
-		uint limbs = 0;
-		uint shapes = 0;
-		uint props = 0;
-		uint propRefs = 0;
-		uint propMovers = 0;
-		uint propsRasterized = 0;
-		uint actorsRasterized = 0;
-		uint corpsesRasterized = 0;
-		uint corpsesLatched = 0;
-		uint spells = 0;
-		uint beforeSpells = 0;
-		uint incorporeal = 0;
-		uint nearestFeet = 0;
-		uint nearestLimbs = 0;
-		uint nearestUsableFeet = 0;
-		bool nearestFallback = false;
-		float nearestDryTravel = 0.0f;
-		uint fallbackActors = 0;
-		uint floating = 0;
-		float nearestGapToRoot = 0.0f;
-		float nearestGapToLand = 0.0f;
-		uint nearestState = 0;
-		bool nearestFloating = false;
-		bool nearestValid = false;
-		float nearestBodyAlpha = 1.0f;
-		std::string nearestBodyAlphaSource;
-		bool nearestGhostFlag = false;
-		bool nearestIncorporeal = false;
-		uint32_t nearestFormID = 0;
-		uint budgetTurnedAway = 0;
-	};
-	StampStats stampStats;
 
 	struct PropAnchor
 	{
@@ -1865,5 +1575,4 @@ protected:
 		bool planted = false;
 	};
 	std::unordered_map<uint64_t, SpoilFoot> spoilFeet;
-	uint64_t speedSpoilWedges = 0;
 };

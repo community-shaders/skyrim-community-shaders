@@ -22,16 +22,16 @@ namespace LandscapeSeams
 	static const float QuadSize = 2048.0;
 	static const float GridCells = 16.0;
 
-	Texture2DArray<float4> Weights : register(t104);
-	StructuredBuffer<QuadData> Quad : register(t105);
+	Texture2DArray<float4> Weights : register(t117);
+	StructuredBuffer<QuadData> Quad : register(t118);
 
-	Texture2D<float4> Color0 : register(t106);
-	Texture2D<float4> Normal0 : register(t107);
-	Texture2D<float4> Rmaos0 : register(t108);
+	Texture2D<float4> Color0 : register(t119);
+	Texture2D<float4> Normal0 : register(t120);
+	Texture2D<float4> Rmaos0 : register(t121);
 
-	Texture2D<float4> Color1 : register(t109);
-	Texture2D<float4> Normal1 : register(t110);
-	Texture2D<float4> Rmaos1 : register(t111);
+	Texture2D<float4> Color1 : register(t122);
+	Texture2D<float4> Normal1 : register(t123);
+	Texture2D<float4> Rmaos1 : register(t124);
 
 	static QuadData Data;
 	static float2 ExtraWeights = 0;

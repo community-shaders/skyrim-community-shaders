@@ -17,11 +17,17 @@
 #define TDM_API_COMMONLIB
 #include "TDM/TrueDirectionalMovementAPI.h"
 
+struct PhysicalLens;
+
 namespace CinematicCamera
 {
 	// Reference velocity scale of the Motion Blur Medium preset, calibrated to
 	// a 180 deg shutter (see the Motion Blur adapter).
 	constexpr float kMotionBlurReferenceScale = 300.0f;
+
+	// Saturation-based ISO: Lmax = 78 / (100 * q) * 2^EV100 cd/m^2, with q = 0.65.
+	// https://google.github.io/filament/Filament.html#imagingpipeline/physicallybasedcamera/exposure
+	constexpr float kExposureCalibration = 1.2f;
 
 	enum class FilmbackPreset : int
 	{
@@ -131,8 +137,6 @@ namespace CinematicCamera
 		float ShutterAngleDeg = 180.0f;
 		float ShutterTimeS = 1.0f / 48.0f;
 		float EV100 = 8.5573427f;
-		// Manual exposure relative to the reference camera, before metering compensation.
-		float ExposureDeltaEV = 0.0f;
 
 		// Projection (degrees).
 		float HorizontalFOVDeg = 39.6f;
@@ -218,7 +222,7 @@ namespace CinematicCamera
 		[[nodiscard]] const char* GetFovStateText() const;
 
 		// Filmback / Lens / Focus / Exposure parameter page with readouts.
-		void DrawSettings();
+		void DrawSettings(PhysicalLens* physicalLens = nullptr);
 
 	private:
 		[[nodiscard]] PhysicalCameraState BuildState(float viewportAspect) const;

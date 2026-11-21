@@ -9,6 +9,7 @@ namespace SharedData
 	static const uint TonemapOwnerVanilla = 0;
 	static const uint TonemapOwnerPostProcessing = 1;
 	static const uint TonemapOwnerEffects11 = 2;
+	static const uint TonemapOwnerPostProcessingFallback = 3;
 
 	cbuffer SharedData : register(b5)
 	{
@@ -39,6 +40,10 @@ namespace SharedData
 		float4 AmbientSHG;
 		float4 AmbientSHB;
 		float4 HDRData;
+		float PreExposure;
+		float RcpPreExposure;
+		float PreviousPreExposure;
+		float PreExposureHistoryRatio;
 	};
 
 	struct GrassLightingSettings
@@ -233,9 +238,13 @@ namespace SharedData
 		float EnvIBLSaturation;
 		float SkyIBLSaturation;
 		float FogAmount;
-		uint DALCMode;       // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
+		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
+		uint EnableReflectionFallback;
+		float ReflectionFallbackDistance;
 		uint ENBSkyFalloff;  // Effects 11 owns IBL: darken sky irradiance from below
 		float pad0;
+		float pad1;
+		float pad2;
 	};
 
 	struct ExtendedTranslucencySettings
@@ -415,6 +424,26 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct ViewAtmosphereSettings
+	{
+		uint enabled;
+		uint nearPixelSize;
+		uint nearSlices;
+		uint middlePixelSize;
+		uint middleSlices;
+		uint distantPixelSize;
+		uint distantSlices;
+		uint historyMissSamples;
+		float nearRange;
+		float localRange;
+		float historyWeight;
+		float sampleJitter;
+		float shadowBias;
+		float depthDistribution;
+		float lookupJitter;
+		float padding;
+	};
+
 	struct ExponentialHeightFogSettings
 	{
 		uint enabled;
@@ -437,26 +466,14 @@ namespace SharedData
 		float4 fogInscatteringColor;
 		float originalFogColorAmount;
 		uint volumetricFogEnabled;
-		uint volumetricGridPixelSize;
-		uint volumetricGridSizeZ;
-		float volumetricFogDistance;
 		float volumetricFogStartDistance;
 		float volumetricFogNearFadeInDistance;
-		float volumetricFogExtinctionScale;
 		float4 volumetricFogAlbedo;
 		float4 volumetricFogEmissive;
 		float volumetricDirectionalScatteringIntensity;
-		float volumetricShadowBias;
-		float volumetricDepthDistributionScale;
 		float volumetricSkyLightingIntensity;
 		float volumetricFogScatteringDistribution;
-		float volumetricHistoryWeight;
-		uint volumetricHistoryMissSampleCount;
-		float volumetricSampleJitterMultiplier;
-		float volumetricUpsampleJitterMultiplier;
-		float volumetricNearGridDistance;
-		uint volumetricFarGridPixelSize;
-		uint volumetricFarGridSizeZ;
+		float volumetricFogExtinctionScale;
 		float volumetricLocalLightScatteringIntensity;
 		float volumetricFogNoiseScale;
 		float volumetricFogNoiseThreshold;
@@ -489,6 +506,90 @@ namespace SharedData
 	{
 		float farWaterDistance;
 		float3 pad;
+	};
+
+	struct PhysSkyData
+	{
+		// DYNAMIC
+		float2 texDim;
+		float2 rcpTexDim;  //
+		float2 frameDim;
+		float2 rcpFrameDim;  //
+
+		float zCameraPlanet;
+		float3 sunDir;  //
+		float3 sunlightColor;
+		float trMix;  //
+		float3 masserDir;
+		float apLumMix;  //
+		float3 masserColor;
+		float apTrMix;  //
+		float3 secundaDir;
+		float sunDiskCos;  //
+		float3 secundaColor;
+
+		// GENERAL
+		uint enabled;  //
+		float pad;
+		float vanillaMix;
+
+		// WORLD
+		float zBottom;
+		float rPlanet;  //
+		float rAtmosphere;
+		float3 groundAlbedo;  //
+
+		// ATMOSPHERE
+		float2 cloudShadowRemapRange;
+
+		float aerosolFalloff;
+		float aerosolPhaseG;  //
+		float3 aerosolScatter;
+		uint halfResApShadow;  //
+		float3 aerosolAbsorption;
+
+		float rayleighFalloff;
+		float3 rayleighScatter;  //
+
+		float ozoneAltitude;  //
+		float ozoneThickness;
+		float3 ozoneAbsorption;  //
+
+		// CLOUDS (VANILLA)
+		uint enableVanillaClouds;
+		float cloudRelightMix;
+		float cloudOriginalMix;
+		float silverLiningMix;  //
+		float silverLiningSpread;
+
+		// VOLUMETRIC CLOUDS
+		uint enableVolumetricClouds;
+		float shadowVolumeRange;
+		float lowestCloudAltitude;  //
+		float highestCloudAltitude;
+		float3 volCloudScatter;  //
+		uint volCloudUseSun;
+		float3 volCloudAbsorption;  //
+		float volCloudLowBottom;
+		float volCloudLowThickness;
+
+		// SETTINGS
+		uint lightSkyStatics;
+		float skyStaticsBrightness;  //
+		float4 lightningPositionRadius;
+		float4 lightningEndPosition;
+		float4 lightningColorIntensity;
+		float4 lightningControl;
+		float4 lightningPhotometry;
+		float4 lightningPlacement;
+		float4 lightningChannelEmitter;
+		float4 lightningPreparationPositionRadius;
+		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
+		float4 diskAngularRadius;            // Sun, Masser, Secunda, directional light
+		float3 dirLightBodyDir;
+		uint dirLightDiskIndex;
+		float4 dirLightDisc;
+		float4 diskBillboardScale;
 	};
 
 	struct RainRefractionSettings
@@ -542,18 +643,14 @@ namespace SharedData
 	{
 		float2 WindowOrigin;
 		float InvWorldSize;
-		// Snow Follows Parallax: Lighting reads the projection noise where
-		// the object's parallax drew its texel (SnowLighting
-		// ParallaxProjNoise). Was a pad. Mirror in SnowDeformation.h.
-		float ParallaxFollow;
+		float padParallaxFollow;
 
 		uint DebugTerrainOverlay;
 		// Horizon snow (LOD terrain recolor): distance ramp start and 1/band,
 		// aligned to the shell's edge so the geometry hands off seamlessly.
 		float LODReplaceStart;
 		float LODReplaceFadeInv;
-		// LOD snow classification sensitivity, shared with the window fill.
-		float LODSnowSensitivity;
+		float padLODSnowSensitivity;
 
 		// Snow albedo (t33) color space + material response for the recolor.
 		float SnowIsLinear;
@@ -561,42 +658,27 @@ namespace SharedData
 		float LODReplaceEnable;
 		// Snow normal map bound at t23 (0 = legacy set without one).
 		float SnowHasNormal;
-		// Snow-textured mesh recolor (statics hook flags unprojected snow-named
-		// shapes as SnowLODBakedIsSnow); the old LODReplaceLegacy slot. Mirror
-		// in SnowDeformation.h.
-		float SnowTexturedEnable;
-		// Projected-snow material match (SNOW-MATCH Phase 2) enabled and the
-		// snow set is bound at t33.
+		float padSnowTexturedEnable;
+		// The object recolors (projected snow, snow-textured meshes) are on and
+		// the snow set is bound at t33.
 		float ProjSnowEnable;
-		// was BakedSnowEnable (glacier match, retired); slot kept for layout.
-		float LODObjectEnable;
-		// cos(max angle): the slope cut applied to the vertex alpha of draws
-		// flagged SnowProjectedUnauthored (runtime-applied projections carry
-		// cos 0 and no alpha mask). Mirror in SnowDeformation.h.
-		float ProjUnauthoredThreshold;
+		float padLODObjectEnable;
+		float padProjUnauthoredThreshold;
 
 		// Toroidal deformation-map addressing: physical position of logical
 		// texel (0,0); every map Load adds this and masks by dim-1.
 		int2 DeformMapOrigin;
-		// Snow Climate x wetness at the player: a pressed print in the land's
-		// recoloured snow darkens like the shell's. Was a pad. Mirror in
-		// SnowDeformation.h.
-		float LandWetPrint;
+		float padLandWetPrint;
 		float padPrintFullDepth;
 
-		// Water raster (t63) frame: world xy of texel (0,0), texel size;
+		// Water raster (t75) frame: world xy of texel (0,0), texel size;
 		// Dim 0 = no raster this frame. Mirror in SnowDeformation.h.
 		float2 WaterWindowOrigin;
 		float WaterWindowTexel;
 		float WaterWindowDim;
 
-		// Ice at the player (Wet Snow and Ice): pressed prints in the land's
-		// recoloured snow glaze like the shell's. Was a pad. Mirror in
-		// SnowDeformation.h.
-		float LandIce;
-		// Recolored projected snow also wears the shell snow's normal (vanilla's
-		// own projected normal is a dead write). Mirror in SnowDeformation.h.
-		float ProjSnowNormalEnable;
+		float padLandIce;
+		float padProjSnowNormalEnable;
 		// The snow set's specular level (its F0 scale), for the land recolor.
 		float SnowSpecularLevel;
 		// Land Snow Recolor: luminance where a snow layer's texel starts to
@@ -605,19 +687,8 @@ namespace SharedData
 
 		int4 padPrintRect;
 
-		// Flatten Parallax Under Snow: Extended Materials' parallax fades out
-		// under projected snow and a band around it (SnowLighting
-		// ParallaxUnderSnow). Mirror in SnowDeformation.h.
-		float ParallaxFlatten;
-		// Wet Snow and Ice: the ageing clock IceHistory was written at, in the
-		// track dates' frame. Was a pad. Mirror in SnowDeformation.h.
-		float IceClock;
-		float2 padIceClock;
-
-		// Wet Snow and Ice: the climate rows' ice (xyz) when each ageing-clock
-		// unit ended, the current unit's now (SnowColor.hlsli SnowIce::AtCut).
-		// Appended last. Mirror in SnowDeformation.h, kIceHistoryBins.
-		float4 IceHistory[128];
+		float padParallaxFlatten;
+		float3 padIceClock;
 	};
 
 	cbuffer FeatureData : register(b6)
@@ -642,7 +713,9 @@ namespace SharedData
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
 		HorizonFixSettings horizonFixSettings;
+		PhysSkyData physSkyData;
 		RainRefractionSettings rainRefractionSettings;
+		ViewAtmosphereSettings viewAtmosphereSettings;
 		ProceduralSunSettings proceduralSunSettings;
 		ProceduralAuroraSettings proceduralAuroraSettings;
 		SnowDeformationSettings snowDeformationSettings;

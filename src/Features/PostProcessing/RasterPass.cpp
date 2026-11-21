@@ -2,8 +2,8 @@
 
 namespace PostProcessingRaster
 {
-	RasterPass::RasterPass(ID3D11DeviceContext* a_context) :
-		context(a_context)
+	RasterPass::RasterPass(ID3D11DeviceContext* a_context, UINT a_psSRVCount, UINT a_psSamplerCount) :
+		context(a_context), psSRVCount(std::min(a_psSRVCount, kPSSRVCount)), psSamplerCount(std::min(a_psSamplerCount, kPSSamplerCount))
 	{
 		context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, &savedDSV);
 		context->OMGetBlendState(&savedBlendState, savedBlendFactor, &savedSampleMask);
@@ -23,9 +23,9 @@ namespace PostProcessingRaster
 		context->DSGetShader(&savedDS, nullptr, nullptr);
 		context->GSGetShader(&savedGS, nullptr, nullptr);
 		context->PSGetShader(&savedPS, nullptr, nullptr);
-		context->PSGetShaderResources(0, kPSSRVCount, savedPSSRVs.data());
+		context->PSGetShaderResources(0, psSRVCount, savedPSSRVs.data());
 		context->PSGetConstantBuffers(0, kPSCBCount, savedPSCBs.data());
-		context->PSGetSamplers(0, kPSSamplerCount, savedPSSamplers.data());
+		context->PSGetSamplers(0, psSamplerCount, savedPSSamplers.data());
 
 		// Fullscreen triangle state: no vertex buffer, no input layout, no depth, no
 		// scissor (default rasterizer state), blending off until a pass opts in.
@@ -42,7 +42,7 @@ namespace PostProcessingRaster
 	RasterPass::~RasterPass()
 	{
 		std::array<ID3D11ShaderResourceView*, kPSSRVCount> nullSRVs = {};
-		context->PSSetShaderResources(0, kPSSRVCount, nullSRVs.data());
+		context->PSSetShaderResources(0, psSRVCount, nullSRVs.data());
 
 		context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
 		context->OMSetBlendState(savedBlendState, savedBlendFactor, savedSampleMask);
@@ -60,9 +60,9 @@ namespace PostProcessingRaster
 		context->DSSetShader(savedDS, nullptr, 0);
 		context->GSSetShader(savedGS, nullptr, 0);
 		context->PSSetShader(savedPS, nullptr, 0);
-		context->PSSetShaderResources(0, kPSSRVCount, savedPSSRVs.data());
+		context->PSSetShaderResources(0, psSRVCount, savedPSSRVs.data());
 		context->PSSetConstantBuffers(0, kPSCBCount, savedPSCBs.data());
-		context->PSSetSamplers(0, kPSSamplerCount, savedPSSamplers.data());
+		context->PSSetSamplers(0, psSamplerCount, savedPSSamplers.data());
 
 		for (auto* rtv : savedRTVs)
 			if (rtv)

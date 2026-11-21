@@ -1,9 +1,11 @@
 #include "SnowDeformation/SnowCommon.hlsli"
 
+#if defined(VSHADER)
 cbuffer StaticCB : register(b1)
 {
-#include "SnowDeformation/StaticCBFields.hlsli"
+#	include "SnowDeformation/StaticCBFields.hlsli"
 }
+#endif
 
 #if defined(WATER)
 struct WATER_VS_OUTPUT
@@ -71,22 +73,14 @@ VS_OUTPUT main(VS_INPUT input)
 #	if defined(PSHADER)
 cbuffer HeightProcessCB : register(b0)
 {
-	int2 ScrollDeltaH;
-	uint ClearAllH;
-	uint padConeStepH;
-	float2 HeightWindowCenterH;
-	float HeightHalfExtentH;
-	float padSlopePerUnitH;
-	float2 TerrainWindowOriginH;
-	float TerrainTexelSizeH;
-	uint TerrainDimH;
+#		include "SnowDeformation/HeightProcessFields.hlsli"
 }
 
 Texture2D<float4> TerrainWindowCapture : register(t2);
 
 float2 main(VS_OUTPUT input) : SV_Target0
 {
-	float terrain = TerrainWindowHeight(TerrainWindowCapture, (input.WorldXY - TerrainWindowOriginH) / TerrainTexelSizeH, TerrainDimH);
+	float terrain = TerrainWindowHeight(TerrainWindowCapture, (input.WorldXY - TerrainWindowOrigin) / TerrainTexelSize, TerrainDim);
 	float bottom = input.WorldZ - terrain < 40.0 ? 100000.0 : input.WorldZ;
 	return float2(input.WorldZ, -bottom);
 }

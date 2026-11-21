@@ -340,25 +340,15 @@ bool SnowDeformation::IsProxyOrOverlayGeometry(const RE::BSGeometry* a_geometry,
 }
 
 bool SnowDeformation::ActorIsIncorporeal(RE::Actor* a_actor, RE::NiAVObject* a_root,
-	StampBones* a_bones, float* a_alphaOut, bool* a_flagOut) const
+	StampBones* a_bones, float* a_alphaOut) const
 {
 	if (a_alphaOut)
 		*a_alphaOut = 1.0f;
-	if (a_flagOut)
-		*a_flagOut = false;
 	if (!a_actor)
 		return false;
-	const int mode = settings.IncorporealMode;
-
-	bool flagged = false;
-	if (const auto* base = a_actor->GetActorBase())
-		flagged = base->actorData.actorBaseFlags.all(RE::ACTOR_BASE_DATA::Flag::kIsGhost);
-	if (a_flagOut)
-		*a_flagOut = flagged;
 
 	float alpha = a_bones ? a_bones->bodyAlpha : -1.0f;
-	const bool wantAlpha = mode == 1 || mode == 3;
-	if (wantAlpha && a_root) {
+	if (a_root) {
 		bool stale = alpha < 0.0f;
 		if (a_bones) {
 			if (a_bones->alphaRecheck > 0)
@@ -420,18 +410,7 @@ bool SnowDeformation::ActorIsIncorporeal(RE::Actor* a_actor, RE::NiAVObject* a_r
 		alpha = 1.0f;
 	if (a_alphaOut)
 		*a_alphaOut = alpha;
-
-	const bool translucent = alpha < kIncorporealAlpha;
-	switch (mode) {
-	case 1:
-		return translucent;
-	case 2:
-		return flagged;
-	case 3:
-		return translucent || flagged;
-	default:
-		return false;
-	}
+	return alpha < kIncorporealAlpha;
 }
 
 bool SnowDeformation::ActorIsFloating(RE::Actor* a_actor, RE::NiAVObject* a_root,
@@ -443,7 +422,7 @@ bool SnowDeformation::ActorIsFloating(RE::Actor* a_actor, RE::NiAVObject* a_root
 		*a_byFeetOut = false;
 	if (!a_actor)
 		return false;
-	const float band = std::max(settings.FloatingActorBand, 0.0f);
+	const float band = kFloatingActorBand;
 	float lowest = FLT_MAX;
 
 	if (a_bones) {
@@ -481,12 +460,6 @@ bool SnowDeformation::ActorIsFloating(RE::Actor* a_actor, RE::NiAVObject* a_root
 	return gap > band;
 }
 
-float SnowDeformation::CrustBreakForce(float a_radius) const
-{
-	const float threshold = std::max(settings.CrustBreakRadius, 1.0f);
-	return std::clamp((a_radius - threshold) / threshold, 0.0f, 1.0f);
-}
-
 struct ShapeStamp
 {
 	float2 a;
@@ -518,7 +491,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 	globals::profiler->BeginPass("SnowDeformation::Trails - Gather & Contact");
 	uint stampCount = 0;
 	const uint actorCeiling = kMaxStamps - kSpellStampReserve;
-	float nearestDistSq = FLT_MAX;
 	RE::NiPoint3 cameraPosition = Util::GetEyePosition();
 	auto* const playerActor = globals::game::player;
 	const float windowReach = 0.5f * deformWorldSize;
@@ -526,9 +498,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 	const float actorReachSq = actorReach * actorReach;
 	std::unordered_map<uint64_t, float2> currentPositions;
 	std::unordered_set<uint32_t> budgetCutRefs;
-	stampStats = {};
-	for (auto& cone : perFrameData.StampCones)
-		cone = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	const float texelFloor = deformWorldSize / (float)deformMapDim;
 	const float footRadiusFloor = std::max(kMinFootStampRadius, texelFloor);
@@ -620,7 +589,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		const uint32_t formID = actor->formID;
 		if (stampCount >= actorCeiling) {
 			budgetCutRefs.insert(formID);
-			stampStats.budgetTurnedAway++;
 			return;
 		}
 		const bool isDead = actor->IsDead();
@@ -814,54 +782,21 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		bool liftInRagdoll = true;
 		float creatureWeight = 0.0f;
 		const float bodyLift = 0.0f;
-		float floatingGap = 0.0f;
 		bool floatingByFeet = false;
 		const bool floating = !isDead &&
-		                      ActorIsFloating(actor.get(), root, bones, footPath, groundZ + bodyLift, &floatingGap, &floatingByFeet);
+		                      ActorIsFloating(actor.get(), root, bones, footPath, groundZ + bodyLift, nullptr, &floatingByFeet);
 		float bodyAlpha = 1.0f;
-		bool ghostFlag = false;
-		const bool incorporeal = !isDead && ActorIsIncorporeal(actor.get(), root, bones, &bodyAlpha, &ghostFlag);
+		const bool incorporeal = !isDead && ActorIsIncorporeal(actor.get(), root, bones, &bodyAlpha);
 
-		if (!actor->IsPlayerRef()) {
-			const float distSq = cameraPosition.GetSquaredDistance(position);
-			if (!stampStats.nearestValid || distSq < nearestDistSq) {
-				nearestDistSq = distSq;
-				const float landZ = landZAt(position);
-				stampStats.nearestValid = true;
-				stampStats.nearestGapToRoot = floatingGap;
-				stampStats.nearestGapToLand = position.z - landZ;
-				stampStats.nearestFloating = floating;
-				stampStats.nearestFeet = bones ? static_cast<uint>(bones->feet.size()) : 0;
-				stampStats.nearestLimbs = bones ? static_cast<uint>(bones->limbs.size()) : 0;
-				stampStats.nearestUsableFeet = usableFeet;
-				stampStats.nearestFallback = cache.collisionFallback;
-				stampStats.nearestDryTravel = cache.dryTravel;
-				stampStats.nearestFormID = formID;
-				stampStats.nearestBodyAlpha = bodyAlpha;
-				stampStats.nearestBodyAlphaSource = bones && bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "";
-				stampStats.nearestGhostFlag = ghostFlag;
-				stampStats.nearestIncorporeal = incorporeal;
-				auto* controller = actor->GetCharController();
-				stampStats.nearestState = controller ?
-				                              static_cast<uint>(controller->context.currentState) :
-				                              0xFFu;
-			}
-		}
-
-		if (floating && settings.NoCarveFloatingActors && !rasterCandidate) {
-			stampStats.floating++;
+		if (floating && !rasterCandidate) {
 			if (floatingByFeet)
 				accumulateDry(dryStep);
 			return;
 		}
 		if (incorporeal) {
-			stampStats.incorporeal++;
 			if (incorporealLogged.size() < 16 && incorporealLogged.insert(formID).second) {
-				const bool byFlag = ghostFlag && settings.IncorporealMode != 1;
-				logger::info("[SNOW DEFORMATION] '{}' ({:08X}) leaves no trench: {}", actor->GetDisplayFullName(), formID,
-					byFlag ? std::string("marked Ghost on its record") :
-							 std::format("most opaque body surface '{}' at alpha {:.2f}",
-								 bones && bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "", bodyAlpha));
+				logger::info("[SNOW DEFORMATION] '{}' ({:08X}) leaves no trench: most opaque body surface '{}' at alpha {:.2f}", actor->GetDisplayFullName(), formID,
+					bones && bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "", bodyAlpha);
 			}
 			return;
 		}
@@ -872,16 +807,14 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				bones->anyAlphaSource.c_str() ? bones->anyAlphaSource.c_str() : "", bones->anyAlpha,
 				bodyAlpha, bones->bodyAlphaSource.c_str() ? bones->bodyAlphaSource.c_str() : "");
 		}
-		const bool alphaGoverns = settings.IncorporealMode == 1 || settings.IncorporealMode == 3;
-		if (!isDead && alphaGoverns && bones && bones->alphaSettle < kBodyAlphaSettleReads) {
-			stampStats.incorporeal++;
+		if (!isDead && bones && bones->alphaSettle < kBodyAlphaSettleReads) {
 			return;
 		}
 
 		const float impactWeight = creatureWeight > 0.0f ? std::cbrt(creatureWeight) : 1.0f;
 		footImpact = std::min(footImpact * impactWeight, 1.0f);
 		knockImpact = std::min(knockImpact * impactWeight, 1.0f);
-		const float impactReach = std::clamp(settings.ImpactReach, 0.5f, 4.0f);
+		const float impactReach = kImpactReach;
 		const bool footStrikes = footPath && bones;
 		const float bodyImpact = footStrikes ? knockImpact : std::max(footImpact, knockImpact);
 		if (bodyImpact > kImpactStampMin && stampCount < actorCeiling)
@@ -902,7 +835,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					{ print.heel.x, print.heel.y, kStampModeCarve + kStampImpactScale * footImpact, 0.0f });
 			}
 		}
-		if (settings.SpeedSpoil && footPath && bones) {
+		if (footPath && bones) {
 			if (spoilFeet.size() > 1024)
 				spoilFeet.clear();
 			const uint32_t spoilFrame = globals::state->frameCount;
@@ -910,7 +843,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			const float spoilTravelX = position.x - impactFrom.x;
 			const float spoilTravelY = position.y - impactFrom.y;
 			const float spoilTravel = std::sqrt(spoilTravelX * spoilTravelX + spoilTravelY * spoilTravelY);
-			const float wedgeLength = spoilSpeed * kSpoilKickSeconds * std::clamp(impactWeight, 0.5f, 2.0f) * std::clamp(settings.SpeedSpoilSize, 0.1f, 2.0f);
+			const float wedgeLength = spoilSpeed * kSpoilKickSeconds * std::clamp(impactWeight, 0.5f, 2.0f) * kSpeedSpoilSize;
 			uint32_t spoilIndex = 0;
 			for (const auto& spoilFoot : bones->feet) {
 				const uint32_t spoilKeyIndex = spoilIndex++;
@@ -930,7 +863,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 						emitStamp({ spoilState.last.x + armX * wedgeLength, spoilState.last.y + armY * wedgeLength, 0.0f, std::clamp(kSpoilArmWidth * wedgeLength, 4.0f, kMaxStampShapeRadius) },
 							{ spoilState.last.x, spoilState.last.y, kStampModeCarve + kStampImpactScale * spoilEnergy, 0.0f });
 					}
-					speedSpoilWedges++;
 				}
 				if (spoilPlanted)
 					spoilState.last = { spoilNode->world.translate.x, spoilNode->world.translate.y };
@@ -966,20 +898,14 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					rest->prevCenter = center;
 					rest->hasPrevCenter = true;
 					draw = !rest->settled;
-					if (!draw)
-						stampStats.corpsesLatched++;
 				}
 				if (draw) {
 					contactActors.push_back({ actor->CreateRefHandle(),
 						bound.center.x - bound.radius, bound.center.y - bound.radius,
 						bound.center.x + bound.radius, bound.center.y + bound.radius, isDead,
 						groundZ, nominalDepth });
-					if (isDead) {
+					if (isDead)
 						contactCorpseCount++;
-						stampStats.corpsesRasterized++;
-					} else {
-						stampStats.actorsRasterized++;
-					}
 				}
 				return;
 			}
@@ -1020,8 +946,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 
 					const float2 segStart = trailFrom(key, heel);
 
-					emitStamp({ tip.x, tip.y, footReach, radius }, { segStart.x, segStart.y, kStampModeBody, CrustBreakForce(radius) });
-					stampStats.feet++;
+					emitStamp({ tip.x, tip.y, footReach, radius }, { segStart.x, segStart.y, kStampModeBody, 0.0f });
 					footStamped = true;
 				}
 			}
@@ -1038,8 +963,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					continue;
 
 				emitStamp({ segment.b->x, segment.b->y, carve, segment.radius },
-					{ segment.a->x, segment.a->y, kStampModeBody, CrustBreakForce(segment.radius) });
-				stampStats.limbs++;
+					{ segment.a->x, segment.a->y, kStampModeBody, 0.0f });
 			}
 			if (footStamped) {
 				cache.dryTravel = 0.0f;
@@ -1049,9 +973,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 			}
 			return;
 		}
-
-		if (!isDead && cache.collisionFallback)
-			stampStats.fallbackActors++;
 
 		const bool useCorpseBones = isDead && bones && !bones->limbs.empty();
 		if (useCorpseBones) {
@@ -1102,8 +1023,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					continue;
 
 				emitStamp({ segment.b->x, segment.b->y, carve, segment.radius },
-					{ segment.a->x, segment.a->y, kStampModeBody, CrustBreakForce(segment.radius) });
-				stampStats.limbs++;
+					{ segment.a->x, segment.a->y, kStampModeBody, 0.0f });
 			}
 		}
 
@@ -1153,8 +1073,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					if (carve < kMinLimbCarve)
 						return RE::BSVisit::BSVisitControl::kContinue;
 					emitStamp({ shapeStamp.a.x, shapeStamp.a.y, carve, std::max(shapeStamp.radius * kStampRadius / kStampRadiusNeutral * depthScale, texelFloor) },
-						{ shapeStamp.b.x, shapeStamp.b.y, kStampModeBody, CrustBreakForce(radius) });
-					stampStats.shapes++;
+						{ shapeStamp.b.x, shapeStamp.b.y, kStampModeBody, 0.0f });
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
@@ -1214,7 +1133,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		if (!root)
 			return;
 
-		stampStats.propRefs++;
 		const auto position = root->world.translate;
 		const uint32_t formID = a_ref->formID;
 		auto prevIt = propPrevPositions.find(formID);
@@ -1229,7 +1147,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		if (propTravelled)
 			prevIt->second.pos = position;
 		if (propMoved) {
-			stampStats.propMovers++;
 			if (scanning)
 				propScanMovers[phase].push_back(a_ref->CreateRefHandle());
 		}
@@ -1258,7 +1175,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					return RE::BSVisit::BSVisitControl::kStop;
 				});
 				(skinned ? contactActors : contactProps).push_back({ a_ref->CreateRefHandle(), bound.center.x - bound.radius, bound.center.y - bound.radius, bound.center.x + bound.radius, bound.center.y + bound.radius, false, groundZ, nominalDepthAt(position) });
-				stampStats.propsRasterized++;
 				return;
 			}
 		}
@@ -1292,8 +1208,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 				if (carve < kMinLimbCarve)
 					return RE::BSVisit::BSVisitControl::kContinue;
 				emitStamp({ shapeStamp.a.x, shapeStamp.a.y, carve, std::max(shapeStamp.radius * kStampRadius / kStampRadiusNeutral * depthScale, kMinPropStampRadius) },
-					{ shapeStamp.b.x, shapeStamp.b.y, 0.0f, CrustBreakForce(radius) });
-				stampStats.props++;
+					{ shapeStamp.b.x, shapeStamp.b.y, 0.0f, 0.0f });
 			}
 			return RE::BSVisit::BSVisitControl::kContinue;
 		});
@@ -1311,8 +1226,7 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 					1.0f - (bound.center.z - radius - supportZ) / nominalDepth, 0.0f, 1.0f);
 				if (carve >= kMinLimbCarve) {
 					emitStamp({ current.x, current.y, carve, std::max(radius * kStampRadius / kStampRadiusNeutral * depthScale, kMinPropStampRadius) },
-						{ previous.x, previous.y, 0.0f, CrustBreakForce(radius) });
-					stampStats.props++;
+						{ previous.x, previous.y, 0.0f, 0.0f });
 				}
 			}
 		}
@@ -1385,8 +1299,6 @@ void SnowDeformation::GatherStamps(PerFrame& perFrameData)
 		if (phase == 0 && propScanCycle >= 2)
 			std::erase_if(propPrevPositions, [&](const auto& a_kv) { return a_kv.second.cycle + 1 < propScanCycle; });
 	}
-
-	stampStats.beforeSpells = stampCount;
 
 	if (!budgetCutRefs.empty()) {
 		for (const auto& [key, anchor] : stampPrevPositions) {

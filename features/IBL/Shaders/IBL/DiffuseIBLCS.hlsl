@@ -8,41 +8,42 @@ RWTexture2D<sh2> IBLTexture : register(u0);
 
 SamplerState LinearSampler : register(s0);
 
-// Performance optimization: Use 16x16 samples (256 total) instead of 32x32 (1024)
-// Quality difference is negligible but performance gain is ~4x
+// 16x16 threads, each integrating a 4x4 patch: single point samples alias small bright
+// features (sunlit cloud edges) into a biased, flickering SH.
 #define AXIS_SAMPLE_COUNT 16
 #define TOTAL_SAMPLES (AXIS_SAMPLE_COUNT * AXIS_SAMPLE_COUNT)
+#define AXIS_SUBSAMPLE_COUNT 4
 
 // Shared memory for parallel reduction - each thread gets its own slot
 groupshared sh2 sharedR[TOTAL_SAMPLES];
 groupshared sh2 sharedG[TOTAL_SAMPLES];
 groupshared sh2 sharedB[TOTAL_SAMPLES];
 
-// Parallelize computation: 16x16 = 256 threads, one per sample
+// Parallelize computation: 16x16 = 256 threads, one patch each
 [numthreads(AXIS_SAMPLE_COUNT, AXIS_SAMPLE_COUNT, 1)] void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
-	// Each thread computes one sample of the spherical integral
 	// Note: No bounds check needed since we dispatch exactly AXIS_SAMPLE_COUNT x AXIS_SAMPLE_COUNT threads
 	uint az = dispatchID.x;
 	uint ze = dispatchID.y;
 
-	// Pre-compute constants for better performance
 	const float rcpAxisSampleCount = rcp((float)AXIS_SAMPLE_COUNT);
-	const float shFactor = 4.0 * Math::PI * rcpAxisSampleCount * rcpAxisSampleCount;
+	const float rcpAxisSubsampleCount = rcp((float)AXIS_SUBSAMPLE_COUNT);
+	const float shFactor = 4.0 * Math::PI * rcpAxisSampleCount * rcpAxisSampleCount * rcpAxisSubsampleCount * rcpAxisSubsampleCount;
 
-	// Compute sample direction (offset by 0.5 for center sampling)
-	float2 sampleCoord = (float2(az, ze) + 0.5) * rcpAxisSampleCount;
-	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
-
-	// Sample cubemap with optimized direction
-	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-
-	// Compute spherical harmonics basis for this direction
-	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
-
-	// Scale by integration weight and color contribution
-	sh2 contributionR = SphericalHarmonics::Scale(sh, color.r * shFactor);
-	sh2 contributionG = SphericalHarmonics::Scale(sh, color.g * shFactor);
-	sh2 contributionB = SphericalHarmonics::Scale(sh, color.b * shFactor);
+	sh2 contributionR = SphericalHarmonics::Zero();
+	sh2 contributionG = SphericalHarmonics::Zero();
+	sh2 contributionB = SphericalHarmonics::Zero();
+	[unroll] for (uint sy = 0; sy < AXIS_SUBSAMPLE_COUNT; ++sy)
+	{
+		[unroll] for (uint sx = 0; sx < AXIS_SUBSAMPLE_COUNT; ++sx)
+		{
+			float3 rayDir = SphericalHarmonics::GetUniformSphereCellSample(uint2(az, ze), uint2(sx, sy), AXIS_SAMPLE_COUNT, AXIS_SUBSAMPLE_COUNT);
+			float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+			sh2 sh = SphericalHarmonics::Evaluate(rayDir);
+			contributionR = SphericalHarmonics::Add(contributionR, SphericalHarmonics::Scale(sh, color.r * shFactor));
+			contributionG = SphericalHarmonics::Add(contributionG, SphericalHarmonics::Scale(sh, color.g * shFactor));
+			contributionB = SphericalHarmonics::Add(contributionB, SphericalHarmonics::Scale(sh, color.b * shFactor));
+		}
+	}
 
 	// Store each thread's contribution in shared memory
 	sharedR[groupIndex] = contributionR;

@@ -8,19 +8,19 @@ void GrassOptimizations::SetupResources()
 {
 	cullParamsCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CullParamsCB>(), "GrassOptimizations::CullParamsCB");
 	{
-		// The marker selects the engine instance stream in the optimized shader permutation.
+		// Select the engine instance stream in the optimized shader.
 		std::array<uint32_t, sizeof(CullBucketCB) / sizeof(uint32_t)> marker{};
 		marker[0] = 0xFFFFFFFFu;
 		vanillaDrawCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc(sizeof(marker), false), "GrassOptimizations::VanillaDrawCB");
 		vanillaDrawCB->Update(marker);
 	}
 
-	hiZ.SetupResources();
-
 	if (FAILED(globals::d3d::context->QueryInterface(__uuidof(ID3D11DeviceContext1), ctx1.put_void())) || !ctx1) {
 		logger::error("[GRASS OPTIMIZATIONS] ID3D11DeviceContext1 unavailable — feature disabled");
 		ctx1 = nullptr;
 	}
+
+	ownsGrass.store(ctx1 && GetCullCS(), std::memory_order_release);
 }
 
 bool GrassOptimizations::EnsureCullBucketCapacity(uint32_t slots)
@@ -28,10 +28,7 @@ bool GrassOptimizations::EnsureCullBucketCapacity(uint32_t slots)
 	if (cullBucketCB && cullBucketCBSlots >= slots)
 		return true;
 
-	uint32_t capacity = cullBucketCBSlots ? cullBucketCBSlots : 64;
-	while (capacity < slots)
-		capacity *= 2;
-
+	const uint32_t capacity = std::max(64u, std::bit_ceil(slots));
 	cullBucketCB.reset();
 	cullBucketCBSlots = 0;
 
@@ -51,12 +48,14 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 {
 	if (!EnsureCullBucketCapacity((uint32_t)visibleBuckets.size()))
 		return false;
+	cullEntries.clear();
+	cullEntries.reserve(visibleBuckets.size());
 
 	D3D11_MAPPED_SUBRESOURCE mapped{};
 	if (FAILED(ctx->Map(cullBucketCB->CB(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
 		return false;
 
-	// SetupTechnique has already populated the fog color used at c16 in PerGeometry.
+	// SetupTechnique populates the fog color for PerGeometry register c16.
 	static const auto* fogNearColor = reinterpret_cast<const float*>(REL::RelocationID(527805, 414756).address() + 0x100);
 	static const auto* grassWindAmount = reinterpret_cast<const float*>(REL::RelocationID(527802, 414753).address());
 	static const auto* windGrassMultiplier = reinterpret_cast<const float*>(REL::RelocationID(513337, 391112).address());
@@ -86,27 +85,44 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 	for (GrassBucket* bucket : visibleBuckets) {
 		bucket->cullSlot = slot;
 		auto& data = slots[slot];
-		const auto& draw = bucket->asset.key.draw;
+		const auto& draw = bucket->drawResources.key.draw;
+
 		data.geometry = geometry;
 		data.geometry.windVector[0] = draw.windDirection[0];
 		data.geometry.windVector[1] = draw.windDirection[1];
 		data.geometry.scaleMask[0] = data.geometry.scaleMask[1] = draw.uniformScale ? 1.0f : 0.0f;
-		data.material = bucket->asset.key.material.constants;
+		data.material = bucket->drawResources.key.material.constants;
+
 		const auto& linearLighting = globals::features::linearLighting;
 		data.material.params1[2] = linearLighting.IsLinearLightingActive() ? linearLighting.settings.emitColorMult : 1.0f;
+
+		const float canopyHeight = draw.boundCenter[2] > 1.0f ? 2.0f * draw.boundCenter[2] : std::max(draw.boundCenter[2] + draw.modelRadius, 1.0f);
+		float occlusionRadius = draw.modelRadius + std::hypot(draw.boundCenter[0], draw.boundCenter[1], draw.boundCenter[2] - 0.5f * canopyHeight);
+
+		for (const auto* lod : bucket->lodMeshes) {
+			if (lod)
+				occlusionRadius = std::max(occlusionRadius, lod->occlusionRadius);
+		}
+
 		const auto lodMeshCost = [bucket](size_t tier) {
 			const auto* lod = bucket->lodMeshes[tier];
-			return lod ? std::sqrt(std::max(1.0f, (float)lod->indexCount / 24.0f)) : bucket->minPixelScale;
+			return lod ? lod->GetMeshCost() : bucket->minPixelScale;
 		};
-		const float canopyHeight = draw.boundCenter[2] > 1.0f ? 2.0f * draw.boundCenter[2] : std::max(draw.boundCenter[2] + draw.modelRadius, 1.0f);
-		data.cull = {
+
+		const auto lodCanopyHeight = [bucket, canopyHeight](size_t tier) {
+			const auto* lod = bucket->lodMeshes[tier];
+			return lod ? lod->canopyHeight : canopyHeight;
+		};
+
+		const CullBucketCB cull{
 			.groupCount = bucket->groupCount,
 			.sliceTableOffset = bucket->sliceTableOffset,
 			.sliceCount = bucket->sliceTableCount,
-			.dispatchWidth = DispatchWidth(bucket->groupCount),
-			.tierStride = bucket->output->capacity,
+			.groupBase = bucket->groupBase,
+			.tierStride = bucketStore.cullOutput.capacity,
 			.outputOffset = bucket->outputOffset,
 			.argsOffset = slot * kTierCount * kArgsStride,
+			.occlusionRadius = occlusionRadius,
 			.boundExtent = bucket->boundExtent,
 			.modelRadius = draw.modelRadius,
 			.distScale = bucket->distScale,
@@ -119,10 +135,12 @@ bool GrassOptimizations::UploadCullBucketConstants(ID3D11DeviceContext* ctx)
 			.timeBase = timeBase,
 			.prevTimeBase = prevTimeBase,
 			.farLODMeshCost = lodMeshCost(1),
-			.canopyHeights = { canopyHeight,
-				bucket->lodMeshes[0] ? bucket->lodMeshes[0]->canopyHeight : canopyHeight,
-				bucket->lodMeshes[1] ? bucket->lodMeshes[1]->canopyHeight : canopyHeight }
+			.canopyHeights = { canopyHeight, lodCanopyHeight(0), lodCanopyHeight(1) },
+			.alphaTestRef = bucket->alphaTestRefKnown ? bucket->alphaTestRef : 0.0f
 		};
+
+		data.cull = cull;
+		cullEntries.push_back({ .cull = cull });
 		++slot;
 	}
 
@@ -137,10 +155,7 @@ bool GrassOptimizations::UploadSliceTable(ID3D11DeviceContext* ctx)
 		sliceTable.reset();
 		sliceTableCapacity = 0;
 
-		uint32_t capacity = 256;
-		while (capacity < sliceTableCPU.size())
-			capacity *= 2;
-
+		const uint32_t capacity = std::max(256u, std::bit_ceil((uint32_t)sliceTableCPU.size()));
 		D3D11_BUFFER_DESC desc{};
 		desc.ByteWidth = capacity * 2 * sizeof(uint32_t);
 		desc.Usage = D3D11_USAGE_DYNAMIC;
@@ -174,75 +189,133 @@ bool GrassOptimizations::UploadSliceTable(ID3D11DeviceContext* ctx)
 	return true;
 }
 
-uint32_t GrassBucketStore::ReservedInstanceCapacity(uint32_t needed)
+void GrassRangeAllocator::Insert(uint32_t offset, uint32_t count)
 {
-	// Keep 25% headroom, rounded to 4096 records, without overflowing the D3D11 byte width.
-	const uint64_t reserved = (uint64_t)needed + ((uint64_t)needed + 3) / 4;
-	return (uint32_t)std::min<uint64_t>(kMaxBucketInstances, std::max<uint64_t>(4096, (reserved + 4095) & ~uint64_t{ 4095 }));
+	freeRanges.emplace(offset, count);
+	rangesBySize.emplace(count, offset);
 }
 
-uint32_t GrassBucketStore::GrownInstanceCapacity(uint32_t current, uint32_t needed)
+void GrassRangeAllocator::Erase(std::map<uint32_t, uint32_t>::iterator range)
 {
-	// Small buckets start at a power of two instead of reserving 4096 records.
-	if (!current)
-		return std::clamp(std::bit_ceil(needed), 256u, kMaxBucketInstances);
+	rangesBySize.erase({ range->second, range->first });
+	freeRanges.erase(range);
+}
 
-	return (uint32_t)std::min<uint64_t>(kMaxBucketInstances, std::max<uint64_t>(ReservedInstanceCapacity(needed), 2ull * current));
+uint32_t GrassRangeAllocator::Allocate(uint32_t count)
+{
+	const auto fit = rangesBySize.lower_bound({ count, 0 });
+	if (fit == rangesBySize.end())
+		return UINT32_MAX;
+
+	const auto [available, offset] = *fit;
+	Erase(freeRanges.find(offset));
+	if (available > count)
+		Insert(offset + count, available - count);
+	return offset;
+}
+
+bool GrassRangeAllocator::TryExtend(uint32_t offset, uint32_t count, uint32_t newCount)
+{
+	const auto next = freeRanges.find(offset + count);
+	if (next == freeRanges.end() || next->second < newCount - count)
+		return false;
+
+	const uint32_t remaining = next->second - (newCount - count);
+	Erase(next);
+	if (remaining)
+		Insert(offset + newCount, remaining);
+	return true;
+}
+
+void GrassRangeAllocator::Free(uint32_t offset, uint32_t count)
+{
+	if (!count)
+		return;
+
+	auto next = freeRanges.lower_bound(offset);
+	if (next != freeRanges.begin()) {
+		if (const auto previous = std::prev(next); previous->first + previous->second == offset) {
+			offset = previous->first;
+			count += previous->second;
+			Erase(previous);
+		}
+	}
+
+	if (next != freeRanges.end() && offset + count == next->first) {
+		count += next->second;
+		Erase(next);
+	}
+
+	Insert(offset, count);
+}
+
+void GrassRangeAllocator::Grow(uint32_t newCapacity)
+{
+	if (newCapacity <= capacity)
+		return;
+
+	const uint32_t previous = std::exchange(capacity, newCapacity);
+	Free(previous, newCapacity - previous);
+}
+
+uint32_t GrassBucketStore::ReservedInstanceCapacity(uint32_t needed)
+{
+	// Leave headroom and round to 4096 instances to reduce reallocations.
+	const uint64_t reserved = (uint64_t)needed + ((uint64_t)needed + 3) / 4;
+	return (uint32_t)std::min<uint64_t>(kMaxPoolInstances, std::max<uint64_t>(4096, (reserved + 4095) & ~uint64_t{ 4095 }));
 }
 
 bool GrassBucketStore::CanReduceInstanceCapacity(uint32_t capacity, uint32_t needed)
 {
-	// Require at least a 12.5% reduction before replacing an otherwise usable buffer.
+	// Avoid reallocating for small reductions in usage.
 	return capacity > 4096 && ReservedInstanceCapacity(needed) <= capacity - capacity / 8;
 }
 
-void GrassBucketStore::AdoptBucketBuffers(GrassBucket& bucket, GrassSourceBuffers& replacement, ID3D11DeviceContext* ctx)
+void GrassBucketStore::RequestPoolGrowth(const GrassPool& pool, std::shared_ptr<GrassPoolGrowth>& growth, uint32_t extra, uint32_t minCapacity, uint32_t maxCapacity,
+	std::unique_ptr<Buffer> (*create)(uint32_t))
 {
-	const uint32_t residentCount = bucket.residentInstances;
-	if (residentCount) {
-		const D3D11_BOX residentRange{ 0, 0, 0, residentCount * kSourceStride, 1, 1 };
-		ctx->CopySubresourceRegion(replacement.instances->resource.get(), 0, 0, 0, 0, bucket.source.instances->resource.get(), 0, &residentRange);
-	}
+	// Grow geometrically to limit pool copies on the render thread.
+	const uint64_t current = pool.ranges.Capacity();
+	const uint64_t capacity = std::min<uint64_t>(maxCapacity, std::max<uint64_t>({ minCapacity, 2 * current, current + extra + extra / 4 }));
+	if (growth || capacity < current + extra)
+		return;
 
-	// Source growth leaves the per-view outputs, arguments and cached cull groups intact.
-	std::swap(bucket.source, replacement);
-}
+	auto job = std::make_shared<GrassPoolGrowth>();
+	job->capacity = (uint32_t)capacity;
+	growth = job;
 
-bool GrassBucketStore::ResizeBucketAsync(GrassBucket& bucket, uint32_t capacity, ID3D11DeviceContext* ctx)
-{
-	if (bucket.allocation) {
-		if (!bucket.allocation->done.load(std::memory_order_acquire))
-			return false;
-
-		const auto completedAllocation = std::exchange(bucket.allocation, nullptr);
-		// Adopt replacements that preserve resident data and request further growth next frame if needed.
-		if (completedAllocation->ok && completedAllocation->capacity >= bucket.residentInstances) {
-			AdoptBucketBuffers(bucket, completedAllocation->source, ctx);
-			return true;
-		}
-	}
-
-	auto job = std::make_shared<BucketAllocation>();
-	job->capacity = capacity;
-	bucket.allocation = job;
-	QueueAllocation(std::move(job));
-
-	return false;
-}
-
-void GrassBucketStore::QueueAllocation(std::shared_ptr<BucketAllocation> job)
-{
 	if (!allocator)
 		allocator = std::make_unique<BS::thread_pool<>>(1);
 
-	allocator->detach_task([job = std::move(job)] {
+	// Creating a large buffer can stall, so it happens on the allocation thread.
+	allocator->detach_task([job = std::move(job), create] {
+		// A sole reference means the store no longer needs this buffer.
 		if (job.use_count() > 1)
-			job->ok = CreateBucketSourceBuffers(job->source, job->capacity);
+			job->buffer = create(job->capacity);
 		job->done.store(true, std::memory_order_release);
 	});
 }
 
-void GrassBucketStore::RetireSlices(std::vector<std::unique_ptr<GrassChunk>>& slices)
+void GrassBucketStore::AdoptPoolGrowth(GrassPool& pool, std::shared_ptr<GrassPoolGrowth>& growth, uint32_t stride, ID3D11DeviceContext* ctx)
+{
+	if (!growth || !growth->done.load(std::memory_order_acquire))
+		return;
+
+	const auto job = std::exchange(growth, nullptr);
+	const uint32_t current = pool.ranges.Capacity();
+	if (!job->buffer || job->capacity <= current)
+		return;
+
+	if (current) {
+		const D3D11_BOX all{ 0, 0, 0, current * stride, 1, 1 };
+		ctx->CopySubresourceRegion(job->buffer->resource.get(), 0, 0, 0, 0, pool.buffer->resource.get(), 0, &all);
+	}
+
+	pool.buffer = std::move(job->buffer);
+	pool.ranges.Grow(job->capacity);
+}
+
+void GrassBucketStore::RetireSlices(std::vector<std::unique_ptr<GrassInstanceSlice>>& slices)
 {
 	if (slices.empty())
 		return;
@@ -250,6 +323,24 @@ void GrassBucketStore::RetireSlices(std::vector<std::unique_ptr<GrassChunk>>& sl
 	if (!allocator)
 		allocator = std::make_unique<BS::thread_pool<>>(1);
 	allocator->detach_task([retired = std::move(slices)] {});
+}
+
+std::unique_ptr<Buffer> GrassBucketStore::CreateStructuredBuffer(uint32_t count, uint32_t stride, const char* name)
+{
+	D3D11_BUFFER_DESC desc{};
+	desc.ByteWidth = count * stride;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.StructureByteStride = stride;
+	auto buffer = std::make_unique<Buffer>(desc, nullptr, name);
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
+	srv.Format = DXGI_FORMAT_UNKNOWN;
+	srv.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	srv.Buffer.NumElements = count;
+	buffer->CreateSRV(srv);
+	return buffer;
 }
 
 std::unique_ptr<Buffer> GrassBucketStore::CreateRawBuffer(uint64_t bytes, uint32_t bindings, uint32_t misc, const char* name)
@@ -276,10 +367,10 @@ std::unique_ptr<Buffer> GrassBucketStore::CreateRawBuffer(uint64_t bytes, uint32
 	return buffer;
 }
 
-bool GrassBucketStore::CreateBucketSourceBuffers(GrassSourceBuffers& buffers, uint32_t capacity)
+std::unique_ptr<Buffer> GrassBucketStore::CreateInstancePoolBuffer(uint32_t capacity)
 {
 	try {
-		auto buffer = CreateRawBuffer((uint64_t)capacity * kSourceStride, D3D11_BIND_SHADER_RESOURCE, 0, "GrassOptimizations::InstanceBuf");
+		auto buffer = CreateRawBuffer((uint64_t)capacity * kSourceStride, D3D11_BIND_SHADER_RESOURCE, 0, "GrassOptimizations::InstancePool");
 		D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
 		srv.Format = DXGI_FORMAT_R32_TYPELESS;
 		srv.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
@@ -287,21 +378,28 @@ bool GrassBucketStore::CreateBucketSourceBuffers(GrassSourceBuffers& buffers, ui
 		srv.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
 
 		buffer->CreateSRV(srv);
-		buffers.instances = std::move(buffer);
-		buffers.capacity = capacity;
-
-		return true;
+		return buffer;
 	} catch (...) {
-		logger::error("[GRASS OPTIMIZATIONS] source buffer create failed instances={}", capacity);
-		return false;
+		logger::error("[GRASS OPTIMIZATIONS] instance pool create failed instances={}", capacity);
+		return nullptr;
 	}
 }
 
-bool GrassBucketStore::CreateBucketCullScratch(GrassCullBuffers& buffers, uint32_t capacity, uint32_t tiers)
+std::unique_ptr<Buffer> GrassBucketStore::CreateGroupPoolBuffer(uint32_t capacity)
 {
 	try {
-		buffers.records = CreateRawBuffer((uint64_t)capacity * tiers * kCullRecordStride, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE, 0, "GrassOptimizations::CompactedBuf");
-		for (uint32_t tier = 0; tier < tiers; ++tier) {
+		return CreateStructuredBuffer(capacity, sizeof(CullGroup), "GrassOptimizations::GroupPool");
+	} catch (...) {
+		logger::error("[GRASS OPTIMIZATIONS] group pool create failed groups={}", capacity);
+		return nullptr;
+	}
+}
+
+bool GrassBucketStore::CreateCullOutput(GrassCullBuffers& buffers, uint32_t capacity)
+{
+	try {
+		buffers.records = CreateRawBuffer((uint64_t)capacity * kTierCount * kCullRecordStride, D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE, 0, "GrassOptimizations::CompactedBuf");
+		for (uint32_t tier = 0; tier < kTierCount; ++tier) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
 			srv.Format = DXGI_FORMAT_R32_TYPELESS;
 			srv.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
@@ -315,11 +413,10 @@ bool GrassBucketStore::CreateBucketCullScratch(GrassCullBuffers& buffers, uint32
 		}
 
 		buffers.capacity = capacity;
-		buffers.tiers = tiers;
 
 		return true;
 	} catch (...) {
-		logger::error("[GRASS OPTIMIZATIONS] cull output create failed instances={} tiers={}", capacity, tiers);
+		logger::error("[GRASS OPTIMIZATIONS] cull output create failed instances={}", capacity);
 		return false;
 	}
 }
@@ -350,340 +447,222 @@ bool GrassBucketStore::PrepareCullOutputs(std::span<GrassBucket*> visible)
 	if (!EnsureArgsCapacity((uint32_t)visible.size()))
 		return false;
 
-	GrassCullBuffers* pageToShrink = nullptr;
-	for (auto& page : outputPages) {
-		if (!pageToShrink && page->underutilizedFrames >= kRetentionFrames)
-			pageToShrink = page.get();
-		page->used = 0;
-	}
-
-	// Place large buckets first to reduce unused space in shared output pages.
-	const auto requiredInstances = [](const GrassBucket* bucket) {
-		return (uint32_t)std::min({ (uint64_t)bucket->totalInstances, (uint64_t)bucket->source.capacity, (uint64_t)bucket->groupCount * kCullGroupSize });
-	};
-
-	std::sort(visible.begin(), visible.end(), [&](const GrassBucket* left, const GrassBucket* right) {
-		const uint32_t leftCount = requiredInstances(left);
-		const uint32_t rightCount = requiredInstances(right);
-		return leftCount != rightCount ? leftCount > rightCount : std::less<const GrassBucket*>{}(left, right);
-	});
-
+	uint64_t used = 0;
 	for (auto* bucket : visible) {
-		const uint32_t instanceCount = requiredInstances(bucket);
-		const uint32_t tiers = bucket->lodMeshes[0] || bucket->lodMeshes[1] ? kTierCount : 1;
-		GrassCullBuffers* selectedPage = nullptr;
-
-		for (auto& page : outputPages) {
-			const uint32_t available = page->capacity - page->used;
-			if (page.get() == pageToShrink || page->tiers != tiers || available < instanceCount)
-				continue;
-			if (!selectedPage || available < selectedPage->capacity - selectedPage->used)
-				selectedPage = page.get();
-		}
-
-		if (!selectedPage) {
-			const uint32_t maxCapacity = UINT32_MAX / (tiers * kCullRecordStride);
-			if (instanceCount > maxCapacity)
-				return false;
-
-			auto page = std::make_unique<GrassCullBuffers>();
-			const uint32_t capacity = std::min(maxCapacity, std::max(65536u, ReservedInstanceCapacity(instanceCount)));
-			if (!CreateBucketCullScratch(*page, capacity, tiers))
-				return false;
-
-			selectedPage = page.get();
-			outputPages.push_back(std::move(page));
-		}
-
-		bucket->output = selectedPage;
-		bucket->outputOffset = selectedPage->used;
-		selectedPage->used += instanceCount;
+		bucket->outputOffset = (uint32_t)used;
+		used += std::min((uint64_t)bucket->residentInstances, (uint64_t)bucket->groupCount * kCullGroupSize);
 	}
 
-	for (auto& page : outputPages) {
-		page->idleFrames = page->used ? 0 : page->idleFrames + 1;
-		if (CanReduceInstanceCapacity(page->capacity, page->used))
-			++page->underutilizedFrames;
-		else
-			page->underutilizedFrames = 0;
-	}
-
-	uint64_t activeBytes = 0;
-	for (const auto& page : outputPages) {
-		if (page->used)
-			activeBytes += (uint64_t)page->capacity * page->tiers * kCullRecordStride;
-	}
-
-	// Retain the recent working set through camera turns, then trim it after 600 smaller frames.
-	if (activeBytes >= outputReserveBytes || ++outputReserveFrames >= kRetentionFrames) {
-		outputReserveBytes = activeBytes;
-		outputReserveFrames = 0;
-	}
-
-	const uint64_t spareBudgetBytes = std::max(activeBytes / 4 + (1ull << 20), outputReserveBytes - activeBytes);
-	std::stable_sort(outputPages.begin(), outputPages.end(), [](const auto& a, const auto& b) { return a->idleFrames < b->idleFrames; });
-	uint64_t retainedBytes = 0;
-	std::erase_if(outputPages, [&](const auto& page) {
-		if (page->used)
-			return false;
-
-		const uint64_t bytes = (uint64_t)page->capacity * page->tiers * kCullRecordStride;
-		if (page.get() == pageToShrink || page->idleFrames >= kRetentionFrames || retainedBytes + bytes > spareBudgetBytes)
-			return true;
-		retainedBytes += bytes;
-
+	const uint32_t maxCapacity = UINT32_MAX / (kTierCount * kCullRecordStride);
+	if (used > maxCapacity)
 		return false;
-	});
+
+	// Delay shrinking so camera turns do not cause repeated reallocations.
+	if (CanReduceInstanceCapacity(cullOutput.capacity, (uint32_t)used))
+		++cullOutput.underutilizedFrames;
+	else
+		cullOutput.underutilizedFrames = 0;
+
+	if (used > cullOutput.capacity || cullOutput.underutilizedFrames >= kRetentionFrames) {
+		cullOutput = {};
+		if (!CreateCullOutput(cullOutput, std::min(maxCapacity, std::max(65536u, ReservedInstanceCapacity((uint32_t)used)))))
+			return false;
+	}
 
 	return true;
 }
 
 void GrassBucketStore::UploadPending(ID3D11DeviceContext* ctx)
 {
-	for (auto* bucket : maintenance) {
-		if (!bucket->HasPendingSlices())
-			continue;
+	// Failed growth is retried when an allocation next runs out of space.
+	AdoptPoolGrowth(instancePool, instancePoolGrowth, kSourceStride, ctx);
+	AdoptPoolGrowth(groupPool, groupPoolGrowth, sizeof(CullGroup), ctx);
 
-		bucket->underutilizedFrames = 0;
-		uint64_t requiredInstances = bucket->residentInstances;
-		for (uint32_t i = bucket->uploadedSlices; i < bucket->slices.size(); ++i)
-			requiredInstances += bucket->slices[i]->count;
-
-		if (bucket->allocation && bucket->allocation->capacity < bucket->source.capacity)
-			bucket->allocation.reset();
-
-		if (bucket->source.instances && bucket->source.capacity >= requiredInstances) {
-			bucket->allocation.reset();
-		} else if (requiredInstances <= kMaxBucketInstances) {
-			ResizeBucketAsync(*bucket, GrownInstanceCapacity(bucket->source.capacity, (uint32_t)requiredInstances), ctx);
+	if (frameParams.enableMeshLOD) {
+		for (auto* bucket : pendingUploads) {
+			if (bucket->HasPendingSlices())
+				meshLibrary.EnsureLODMeshes(*bucket->drawResources.key.mesh);
 		}
 	}
 
-	uint64_t uploadBudget = kUploadBudgetBytes;
-	uint64_t defragBudget = kDefragBudgetBytes;
-	bool shrinkAttempted = false;
+	UploadNewSlices(ctx);
 
-	for (auto it = maintenance.begin(); it != maintenance.end();) {
-		auto& bucket = **it;
-
-		if (frameParams.enableMeshLOD && bucket.HasPendingSlices())
-			meshLibrary.EnsureLODMeshes(*bucket.asset.key.mesh);
-
-		if (bucket.HasPendingSlices() && bucket.source.instances && uploadBudget)
-			AppendNewSlices(bucket, uploadBudget, ctx);
-
-		if (bucket.fragmented && defragBudget)
-			bucket.fragmented = !DefragBucket(bucket, defragBudget, ctx);
-
-		const bool canShrink = !bucket.HasPendingSlices() && !bucket.fragmented && CanReduceInstanceCapacity(bucket.source.capacity, bucket.totalInstances);
-		if (canShrink) {
-			if (++bucket.underutilizedFrames >= 600 && !shrinkAttempted) {
-				shrinkAttempted = true;
-				if (ResizeBucketAsync(bucket, ReservedInstanceCapacity(bucket.totalInstances), ctx))
-					bucket.underutilizedFrames = 0;
-			}
-		} else {
-			bucket.underutilizedFrames = 0;
-			if (bucket.allocation && bucket.allocation->capacity < bucket.source.capacity)
-				bucket.allocation.reset();
-		}
-
-		if (bucket.HasPendingSlices() || bucket.fragmented || canShrink)
-			++it;
-		else
-			it = maintenance.erase(it);
-	}
+	std::erase_if(pendingUploads, [](const GrassBucket* bucket) { return !bucket->HasPendingSlices(); });
 }
 
-void GrassBucketStore::AppendNewSlices(GrassBucket& bucket, uint64_t& budgetBytes, ID3D11DeviceContext* ctx)
+uint32_t GrassBucketStore::SelectUploadSlices(const GrassBucket& bucket, uint64_t& budgetBytes, uint64_t& uploadBytes)
 {
 	// Allow one oversized slice per frame so uploads always make progress.
-	const uint64_t availableBytes = (uint64_t)(bucket.source.capacity - bucket.residentInstances) * kSourceStride;
 	uint32_t endSlice = bucket.uploadedSlices;
-	uint64_t uploadBytes = 0;
-	bool outOfBudget = false;
+	uploadBytes = 0;
 	for (; endSlice < (uint32_t)bucket.slices.size(); ++endSlice) {
 		const uint64_t sliceBytes = (uint64_t)bucket.slices[endSlice]->count * kSourceStride;
-		if (uploadBytes + sliceBytes > availableBytes)
+		if (uploadBytes + sliceBytes > budgetBytes && (uploadBytes || budgetBytes < kUploadBudgetBytes))
 			break;
-		if (uploadBytes + sliceBytes > budgetBytes && (uploadBytes || budgetBytes < kUploadBudgetBytes)) {
-			outOfBudget = true;
-			break;
-		}
 		uploadBytes += sliceBytes;
 	}
 
-	if (endSlice == bucket.uploadedSlices) {
-		// A full buffer waits for its replacement without taking the budget from other buckets.
-		if (outOfBudget)
-			budgetBytes = 0;
-		return;
-	}
-
-	UploadSlices(bucket, bucket.uploadedSlices, endSlice, bucket.residentInstances, ctx);
+	// End this frame's uploads rather than letting smaller slices overtake this one.
+	if (endSlice == bucket.uploadedSlices)
+		budgetBytes = 0;
 	budgetBytes -= std::min(uploadBytes, budgetBytes);
-	bucket.uploadedSlices = endSlice;
+	return endSlice;
 }
 
-void GrassBucketStore::UploadSlices(GrassBucket& bucket, uint32_t firstSlice, uint32_t endSlice, uint32_t firstInstance, ID3D11DeviceContext* ctx)
+void GrassBucketStore::UploadNewSlices(ID3D11DeviceContext* ctx)
 {
-	// Sum the slice counts because resident records may contain removal gaps.
-	uint32_t instanceCount = 0;
-	for (uint32_t i = firstSlice; i < endSlice; ++i)
-		instanceCount += bucket.slices[i]->count;
-	if (!instanceCount)
-		return;
+	uploadBatches.clear();
+	uint64_t budgetBytes = kUploadBudgetBytes;
+	uint64_t stagingBytes = 0;
 
-	// Reuse storage across cell loads and upload the flattened range in one call.
-	static thread_local std::vector<uint8_t> records;
-	records.clear();
-	records.reserve((size_t)instanceCount * kSourceStride);
+	for (auto* bucket : pendingUploads) {
+		if (!budgetBytes)
+			break;
+		if (!bucket->HasPendingSlices())
+			continue;
 
-	uint32_t nextInstance = firstInstance;
-	for (uint32_t i = firstSlice; i < endSlice; ++i) {
-		auto& slice = *bucket.slices[i];
-		slice.bufferOffset = nextInstance;
-		records.insert(records.end(), slice.data.begin(), slice.data.end());
-		nextInstance += slice.count;
+		uint64_t bytes = 0;
+		const uint32_t endSlice = SelectUploadSlices(*bucket, budgetBytes, bytes);
+		if (endSlice == bucket->uploadedSlices)
+			continue;
+
+		uploadBatches.push_back({ bucket, endSlice, (uint32_t)(bytes / kSourceStride) });
+		stagingBytes += bytes;
 	}
 
-	const D3D11_BOX box{ firstInstance * kSourceStride, 0, 0, nextInstance * kSourceStride, 1, 1 };
-	ctx->UpdateSubresource(bucket.source.instances->resource.get(), 0, &box, records.data(), 0, 0);
-	bucket.residentInstances = nextInstance;
+	if (uploadBatches.empty())
+		return;
 
-	for (uint32_t i = firstSlice; i < endSlice; ++i)
-		UpdateShapeResidency(*bucket.slices[i], true);
-}
+	uint64_t stagingOffset = 0;
+	auto* staging = MapUploadStaging(ctx, stagingBytes, stagingOffset);
+	if (!staging)
+		return;
 
-bool GrassBucketStore::DefragBucket(GrassBucket& bucket, uint64_t& budgetBytes, ID3D11DeviceContext* ctx)
-{
-	if (!bucket.source.instances)
-		return true;
+	// Map before allocating pool ranges so a failed map cannot strand allocations.
+	uploadCopies.clear();
+	uint64_t unplacedInstances = 0;
 
-	uint32_t destinationOffset = 0;
-	for (uint32_t firstSlice = 0; firstSlice < bucket.uploadedSlices;) {
-		auto& slice = *bucket.slices[firstSlice];
-		if (slice.bufferOffset <= destinationOffset) {
-			destinationOffset = slice.bufferOffset + slice.count;
-			++firstSlice;
-			continue;
-		}
+	for (const auto& batch : uploadBatches) {
+		auto& bucket = *batch.bucket;
+		uint32_t unplaced = batch.instances;
+		// Prefer one contiguous range per batch to reduce copy calls.
+		uint32_t batchOffset = instancePool.ranges.Allocate(unplaced);
 
-		uint32_t endSlice = firstSlice + 1;
-		uint32_t instanceCount = slice.count;
-		uint64_t copyBytes = (uint64_t)instanceCount * kSourceStride * 2;
+		for (; bucket.uploadedSlices < batch.endSlice; ++bucket.uploadedSlices) {
+			auto& slice = *bucket.slices[bucket.uploadedSlices];
 
-		// Always allow one move per frame so a slice larger than the budget still makes progress.
-		if (copyBytes > budgetBytes && budgetBytes < kDefragBudgetBytes) {
-			budgetBytes = 0;
-			return false;
-		}
-
-		// Move adjacent slices together to reduce GPU copy calls.
-		while (endSlice < bucket.uploadedSlices) {
-			const auto& following = *bucket.slices[endSlice];
-			const uint64_t combinedBytes = copyBytes + (uint64_t)following.count * kSourceStride * 2;
-			if (following.bufferOffset != slice.bufferOffset + instanceCount || combinedBytes > budgetBytes)
-				break;
-			instanceCount += following.count;
-			copyBytes = combinedBytes;
-			++endSlice;
-		}
-
-		if (!MoveInstances(bucket, slice.bufferOffset, destinationOffset, instanceCount, ctx)) {
-			// Preserve resident records and retry next frame if scratch allocation fails.
-			budgetBytes = 0;
-			return false;
-		}
-
-		budgetBytes -= std::min(copyBytes, budgetBytes);
-
-		for (uint32_t sliceIndex = firstSlice; sliceIndex < endSlice; ++sliceIndex) {
-			auto& movedSlice = *bucket.slices[sliceIndex];
-			movedSlice.bufferOffset = destinationOffset;
-
-			if (bucket.clustersValid && movedSlice.firstCullGroup != UINT32_MAX && sliceIndex < bucket.clusteredSlices) {
-				const uint32_t groupCount = (movedSlice.count + kCullGroupSize - 1) / kCullGroupSize;
-				for (uint32_t groupIndex = 0; groupIndex < groupCount; ++groupIndex)
-					bucket.cullGroups[movedSlice.firstCullGroup + groupIndex].sourceStart = destinationOffset + groupIndex * kCullGroupSize;
-				bucket.dirtyGroupRanges.emplace_back(movedSlice.firstCullGroup, movedSlice.firstCullGroup + groupCount);
+			uint32_t offset;
+			if (batchOffset != UINT32_MAX) {
+				offset = batchOffset;
+				batchOffset += slice.count;
+			} else {
+				offset = instancePool.ranges.Allocate(slice.count);
 			}
 
-			destinationOffset += movedSlice.count;
+			if (offset == UINT32_MAX) {
+				// Stop at the first allocation failure to preserve the uploaded slice prefix.
+				unplacedInstances += unplaced;
+				break;
+			}
+
+			const uint64_t sliceBytes = (uint64_t)slice.count * kSourceStride;
+			std::memcpy(staging + stagingOffset, slice.data.data(), sliceBytes);
+			AddUploadCopy(stagingOffset, offset, slice.count);
+			stagingOffset += sliceBytes;
+			unplaced -= slice.count;
+
+			slice.bufferOffset = offset;
+			// Start fading after upload so delayed slices do not appear partly faded.
+			slice.fadeStart = frameParams.fadeStart;
+			bucket.residentInstances += slice.count;
 		}
-		firstSlice = endSlice;
 	}
 
-	bucket.residentInstances = destinationOffset;
-	return true;
+	ctx->Unmap(uploadStaging->resource.get(), 0);
+
+	if (unplacedInstances)
+		RequestPoolGrowth(instancePool, instancePoolGrowth, (uint32_t)std::min<uint64_t>(unplacedInstances, kMaxPoolInstances), 1u << 20, kMaxPoolInstances, CreateInstancePoolBuffer);
+
+	for (const auto& copy : uploadCopies) {
+		const D3D11_BOX box{ (UINT)copy.stagingOffset, 0, 0, (UINT)(copy.stagingOffset + (uint64_t)copy.count * kSourceStride), 1, 1 };
+		ctx->CopySubresourceRegion(instancePool.buffer->resource.get(), 0, copy.poolOffset * kSourceStride, 0, 0, uploadStaging->resource.get(), 0, &box);
+	}
 }
 
-bool GrassBucketStore::MoveInstances(GrassBucket& bucket, uint32_t sourceOffset, uint32_t destinationOffset, uint32_t count, ID3D11DeviceContext* ctx)
+uint8_t* GrassBucketStore::MapUploadStaging(ID3D11DeviceContext* ctx, uint64_t bytes, uint64_t& offset)
 {
-	// Copy toward lower offsets through bounded scratch storage so unread source records remain intact.
-	constexpr uint32_t kChunkInstances = 16384;
-	if (!compactionScratch) {
+	// Append without discarding until the staging buffer wraps.
+	if (!uploadStaging || uploadStaging->desc.ByteWidth < bytes) {
+		uploadStaging.reset();
 		try {
 			D3D11_BUFFER_DESC desc{};
-			desc.ByteWidth = kChunkInstances * kSourceStride;
-			desc.Usage = D3D11_USAGE_DEFAULT;
-			compactionScratch = std::make_unique<Buffer>(desc, nullptr, "GrassOptimizations::CompactionScratch");
+			desc.ByteWidth = (UINT)std::max<uint64_t>(4 * kUploadBudgetBytes, std::bit_ceil(bytes));
+			desc.Usage = D3D11_USAGE_DYNAMIC;
+			// The vertex-buffer binding permits NO_OVERWRITE on D3D11.0.
+			desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+			desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			uploadStaging = std::make_unique<Buffer>(desc, nullptr, "GrassOptimizations::UploadStaging");
+			uploadStagingOffset = desc.ByteWidth;  // The first map must discard.
 		} catch (...) {
-			return false;
+			logger::error("[GRASS OPTIMIZATIONS] upload staging create failed bytes={}", bytes);
+			return nullptr;
 		}
 	}
-	for (uint32_t offset = 0; offset < count;) {
-		const uint32_t chunkCount = std::min(kChunkInstances, count - offset);
-		const UINT recordBytes = chunkCount * kSourceStride;
-		const uint32_t sourceInstance = sourceOffset + offset;
-		const uint32_t destinationInstance = destinationOffset + offset;
 
-		const D3D11_BOX sourceRange{ sourceInstance * kSourceStride, 0, 0, sourceInstance * kSourceStride + recordBytes, 1, 1 };
-		ctx->CopySubresourceRegion(compactionScratch->resource.get(), 0, 0, 0, 0, bucket.source.instances->resource.get(), 0, &sourceRange);
-		const D3D11_BOX scratchRange{ 0, 0, 0, recordBytes, 1, 1 };
-		ctx->CopySubresourceRegion(bucket.source.instances->resource.get(), 0, destinationInstance * kSourceStride, 0, 0, compactionScratch->resource.get(), 0, &scratchRange);
-		offset += chunkCount;
-	}
+	const bool wrap = uploadStagingOffset + bytes > uploadStaging->desc.ByteWidth;
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	if (FAILED(ctx->Map(uploadStaging->resource.get(), 0, wrap ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mapped)))
+		return nullptr;
+	if (wrap)
+		uploadStagingOffset = 0;
 
-	return true;
+	offset = uploadStagingOffset;
+	uploadStagingOffset += bytes;
+	return static_cast<uint8_t*>(mapped.pData);
 }
 
-bool GrassBucketStore::UploadCullGroups(GrassBucket& bucket, ID3D11DeviceContext* ctx)
+void GrassBucketStore::AddUploadCopy(uint64_t stagingOffset, uint32_t poolOffset, uint32_t count)
 {
-	const uint32_t groupCount = (uint32_t)bucket.cullGroups.size();
-	if (groupCount > bucket.groupCapacity || !bucket.groups) {
-		uint32_t capacity = bucket.groupCapacity ? bucket.groupCapacity : 256;
-		while (capacity < groupCount)
-			capacity *= 2;
-
-		D3D11_BUFFER_DESC desc{};
-		desc.ByteWidth = capacity * sizeof(CullGroup);
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-		desc.StructureByteStride = sizeof(CullGroup);
-
-		try {
-			auto groups = std::make_unique<Buffer>(desc, nullptr, "GrassOptimizations::GroupBuf");
-			D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
-			srv.Format = DXGI_FORMAT_UNKNOWN;
-			srv.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-			srv.Buffer.NumElements = capacity;
-			groups->CreateSRV(srv);
-			bucket.groups = std::move(groups);
-		} catch (...) {
-			logger::error("[GRASS OPTIMIZATIONS] group buffer create failed groups={}", capacity);
-			return false;
+	if (!uploadCopies.empty()) {
+		auto& last = uploadCopies.back();
+		if (last.poolOffset + last.count == poolOffset && last.stagingOffset + (uint64_t)last.count * kSourceStride == stagingOffset) {
+			last.count += count;
+			return;
 		}
+	}
+	uploadCopies.push_back({ stagingOffset, poolOffset, count });
+}
 
-		bucket.groupCapacity = capacity;
-		bucket.residentGroups = 0;
+void GrassBucketStore::UploadCullGroups(GrassBucket& bucket, ID3D11DeviceContext* ctx)
+{
+	// Limit spare capacity because all buckets share this pool.
+	const uint32_t groupCount = (uint32_t)bucket.cullGroups.size();
+	const uint32_t reserved = std::max(256u, (groupCount + groupCount / 4 + 255) & ~255u);
+	if (groupCount > bucket.groupCapacity) {
+		if (bucket.groupCapacity && groupPool.ranges.TryExtend(bucket.groupBase, bucket.groupCapacity, reserved)) {
+			bucket.groupCapacity = reserved;
+		} else if (const uint32_t base = groupPool.ranges.Allocate(reserved); base != UINT32_MAX) {
+			// The CPU copy supplies moved groups, so no GPU copy is needed.
+			groupPool.ranges.Free(bucket.groupBase, bucket.groupCapacity);
+			bucket.groupBase = base;
+			bucket.groupCapacity = reserved;
+			bucket.residentGroups = 0;
+		} else {
+			// Keep drawing resident groups while the pool grows.
+			RequestPoolGrowth(groupPool, groupPoolGrowth, reserved, 1u << 16, kMaxPoolGroups, CreateGroupPoolBuffer);
+			bucket.rebuildPending = bucket.rebuildPending || bucket.deadGroups;
+		}
+	} else if (bucket.groupCapacity > 2 * reserved) {
+		// Live groups occupy a prefix, so the unused tail can be freed in place.
+		groupPool.ranges.Free(bucket.groupBase + reserved, bucket.groupCapacity - reserved);
+		bucket.groupCapacity = reserved;
 	}
 
-	// Upload groups appended at the tail plus each resident range emptied or moved since the last upload.
+	// Upload new groups and dirty resident ranges, deferring groups that do not yet fit.
+	const uint32_t uploadable = std::min({ groupCount, bucket.groupCapacity, kMaxRecordGroups });
 	auto& ranges = bucket.dirtyGroupRanges;
-	if (groupCount > bucket.residentGroups)
-		ranges.emplace_back(bucket.residentGroups, groupCount);
+	if (uploadable > bucket.residentGroups)
+		ranges.emplace_back(bucket.residentGroups, uploadable);
 
 	std::sort(ranges.begin(), ranges.end());
 	constexpr uint32_t kMergeGap = 64;  // Neighbouring ranges share one update rather than many tiny ones.
@@ -694,17 +673,15 @@ bool GrassBucketStore::UploadCullGroups(GrassBucket& bucket, ID3D11DeviceContext
 
 		for (++i; i < ranges.size() && ranges[i].first <= endGroup + kMergeGap; ++i)
 			endGroup = std::max(endGroup, ranges[i].second);
-		endGroup = std::min(endGroup, groupCount);
+		endGroup = std::min(endGroup, uploadable);
 
 		if (endGroup <= firstGroup)
 			continue;
 
-		const D3D11_BOX box{ firstGroup * (UINT)sizeof(CullGroup), 0, 0, endGroup * (UINT)sizeof(CullGroup), 1, 1 };
-		ctx->UpdateSubresource(bucket.groups->resource.get(), 0, &box, bucket.cullGroups.data() + firstGroup, 0, 0);
+		const D3D11_BOX box{ (bucket.groupBase + firstGroup) * (UINT)sizeof(CullGroup), 0, 0, (bucket.groupBase + endGroup) * (UINT)sizeof(CullGroup), 1, 1 };
+		ctx->UpdateSubresource(groupPool.buffer->resource.get(), 0, &box, bucket.cullGroups.data() + firstGroup, 0, 0);
 	}
 
 	ranges.clear();
-	bucket.residentGroups = groupCount;
-
-	return true;
+	bucket.residentGroups = uploadable;
 }

@@ -474,7 +474,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 		dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
 	}
 
-	dlssOptions.preExposure = 1.0f;
+	dlssOptions.preExposure = globals::state->preExposure;
 	dlssOptions.sharpness = 0.0f;
 
 	if (SL_FAILED(result, slDLSSSetOptions(p_viewport, dlssOptions))) {

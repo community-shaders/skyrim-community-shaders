@@ -1,30 +1,6 @@
 cbuffer HeightProcessCB : register(b0)
 {
-	int2 ScrollDelta;
-	uint ClearAll;
-	uint padConeStep;
-
-	float2 HeightWindowCenter;
-	float HeightHalfExtent;
-	float padSlopePerUnit;
-
-	float2 TerrainWindowOrigin;
-	float TerrainTexelSize;
-	uint TerrainDim;
-
-	float GhostDecay;
-	float padObjectSnowDepth;
-	float padRimStep;
-	float padOverheadIgnore;
-
-	float ShelterBandHeight;
-	float padDiffuseLambda;
-	float ShelterMaxHeight;
-	float ShelterConeTan;
-
-	uint HeightProcessKeeper;
-	uint DeadGhostTiles;
-	uint2 HeightProcessPad;
+#include "SnowDeformation/HeightProcessFields.hlsli"
 }
 
 #define SHELTER_MELT 0.9
@@ -32,6 +8,15 @@ cbuffer HeightProcessCB : register(b0)
 #define SHELTER_CONE_MAX_TEXELS 160.0
 #define SHELTER_CONE_LO 0.5
 #define SHELTER_CONE_HI 0.85
+
+// A roof higher than this above the ground no longer keeps the snow off.
+static const float kShelterMaxHeight = 275.0;
+// Cover up to this high counts toward enclosure.
+static const float kShelterBandHeight = max(250.0, kShelterMaxHeight);
+// tan(30 degrees): how far from straight down the snow blows in under cover.
+static const float kShelterConeTan = 0.577350259;
+// Height a carried-over texel loses each update, so ghosts of moved objects fade.
+static const float kGhostDecay = 0.5;
 
 cbuffer GhostCB : register(b2)
 {
@@ -100,8 +85,8 @@ uint ScrollTexel(uint2 texel, uint2 dims)
 	if (!ClearAll) {
 		int2 src = int2(dtid.xy) + ScrollDelta;
 		if (all(src >= 0) && all(src < int2(dims))) {
-			top = InA[uint2(src)] - GhostDecay;
-			bottom = InB[uint2(src)] + GhostDecay;
+			top = InA[uint2(src)] - kGhostDecay;
+			bottom = InB[uint2(src)] + kGhostDecay;
 		}
 	}
 
@@ -118,7 +103,7 @@ uint ScrollTexel(uint2 texel, uint2 dims)
 
 	OutA[dtid.xy] = top;
 	OutB[dtid.xy] = bottom;
-	bool dead = DeadGhostTiles != 0 && bottom - top > ShelterBandHeight + 61.0;
+	bool dead = bottom - top > kShelterBandHeight + 61.0;
 	return (top > -50000.0 && bottom < 50000.0 && !dead) ? 1u : 0u;
 }
 
@@ -132,7 +117,7 @@ float2 ShelterTap(int2 p, int2 dims, float terrain)
 		float bottom = InB[p];
 		float clearance = bottom - terrain;
 		float floating = smoothstep(20.0, 60.0, clearance) * smoothstep(40.0, 80.0, top - terrain);
-		result = floating * (1.0 - smoothstep(float2(ShelterMaxHeight, ShelterBandHeight), float2(ShelterMaxHeight, ShelterBandHeight) + 100.0, clearance));
+		result = floating * (1.0 - smoothstep(float2(kShelterMaxHeight, kShelterBandHeight), float2(kShelterMaxHeight, kShelterBandHeight) + 100.0, clearance));
 	}
 	return result;
 }
@@ -150,7 +135,7 @@ float ShelterEnclosure(int2 texel, int2 dims, float terrain)
 		float2(-0.208, -0.139), float2(-0.049, -0.245), float2(0.139, -0.208), float2(0.245, -0.049)
 	};
 	float texelSize = HeightHalfExtent * 2.0 / dims.x;
-	float radius = clamp(ShelterBandHeight * ShelterConeTan / texelSize, SHELTER_RING_TEXELS, SHELTER_CONE_MAX_TEXELS);
+	float radius = clamp(kShelterBandHeight * kShelterConeTan / texelSize, SHELTER_RING_TEXELS, SHELTER_CONE_MAX_TEXELS);
 
 	float covered = ShelterTap(texel, dims, terrain).y * 2.0;
 	[loop] for (uint tapI = 0; tapI < 32; tapI++)
@@ -284,27 +269,3 @@ static const float kWaterNearMax = 3.0;
 				nearSq = min(nearSq, (uint)(i * i + j * j));
 	WaterNearOut[dtid.xy] = nearSq;
 }
-
-#ifdef RASTER_COMPARE
-Texture2D<float4> CompareKept : register(t8);
-Texture2D<float4> CompareFresh : register(t9);
-RWByteAddressBuffer CompareCount : register(u4);
-
-[numthreads(8, 8, 1)] void RasterCompareCS(uint3 dtid : SV_DispatchThreadID) {
-	uint2 dims;
-	CompareKept.GetDimensions(dims.x, dims.y);
-	if (any(dtid.xy >= dims))
-		return;
-	float4 kept = CompareKept[dtid.xy];
-	float4 fresh = CompareFresh[dtid.xy];
-	if (all(asuint(kept) == asuint(fresh)))
-		return;
-	uint prior;
-	CompareCount.InterlockedAdd(0, 1u, prior);
-	if (prior >= 8u)
-		return;
-	uint base = 16u + prior * 32u;
-	CompareCount.Store4(base, uint4((dtid.y << 16) | dtid.x, asuint(kept.x), asuint(kept.y), asuint(fresh.x)));
-	CompareCount.Store4(base + 16u, uint4(asuint(fresh.y), 0u, 0u, 0u));
-}
-#endif

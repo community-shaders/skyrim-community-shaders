@@ -23,6 +23,7 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
 #include "Features/ProceduralSun.h"
@@ -42,6 +43,7 @@
 #include "Features/TreeWind.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/ViewAtmosphere.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -264,6 +266,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::terrainBlending,
 		&globals::features::terrainHelper,
 		&globals::features::volumetricLighting,
+		&globals::features::viewAtmosphere,
 		&globals::features::lodBlending,
 		&globals::features::hairSpecular,
 		&globals::features::interiorSun,
@@ -284,6 +287,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::treeWind,
 		&globals::features::exponentialHeightFog,
 		&globals::features::hdrDisplay,
+		&globals::features::physicalSky,
 		&globals::features::skin,
 		&globals::features::postProcessing,
 		&globals::features::proceduralAurora

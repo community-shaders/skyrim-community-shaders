@@ -57,7 +57,7 @@ static const float kLsBorderTolerance = 1.0;
 void LsPlainTap(int2 t, inout float2 lowest, inout float2 highest)
 {
 	float2 depthCoverage = TerrainWindowWet.Load(int3(t, 0)).yz;
-	depthCoverage.x = max(depthCoverage.x, 0.0) * RimStyle.w + min(depthCoverage.x, 0.0);
+	depthCoverage.x = max(depthCoverage.x, 0.0) * AccumulationDepthScale + min(depthCoverage.x, 0.0);
 	lowest = min(lowest, depthCoverage);
 	highest = max(highest, depthCoverage);
 }
@@ -205,12 +205,11 @@ float LsDetailFactor(float3 a, float3 b)
 	float spacing = ShellBandStep(mid);
 	[branch] if (LsTess.x > 0.5)
 	{
-		float reliefBase = SnowReliefDepth > 0.01 ? 1.0 : 0.0;
-		float reach = kTessNear * reliefBase;
+		float reach = 0.0;
 		[branch] if (dist < kTessCutoff)
 		{
 			float deform = max(max(SampleDeformationFast(a.xy), SampleDeformationFast(b.xy)), SampleDeformationFast(mid));
-			reach = kTessNear * lerp(reliefBase, kTessReachBoost, smoothstep(0.02, 0.25, deform));
+			reach = kTessCutoff * smoothstep(0.02, 0.25, deform);
 		}
 		spacing /= clamp(reach / max(dist, 32.0), 1.0, kTessMax);
 	}

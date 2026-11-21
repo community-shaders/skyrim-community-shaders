@@ -67,12 +67,12 @@ float BermShape(float bermDeform)
 float BermGradStep()
 {
 	SNOW_DEFORM_DIMS(dims);
-	return min(4.0, max(4.0 * BermReach, 0.5 / (DeformInvWorldSize * dims.x)));
+	return min(4.0, max(4.0 * kBermReach, 0.5 / (DeformInvWorldSize * dims.x)));
 }
 
 static const float kWallBlurReach = 12.0;
 
-float4 BermFieldBaked(float2 gridLocal)
+float2 BermFieldBaked(float2 gridLocal)
 {
 	float2 uv = (GridToDeformOffset + gridLocal) * DeformInvWorldSize;
 	if (any(uv < 0.0) || any(uv > 1.0))
@@ -81,47 +81,20 @@ float4 BermFieldBaked(float2 gridLocal)
 	SNOW_BERM_DIMS(dims);
 	float2 t = clamp(uv * dims - 0.5, 0.0, dims - 1.001);
 #ifdef SNOW_DEFORM_SAMPLER
-	float4 v = BermFieldMap.SampleLevel(SnowSampler, (t + 0.5 + float2(DeformMapOrigin)) / dims, 0.0);
+	float2 v = BermFieldMap.SampleLevel(SnowSampler, (t + 0.5 + float2(DeformMapOrigin)) / dims, 0.0);
 #else
 	int2 t0 = (int2)t;
 	float2 f = t - t0;
 	int2 t1 = min(t0 + 1, int2(dims) - 1);
 
-	float4 s00 = BermFieldMap.Load(DeformTexel(int2(t0.x, t0.y), int2(dims)));
-	float4 s10 = BermFieldMap.Load(DeformTexel(int2(t1.x, t0.y), int2(dims)));
-	float4 s01 = BermFieldMap.Load(DeformTexel(int2(t0.x, t1.y), int2(dims)));
-	float4 s11 = BermFieldMap.Load(DeformTexel(int2(t1.x, t1.y), int2(dims)));
+	float2 s00 = BermFieldMap.Load(DeformTexel(int2(t0.x, t0.y), int2(dims)));
+	float2 s10 = BermFieldMap.Load(DeformTexel(int2(t1.x, t0.y), int2(dims)));
+	float2 s01 = BermFieldMap.Load(DeformTexel(int2(t0.x, t1.y), int2(dims)));
+	float2 s11 = BermFieldMap.Load(DeformTexel(int2(t1.x, t1.y), int2(dims)));
 
-	float4 v = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+	float2 v = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
 #endif
-	v.z = v.y > 1e-5 ? v.z / v.y : 0.0;
-	v.w = v.x > 1e-5 ? v.w / v.x : 0.0;
 	return v;
-}
-
-float TrackAgeOf(float a_date)
-{
-	return a_date > 0.0 ? saturate((TrackAge.x - a_date) * TrackAge.y) : 0.0;
-}
-
-float3 TrackCarveLook(float a_age)
-{
-	return float3(saturate(a_age * 1.1111 - 0.1111), RimStyle.y * saturate(1.0 - a_age * 2.857), RimStyle.x * saturate(1.1111 - a_age * 2.2222));
-}
-
-float TrackBermScale(float a_age)
-{
-	return 1.0 - 0.6 * saturate(a_age * 1.25 - 0.25);
-}
-
-float TrackDetailReliefScale(float a_age)
-{
-	return 1.0 - 0.65 * saturate(a_age * 1.6667);
-}
-
-float TrackDetailImpactScale(float a_age)
-{
-	return saturate(1.0 - a_age * 2.5);
 }
 
 static const float kSunMarchDist[5] = { 12.0, 32.0, 90.0, 300.0, 1000.0 };
@@ -417,7 +390,7 @@ float TrenchDetailSunShadow(TrenchDetailTaps a_t, float a_h, float3 L, float2 g,
 	return lit;
 }
 
-#define SNOW_DEFORM_BILINEAR4(v, gridLocal)                                      \
+#define SNOW_DEFORM_BILINEAR2(v, gridLocal)                                      \
 	float2 uv = (GridToDeformOffset + gridLocal) * DeformInvWorldSize;           \
 	if (any(uv < 0.0) || any(uv > 1.0))                                          \
 		return 0.0;                                                              \
@@ -426,42 +399,16 @@ float TrenchDetailSunShadow(TrenchDetailTaps a_t, float a_h, float3 L, float2 g,
 	int2 t0 = (int2)t;                                                           \
 	float2 f = t - t0;                                                           \
 	int2 t1 = min(t0 + 1, int2(dims) - 1);                                       \
-	float4 s00 = DeformationMap.Load(DeformTexel(int2(t0.x, t0.y), int2(dims))); \
-	float4 s10 = DeformationMap.Load(DeformTexel(int2(t1.x, t0.y), int2(dims))); \
-	float4 s01 = DeformationMap.Load(DeformTexel(int2(t0.x, t1.y), int2(dims))); \
-	float4 s11 = DeformationMap.Load(DeformTexel(int2(t1.x, t1.y), int2(dims))); \
-	float4 v = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y)
+	float2 s00 = DeformationMap.Load(DeformTexel(int2(t0.x, t0.y), int2(dims))); \
+	float2 s10 = DeformationMap.Load(DeformTexel(int2(t1.x, t0.y), int2(dims))); \
+	float2 s01 = DeformationMap.Load(DeformTexel(int2(t0.x, t1.y), int2(dims))); \
+	float2 s11 = DeformationMap.Load(DeformTexel(int2(t1.x, t1.y), int2(dims))); \
+	float2 v = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y)
 
-float SampleMelted(float2 gridLocal)
+float SampleDetailSpoil(float2 gridLocal)
 {
-	SNOW_DEFORM_BILINEAR4(v, gridLocal);
+	SNOW_DEFORM_BILINEAR2(v, gridLocal);
 	return saturate(v.y);
-}
-
-float2 SampleDetailMarks(float2 gridLocal)
-{
-	SNOW_DEFORM_BILINEAR4(v, gridLocal);
-	return float2(saturate(v.y), saturate(v.w));
-}
-
-static const float kSpellMarkStart = 0.02;
-float SampleSpellMark(float2 gridLocal)
-{
-	float2 uv = (GridToDeformOffset + gridLocal) * DeformInvWorldSize;
-	if (any(uv < 0.0) || any(uv > 1.0))
-		return 0.0;
-
-	SNOW_DEFORM_DIMS(dims);
-	float2 t = clamp(uv * dims - 0.5, 0.0, dims.x - 1.001);
-	int2 t0 = (int2)t;
-	float2 f = t - t0;
-	int2 t1 = min(t0 + 1, int2(dims) - 1);
-
-	float m00 = abs(DeformationMap.Load(DeformTexel(int2(t0.x, t0.y), int2(dims))).y);
-	float m10 = abs(DeformationMap.Load(DeformTexel(int2(t1.x, t0.y), int2(dims))).y);
-	float m01 = abs(DeformationMap.Load(DeformTexel(int2(t0.x, t1.y), int2(dims))).y);
-	float m11 = abs(DeformationMap.Load(DeformTexel(int2(t1.x, t1.y), int2(dims))).y);
-	return smoothstep(kSpellMarkStart, 0.15, lerp(lerp(m00, m10, f.x), lerp(m01, m11, f.x), f.y));
 }
 
 Texture2D<float> BodyReachMax : register(t56);
@@ -470,7 +417,7 @@ float TrampleDetailScale(float2 worldXY, float deformation)
 {
 	float scale = 1.0;
 	const float2 uv = (GridToDeformOffset + worldXY - GridOrigin) * DeformInvWorldSize;
-	[branch] if (TrampleStyle.y < 0.999 && deformation > 0.001 && all(uv >= 0.0) && all(uv <= 1.0))
+	[branch] if (deformation > 0.001 && all(uv >= 0.0) && all(uv <= 1.0))
 	{
 		SNOW_DEFORM_DIMS(dims);
 		const float2 t = clamp(uv * dims - 0.5, 0.0, dims.x - 1.001);
@@ -481,145 +428,40 @@ float TrampleDetailScale(float2 worldXY, float deformation)
 		[unroll] for (int i = 0; i < 4; i++)
 		{
 			const int3 texel = DeformTexel(int2((i & 1) ? t1.x : t0.x, (i & 2) ? t1.y : t0.y), int2(dims));
-			const float2 carve = saturate(DeformationMap.Load(texel).xy);
+			const float carve = saturate(DeformationMap.Load(texel).x);
 			const float reach = BodyReachMax.Load(texel);
 			const float layer = reach > 0.0 ? reach : 1.0;
-			const float pressed = max(carve.x - carve.y, 0.0) / layer;
-			packed[i] = saturate((pressed - TrampleStyle.z) / max(1.0 - TrampleStyle.z, 1e-3)) * smoothstep(0.05, 0.5, layer);
+			const float pressed = carve / layer;
+			packed[i] = saturate((pressed - BodyPrint) / max(1.0 - BodyPrint, 1e-3)) * smoothstep(0.05, 0.5, layer);
 		}
-		scale = lerp(1.0, saturate(TrampleStyle.y), lerp(lerp(packed.x, packed.y, f.x), lerp(packed.z, packed.w, f.x), f.y));
+		scale = lerp(1.0, kTrampledFlattening, lerp(lerp(packed.x, packed.y, f.x), lerp(packed.z, packed.w, f.x), f.y));
 	}
 	return scale;
 }
 
-float4 SnowClimateRow(float worldZ)
-{
-	const float dT = clamp(SnowClimate.y * (SnowClimate.z - worldZ), -2.0, 2.0);
-	return lerp(SnowClimateLUT[1], dT < 0.0 ? SnowClimateLUT[0] : SnowClimateLUT[2], abs(dT) * 0.5);
-}
-
-float SnowClimateRowOf(float3 a_rows, float worldZ)
-{
-	const float dT = clamp(SnowClimate.y * (SnowClimate.z - worldZ), -2.0, 2.0);
-	return lerp(a_rows.y, dT < 0.0 ? a_rows.x : a_rows.z, abs(dT) * 0.5);
-}
-
 #ifdef PSHADER
-static const float3 kIceTint = float3(0.93, 0.955, 0.985);
-static const float kIceRoughCut = 0.8;
-static const float kIceSurfaceGlaze = 0.1;
-static const float kIceParallax = 0.5;
 
 float SnowPressed(float a_carve, float a_melt)
 {
 	return smoothstep(0.1, 0.5, a_carve) * (1.0 - smoothstep(0.1, 0.4, a_melt));
 }
 
-bool SnowIceInView()
-{
-	return SnowClimateLUT[0].z > 0.001;
-}
+// A print in dry cold snow at the snow climate's default strength (0.75) keeps a quarter of the wet look.
+static const float kDryWetPrint = 0.25;
 
-float SnowIceSince(float a_rowIce, float2 a_gridLocal, bool a_dated, float a_worldZ)
+float SnowWetPrint(inout float3 a_albedo, float a_carve, float a_melt, float a_depth)
 {
-	float since = 0.0;
-	[branch] if (a_dated && BermBakeActive > 0.5)
-		since = max(a_rowIce - SnowClimateRowOf(SnowIce::AtCut(BermFieldBaked(a_gridLocal).z), a_worldZ), 0.0);
-	return since;
-}
-
-float SnowIceGlaze(float a_carve, float a_melt, float a_worldZ, float2 a_gridLocal, bool a_dated)
-{
-	const float pressed = SnowPressed(a_carve, a_melt);
-	float glaze = 0.0;
-	[branch] if (pressed > 0.001)
-		glaze = SnowIceSince(SnowClimateRow(a_worldZ).x, a_gridLocal, a_dated, a_worldZ) * pressed;
-	return glaze;
-}
-
-float SnowIceLook(float a_carve, float a_melt, float a_worldZ, float2 a_gridLocal, bool a_dated)
-{
-	return max(SnowIceGlaze(a_carve, a_melt, a_worldZ, a_gridLocal, a_dated), kIceSurfaceGlaze * SnowClimateRow(a_worldZ).x);
-}
-
-float SnowIceParallax(float a_carve, float a_melt, float a_worldZ, float2 a_gridLocal, bool a_dated)
-{
-	float share = 1.0;
-	[branch] if (SnowIceInView())
-		share = lerp(1.0, kIceParallax, SnowIceGlaze(a_carve, a_melt, a_worldZ, a_gridLocal, a_dated));
-	return share;
-}
-
-float2 SnowWetPrint(inout float3 a_albedo, float a_carve, float a_melt, float a_depth, float a_worldZ, float2 a_gridLocal, bool a_dated)
-{
-	float2 look = float2(0.0, 1.0);
+	float roughCut = 0.0;
 	const float wetPress = SnowPressed(a_carve, a_melt);
-	const bool wetIce = SnowClimateLUT[2].y > 0.001 || SnowIceInView();
-	[branch] if (wetIce || (wetPress > 0.001 && (a_depth < 6.0 || SnowClimateLUT[2].w > 0.001)))
+	[branch] if (wetPress > 0.001 && a_depth < 6.0)
 	{
-		const float4 row = SnowClimateRow(a_worldZ);
-		a_albedo = lerp(a_albedo, pow(abs(a_albedo), 1.0 + row.y), 0.5);
-		float pressGlaze = 0.0;
-		[branch] if (wetPress > 0.001 && row.x > 0.001)
-			pressGlaze = SnowIceSince(row.x, a_gridLocal, a_dated, a_worldZ) * wetPress;
-		const float glaze = max(pressGlaze, kIceSurfaceGlaze * row.x);
-		look.y = (1.0 - row.y) * (1.0 - glaze);
-		look.x = glaze * kIceRoughCut;
-		a_albedo *= lerp(1.0, kIceTint, glaze);
-		[branch] if (wetPress > 0.001)
-		{
-			const float climateWet = row.w;
-			const float thinPrint = (1.0 - smoothstep(1.5, 6.0, a_depth)) * saturate(SnowClimate2.w + climateWet);
-			float wetPrint = wetPress * max(thinPrint, 0.8 * climateWet);
-			[branch] if (a_dated && TrackAge.y > 0.0 && BermBakeActive > 0.5)
-				wetPrint *= saturate(1.0 - 2.0 * TrackAgeOf(BermFieldBaked(a_gridLocal).z));
-			a_albedo = lerp(a_albedo, a_albedo * float3(0.76, 0.77, 0.80) * (1.0 - 0.25 * climateWet), wetPrint);
-			look.x = max(wetPrint * (0.24 + 0.26 * climateWet), look.x);
-		}
+		const float wetPrint = wetPress * (1.0 - smoothstep(1.5, 6.0, a_depth)) * kDryWetPrint;
+		a_albedo = lerp(a_albedo, a_albedo * float3(0.76, 0.77, 0.80), wetPrint);
+		roughCut = wetPrint * 0.24;
 	}
-	return look;
+	return roughCut;
 }
 #endif
-
-float4 SampleBlood(float2 gridLocal, out float fresh)
-{
-	fresh = 0.0;
-	float4 acc = 0.0;
-	float2 uv = (GridToDeformOffset + gridLocal) * DeformInvWorldSize;
-	const bool live = BloodLook2.z > 0.5 && all(uv >= 0.0) && all(uv <= 1.0);
-	[branch] if (live)
-	{
-		float2 dims;
-		BloodMap.GetDimensions(dims.x, dims.y);
-		float2 t = clamp(uv * dims - 0.5, 0.0, dims.x - 1.001);
-		int2 t0 = (int2)t;
-		float2 f = t - t0;
-		int2 t1 = min(t0 + 1, int2(dims) - 1);
-
-		const int2 taps[4] = { int2(t0.x, t0.y), int2(t1.x, t0.y), int2(t0.x, t1.y), int2(t1.x, t1.y) };
-		const float weights[4] = { (1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y };
-		float freshAcc = 0.0;
-		[unroll] for (int i = 0; i < 4; i++)
-		{
-			float4 b = BloodMap.Load(DeformTexel(taps[i], int2(dims)));
-			[branch] if (b.a > 0.002)
-			{
-				float2 clock = BloodClock.Load(DeformTexel(taps[i], int2(dims)));
-				float buried = saturate((BloodLook.y - clock.x) / BloodLook.w);
-				float age = saturate((BloodLook.z - clock.y) / BloodLook2.x);
-				float conc = b.a * (1.0 - buried) * weights[i];
-				acc += float4(b.rgb * conc, conc);
-				freshAcc += (1.0 - age) * conc;
-			}
-		}
-		[branch] if (acc.a > 1e-4)
-		{
-			acc.rgb /= acc.a;
-			fresh = freshAcc / acc.a;
-		}
-	}
-	return acc;
-}
 
 float2 SampleExclusionField(float2 worldXY)
 {
@@ -651,7 +493,7 @@ static const float kFireMeltFloor = 1.0;
 
 float Undulation(float2 worldXY)
 {
-	return UndulationNorm(worldXY, UndulationScale) * UndulationAmp;
+	return UndulationNorm(worldXY) * kUndulationAmp;
 }
 
 float3 UndulationBakedHG(float2 worldXY)
@@ -679,7 +521,7 @@ float UndulationSampled(float2 worldXY)
 {
 	float result;
 	[branch] if (UndulationBakedCovers(worldXY))
-		result = UndulationBakedHG(worldXY).x * UndulationAmp;
+		result = UndulationBakedHG(worldXY).x * kUndulationAmp;
 	else result = Undulation(worldXY);
 	return result;
 }
@@ -688,7 +530,7 @@ float2 UndulationGradSampled(float2 worldXY)
 {
 	float2 result;
 	[branch] if (UndulationBakedCovers(worldXY))
-		result = UndulationBakedHG(worldXY).yz * UndulationAmp;
+		result = UndulationBakedHG(worldXY).yz * kUndulationAmp;
 	else
 	{
 		const float uStep = kUndulationGradStep;
@@ -700,47 +542,35 @@ float2 UndulationGradSampled(float2 worldXY)
 	return result;
 }
 
-float CarveSlough(float deformation, float deformBlur, float a_round)
-{
-	float d = saturate(lerp(deformation, min(deformation, deformBlur), CompactLook.w));
-	return lerp(d, deformBlur, a_round);
-}
+#define CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth)                  \
+	float soft = d * d * d * (d * (d * 6.0 - 15.0) + 10.0);                     \
+	d = lerp(soft, d, depthT);                                                  \
+	float profile = uncarvedDepth * (1.0 - d);                                  \
+	float hump = smoothstep(0.02, 0.10, d) * (1.0 - smoothstep(0.10, 0.35, d)); \
+	profile += kRimLip * uncarvedDepth * hump * depthT;
 
-#define CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth, look)                \
-	float soft = d * d * d * (d * (d * 6.0 - 15.0) + 10.0);                         \
-	d = lerp(soft, d, depthT);                                                      \
-	float profile = uncarvedDepth * (1.0 - d);                                      \
-	[branch] if (RimStyle.x > 0.001)                                                \
-	{                                                                               \
-		float hump = smoothstep(0.02, 0.10, d) * (1.0 - smoothstep(0.10, 0.35, d)); \
-		profile += look.z * uncarvedDepth * hump * depthT;                          \
-	}
-
-float CarveProfile(float deformation, float deformBlur, float uncarvedDepth, float2 worldXY, float3 a_look)
+float CarveProfile(float deformation, float uncarvedDepth, float2 worldXY)
 {
 	float depthT = smoothstep(6.0, 18.0, uncarvedDepth);
-	float d = CarveSlough(deformation, deformBlur, a_look.x);
+	float d = saturate(deformation);
 
-	[branch] if (RimStyle.y > 0.001)
+	float rimBand = smoothstep(0.02, 0.12, d) * (1.0 - smoothstep(0.30, 0.55, d));
+	[branch] if (rimBand > 0.0 && depthT > 0.0)
 	{
-		float rimBand = smoothstep(0.02, 0.12, d) * (1.0 - smoothstep(0.30, 0.55, d));
-		[branch] if (rimBand > 0.0 && depthT > 0.0)
-		{
-			float notch = (SnowDetailNoise(worldXY / 37.0) - 0.5) * 0.8 +
-			              (SnowDetailNoise(worldXY / 8.0) - 0.5) * 1.2;
-			d = saturate(d + notch * a_look.y * 0.35 * rimBand * depthT);
-		}
+		float notch = (SnowDetailNoise(worldXY / 37.0) - 0.5) * 0.8 +
+		              (SnowDetailNoise(worldXY / 8.0) - 0.5) * 1.2;
+		d = saturate(d + notch * kRimTeeth * 0.35 * rimBand * depthT);
 	}
 
-	CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth, a_look)
+	CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth)
 	return profile;
 }
 
-float CarveProfileNoTeeth(float deformation, float deformBlur, float uncarvedDepth, float3 a_look)
+float CarveProfileNoTeeth(float deformation, float uncarvedDepth)
 {
 	float depthT = smoothstep(6.0, 18.0, uncarvedDepth);
-	float d = CarveSlough(deformation, deformBlur, a_look.x);
-	CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth, a_look)
+	float d = saturate(deformation);
+	CARVE_PROFILE_SHAPE(profile, d, depthT, uncarvedDepth)
 	return profile;
 }
 

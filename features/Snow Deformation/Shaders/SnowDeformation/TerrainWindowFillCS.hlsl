@@ -18,21 +18,18 @@ cbuffer WindowFillCB : register(b0)
 	float2 HeightMapOffset;
 
 	float2 HeightRange;
-	float SnowDepthUnits;
+	float padSnowDepthUnits;
 	float padFill;
 
 	float2 LODTileBase;
 	float LODTileSpan;
-	float LODSnowSensitivity;
+	float padLODSnowSensitivity;
 
 	float4 LODTileValid;
 }
 
-float ClassifyLODSnow(float3 color)
-{
-	SNOW_TEXEL_SCORE(score, color, 0.62 - 0.64 * saturate(LODSnowSensitivity), 0.12);
-	return score;
-}
+// Snow depth on far land, in world units: the Snow 01 family's depth (kSnowClassDepths[3] in SnowDeformation.h).
+static const float kFarSnowDepth = 30.0;
 
 [numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) {
 	if (id.x >= WindowDim || id.y >= WindowDim)
@@ -73,5 +70,5 @@ float ClassifyLODSnow(float3 color)
 		provenance = 1.0;
 	}
 
-	TerrainWindow[id.xy] = float4(z, coverage * SnowDepthUnits, coverage, provenance);
+	TerrainWindow[id.xy] = float4(z, coverage * kFarSnowDepth, coverage, provenance);
 }

@@ -5,9 +5,8 @@ namespace SnowDeformation
 	Texture2D<float4> DeformationMap : register(t101);
 	Texture2D<float4> HorizonSnowAlbedo : register(t33);
 	Texture2D<float4> HorizonSnowNormal : register(t23);
-	Texture2D<float> WaterWindow : register(t63);
+	Texture2D<float> WaterWindow : register(t75);
 	Texture2D<float4> HorizonSnowRmaos : register(t68);
-	Texture2D<float4> BermField : register(t56);
 
 	bool UnderWater(float3 absWorld)
 	{
@@ -34,12 +33,6 @@ namespace SnowDeformation
 	}
 
 	static const float SnowUVTile = 4096.0 / 24.0;
-
-	float ClassifyLODSnow(float3 gammaColor)
-	{
-		SNOW_TEXEL_SCORE(score, gammaColor, 0.62 - 0.64 * saturate(SharedData::snowDeformationSettings.LODSnowSensitivity), 0.12);
-		return score;
-	}
 
 	float2 GetDeformationUV(float2 absWorldXY)
 	{
@@ -82,27 +75,5 @@ namespace SnowDeformation
 			deformation = bspline * border;
 		}
 		return deformation;
-	}
-
-	float GetCutDate(float2 absWorldXY)
-	{
-		float2 mapDim;
-		BermField.GetDimensions(mapDim.x, mapDim.y);
-		float2 t = clamp(GetDeformationUV(absWorldXY) * mapDim - 0.5, 0.0, mapDim - 1.001);
-		int2 t0 = (int2)t;
-		float2 f = t - t0;
-		int2 t1 = min(t0 + 1, int2(mapDim) - 1);
-
-		const int2 mask = int2(mapDim) - 1;
-		const int2 origin = SharedData::snowDeformationSettings.DeformMapOrigin;
-		int2 q0 = (t0 + origin) & mask;
-		int2 q1 = (t1 + origin) & mask;
-
-		float2 s00 = BermField.Load(int3(q0.x, q0.y, 0)).yz;
-		float2 s10 = BermField.Load(int3(q1.x, q0.y, 0)).yz;
-		float2 s01 = BermField.Load(int3(q0.x, q1.y, 0)).yz;
-		float2 s11 = BermField.Load(int3(q1.x, q1.y, 0)).yz;
-		float2 v = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
-		return v.x > 1e-5 ? v.y / v.x : 0.0;
 	}
 }
