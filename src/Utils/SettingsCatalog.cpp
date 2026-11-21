@@ -200,23 +200,38 @@ namespace Util::Settings
 		return prefix.empty() ? key : prefix + "." + key;
 	}
 
-	void CollectUnknownSettingKeys(const nlohmann::json& incoming, const nlohmann::json& known,
+	void PruneUnknownSettingKeys(nlohmann::json& incoming, const nlohmann::json& known,
 		const std::string& prefix, std::vector<std::string>& unknownKeys)
 	{
 		if (!incoming.is_object())
 			return;
-		for (const auto& [key, value] : incoming.items()) {
-			if (IsMetadataKey(key))
+		for (auto it = incoming.begin(); it != incoming.end();) {
+			if (IsMetadataKey(it.key())) {
+				++it;
 				continue;
-			const auto path = JoinSettingPath(prefix, key);
-			const auto found = known.is_object() ? known.find(key) : known.end();
-			if (!known.is_object() || found == known.end())
+			}
+			const auto path = JoinSettingPath(prefix, it.key());
+			const auto found = known.is_object() ? known.find(it.key()) : known.end();
+			if (!known.is_object() || found == known.end()) {
 				unknownKeys.push_back(path);
-			else if (!IsCompatibleSettingValue(*found, value))
+				it = incoming.erase(it);
+			} else if (!IsCompatibleSettingValue(*found, it.value())) {
 				unknownKeys.push_back(path + " (wrong type)");
-			else if (value.is_object() && !SceneBlend::IsValid(value))
-				CollectUnknownSettingKeys(value, *found, path, unknownKeys);
+				it = incoming.erase(it);
+			} else {
+				// A null known value accepts any shape, so there is nothing to prune its children against.
+				if (it.value().is_object() && !found->is_null() && !SceneBlend::IsValid(it.value()))
+					PruneUnknownSettingKeys(it.value(), *found, path, unknownKeys);
+				++it;
+			}
 		}
+	}
+
+	void CollectUnknownSettingKeys(const nlohmann::json& incoming, const nlohmann::json& known,
+		const std::string& prefix, std::vector<std::string>& unknownKeys)
+	{
+		auto scratch = incoming;
+		PruneUnknownSettingKeys(scratch, known, prefix, unknownKeys);
 	}
 
 	void EraseMismatchedSettings(nlohmann::json& incoming, const nlohmann::json& known,
