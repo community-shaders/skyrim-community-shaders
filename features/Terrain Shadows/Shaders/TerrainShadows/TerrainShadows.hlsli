@@ -40,4 +40,37 @@ namespace TerrainShadows
 			return worldPos.z >= shadowHeight.x ? 1.0 : 0.0;
 		return saturate((worldPos.z - lowerHeight) / transitionHeight);
 	}
+
+	/** @brief GetTerrainShadow's heightmap lookup at one xy, to shade several heights over the same texel (GetColumnShadow). */
+	struct ShadowColumn
+	{
+		bool lit;  // terrain shadows off, or outside the heightmap
+		float2 shadowHeight;
+		float lowerHeight;
+		float transitionHeight;
+	};
+
+	ShadowColumn GetShadowColumn(const float2 worldXY, SamplerState samp)
+	{
+		ShadowColumn column = (ShadowColumn)0;
+		float2 uv = GetTerrainShadowUV(worldXY);
+		column.lit = !SharedData::terraOccSettings.EnableTerrainShadow || any(uv < 0.0) || any(uv > 1.0);
+		if (column.lit)
+			return column;
+		column.shadowHeight = GetTerrainZ(ShadowHeightTexture.SampleLevel(samp, uv, 0));
+		float zBlur = min(SharedData::terraOccSettings.ZBlur, SelfShadowBias);
+		column.lowerHeight = column.shadowHeight.y - zBlur;
+		column.transitionHeight = column.shadowHeight.x + zBlur - column.lowerHeight;
+		return column;
+	}
+
+	/** @brief GetTerrainShadow at height worldZ over the column's texel. */
+	float GetColumnShadow(ShadowColumn column, float worldZ)
+	{
+		if (column.lit)
+			return 1.0;
+		if (column.transitionHeight <= 0.0)
+			return worldZ >= column.shadowHeight.x ? 1.0 : 0.0;
+		return saturate((worldZ - column.lowerHeight) / column.transitionHeight);
+	}
 }
