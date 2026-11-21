@@ -150,6 +150,13 @@ void Deferred::SetupResources()
 		// TAA water history buffers need RGBA16: alpha stores premultiplied coverage for ISWaterBlend
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, "Deferred::Water1");
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, "Deferred::Water2");
+
+		D3D11_TEXTURE2D_DESC mainCopyDesc = texDesc;
+		mainCopyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		mainCopyDesc.MiscFlags = 0;
+
+		mainCopy = eastl::make_unique<Texture2D>(mainCopyDesc);
+		mainCopy->CreateSRV(srvDesc);
 	}
 
 	{
@@ -412,9 +419,18 @@ void Deferred::DeferredPasses()
 		};
 		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
+		if (mainCopy) {
+			context->CopyResource(mainCopy->resource.get(), main.texture);
+		}
+
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, ARRAYSIZE(skylightingCoverageSrvs), skylightingCoverageSrvs);
 		globals::features::viewAtmosphere.Bind(true);
+
+		if (mainCopy) {
+			ID3D11ShaderResourceView* mainCopySrv = mainCopy->srv.get();
+			context->CSSetShaderResources(23, 1, &mainCopySrv);
+		}
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -435,6 +451,7 @@ void Deferred::DeferredPasses()
 		ID3D11ShaderResourceView* views[21]{};
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, 2, views);
+		context->CSSetShaderResources(23, 1, views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
