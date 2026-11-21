@@ -34,7 +34,8 @@ namespace Util
 	bool ExtractShapeBound(const RE::hkpShape* shape, float& radius);
 
 	/**
-     * @brief Visits every collision object below a scenegraph root without trusting a child array the game is releasing.
+     * @brief Visits every collision object below a scenegraph root, holding a reference on each visited node.
+     * @note Call on the main thread only: NiNode child arrays have no lock, so a concurrent detach is unsafe.
      * @param a_root Scenegraph root to traverse; kept referenced for the duration of the walk.
      * @param a_func Callback invoked for each collision object; return kStop to end the walk.
      * @return The last control value returned by the callback.

@@ -102,7 +102,7 @@ namespace Util
 		if (auto* node = a_root->AsNode()) {
 			auto& children = node->GetChildren();
 			for (std::uint16_t index = 0; index < children.capacity(); ++index) {
-				// A node being destroyed on another thread leaves capacity set while its storage is already gone.
+				// Guards capacity set with no storage; not a substitute for the main-thread contract.
 				if (!children.begin())
 					break;
 				const RE::NiPointer<RE::NiAVObject> child = children[index];
