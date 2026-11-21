@@ -774,9 +774,10 @@ namespace SIE
 			Sky = 8,
 		};
 
-		/** @brief Sky descriptor flags above the technique. Bit 8 is the deferred pass. */
+		/** @brief Sky descriptor flags above the technique. */
 		enum class SkyShaderFlags
 		{
+			Deferred = 1 << 8,
 			CloudShadowsCapture = 1 << 9,
 		};
 

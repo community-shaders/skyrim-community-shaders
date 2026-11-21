@@ -72,12 +72,15 @@ public:
 	/** @brief Vertex constant buffer slot of the capture face index, CloudShadowsCapture in CloudShadows.hlsli. */
 	static constexpr UINT kCaptureFaceSlot = 7;
 
+	static constexpr uint32_t kNeverCaptured = UINT32_MAX;
 	/** @brief Frame of the last capture from either source; the occlusion is bound only while it is at most one cube old. */
-	uint32_t lastCaptureFrame = 0;
-	uint32_t lastReflectionsCaptureFrame = UINT32_MAX;
-	uint32_t viewCaptureFrame = UINT32_MAX;
+	uint32_t lastCaptureFrame = kNeverCaptured;
+	uint32_t lastReflectionsCaptureFrame = kNeverCaptured;
+	uint32_t viewCaptureFrame = kNeverCaptured;
 	uint32_t viewCaptureFaces[kCaptureFacesPerFrame] = {};
 	bool viewCapturePending = false;
+	/** @brief Set when a face of the layer chain was written since the occlusion was last copied for binding. */
+	bool occlusionChanged = true;
 
 	winrt::com_ptr<ID3D11RasterizerState> captureRasterizerState;
 	winrt::com_ptr<ID3D11Buffer> captureFaceCBs[6];

@@ -78,6 +78,7 @@ void CloudShadows::CheckResourcesSide(int side)
 	context->ClearRenderTargetView(cloudShadowLayerRTVs[0][side], black);
 	globals::profiler->EndPass();
 	renderedLayersMask[side] = 0;
+	occlusionChanged = true;
 }
 
 void CloudShadows::PropagateToCompletion(int side)
@@ -121,6 +122,7 @@ void CloudShadows::PropagateToCompletion(int side)
 			texCloudShadowLayers[fromLayer]->resource.get(), subresource, nullptr);
 	}
 	globals::profiler->EndPass();
+	occlusionChanged = true;
 }
 
 void CloudShadows::SkyShaderHacks()
@@ -198,6 +200,7 @@ void CloudShadows::SkyShaderHacks()
 
 		renderedLayersMask[side] |= (1u << layer);
 		lastCaptureFrame = lastReflectionsCaptureFrame = globals::state->frameCount;
+		occlusionChanged = true;
 	}
 
 	// Release the references OMGetRenderTargets added
@@ -274,6 +277,10 @@ void CloudShadows::CaptureLayerFromView()
 	const auto state = globals::state;
 	if (!state->currentShader || state->currentShader->shaderType.get() != RE::BSShader::Type::Sky)
 		return;
+	// The occlusion comes from CS's own non-deferred sky pixel shader; the engine's and the deferred one write no SV_Target3
+	constexpr auto deferredFlag = static_cast<uint32_t>(SIE::ShaderCache::SkyShaderFlags::Deferred);
+	if (!state->customPixelShader || (state->modifiedPixelDescriptor & deferredFlag))
+		return;
 	constexpr auto captureFlag = static_cast<uint32_t>(SIE::ShaderCache::SkyShaderFlags::CloudShadowsCapture);
 	auto* captureShader = globals::shaderCache->GetVertexShader(*state->currentShader, state->modifiedVertexDescriptor | captureFlag);
 	if (!captureShader)
@@ -288,7 +295,7 @@ void CloudShadows::CaptureLayerFromView()
 	if (viewCaptureFrame != frame) {
 		float black[4] = { 0, 0, 0, 0 };
 		// After a gap the composite holds another sky; faces not yet recaptured read as clear
-		if (frame - lastCaptureFrame > kCaptureFramesPerCube) {
+		if (lastCaptureFrame == kNeverCaptured || frame - lastCaptureFrame > kCaptureFramesPerCube) {
 			for (auto* rtv : cloudShadowLayerRTVs[kMaxCloudLayers - 1])
 				context->ClearRenderTargetView(rtv, black);
 		}
@@ -352,6 +359,7 @@ void CloudShadows::CaptureLayerFromView()
 		renderedLayersMask[face] |= (1u << layer);
 	}
 	lastCaptureFrame = frame;
+	occlusionChanged = true;
 
 	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
 	context->OMSetBlendState(savedBlendState, savedBlendFactor, savedSampleMask);
@@ -401,12 +409,14 @@ void CloudShadows::ReflectionsPrepass()
 				for (auto* rtv : cloudShadowLayerRTVs[kMaxCloudLayers - 1])
 					context->ClearRenderTargetView(rtv, black);
 				occlusionClearedWithoutClouds = true;
+				occlusionChanged = true;
 			}
 		} else {
 			occlusionClearedWithoutClouds = false;
 		}
 
-		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
+		if (std::exchange(occlusionChanged, false))
+			context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
 		globals::profiler->EndPass();
 
 		ID3D11ShaderResourceView* srv = texCubemapCloudOccCopy->srv.get();
@@ -426,8 +436,8 @@ void CloudShadows::EarlyPrepass()
 
 	// Draws outside the reflections pass read t25 too; an occlusion older than one cube of captures belongs to another sky
 	auto context = globals::d3d::context;
-	const bool current = globals::state->frameCount - lastCaptureFrame <= kCaptureFramesPerCube;
-	if (current) {
+	const bool current = lastCaptureFrame != kNeverCaptured && globals::state->frameCount - lastCaptureFrame <= kCaptureFramesPerCube;
+	if (current && std::exchange(occlusionChanged, false)) {
 		globals::profiler->BeginPass("CloudShadows::OcclusionCopy");
 		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
 		globals::profiler->EndPass();
