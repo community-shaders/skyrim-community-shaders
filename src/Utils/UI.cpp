@@ -3124,7 +3124,8 @@ namespace Util
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
 		const char* filename,
 		ID3D11ShaderResourceView** out_srv,
-		ImVec2& out_size)
+		ImVec2& out_size,
+		bool quietIfMissing)
 	{
 		if (!device || !out_srv) {
 			logger::warn("LoadDDSTextureFromFile: Invalid parameters");
@@ -3136,7 +3137,10 @@ namespace Util
 		// Try to load from BSA using Skyrim's resource system
 		RE::BSResourceNiBinaryStream bsaStream(filename);
 		if (!bsaStream.good()) {
-			logger::warn("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
+			if (quietIfMissing)
+				logger::debug("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
+			else
+				logger::warn("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
 			return false;
 		}
 

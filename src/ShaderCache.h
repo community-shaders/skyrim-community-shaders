@@ -779,6 +779,12 @@ namespace SIE
 			Sky = 8,
 		};
 
+		/** @brief Sky descriptor flags above the technique. Bit 8 is the deferred pass. */
+		enum class SkyShaderFlags
+		{
+			CloudShadowsCapture = 1 << 9,
+		};
+
 		enum class GrassShaderTechniques
 		{
 			RenderDepthStencil = 7,

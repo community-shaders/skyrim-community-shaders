@@ -163,6 +163,7 @@ file_common_defines:
         CSHADER: []
     Lighting.hlsl:
         PSHADER:
+            - SNOW_DEFORMATION
             - TERRAIN_SHADOWS
             - CS_HAIR
             - SCREEN_SPACE_SHADOWS
@@ -181,6 +182,7 @@ file_common_defines:
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
         VSHADER:
+            - SNOW_DEFORMATION
             - TERRAIN_SHADOWS
             - CS_HAIR
             - DYNAMIC_CUBEMAPS
@@ -2313,6 +2315,23 @@ shaders:
                   - entry: Sky:Vertex:7
                     defines:
                         - TEX
+                  - entry: Sky:Vertex:204
+                    defines:
+                        - TEX
+                        - CLOUDS
+                        - CLOUD_SHADOWS_CAPTURE
+                  - entry: Sky:Vertex:205
+                    defines:
+                        - TEX
+                        - CLOUDS
+                        - TEXLERP
+                        - CLOUD_SHADOWS_CAPTURE
+                  - entry: Sky:Vertex:206
+                    defines:
+                        - TEX
+                        - CLOUDS
+                        - TEXFADE
+                        - CLOUD_SHADOWS_CAPTURE
     - file: Particle.hlsl
       configs:
           PSHADER:

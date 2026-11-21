@@ -74,7 +74,7 @@ namespace Glints
 struct MaterialProperties
 {
 	float3 BaseColor;
-#if defined(TRUE_PBR) || defined(CS_SKIN_SHADING)
+#if defined(TRUE_PBR) || defined(CS_SKIN_SHADING) || defined(SNOW_DEFORMATION)
 	float3 DirectSpecularEnergyCompensation;
 #endif
 #if !defined(TRUE_PBR)
