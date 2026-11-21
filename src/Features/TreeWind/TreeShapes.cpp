@@ -17,8 +17,8 @@ namespace TreeShapes
 		// Crown vertices sit within this many model units (at LOD4 scale) of their trunk
 		constexpr float kCrownRadius = 100.0f;
 		constexpr float kCellSize = 128.0f;
-		// Bend data of a shape not drawn for this many frames is freed
-		constexpr uint kEvictFrames = 600;
+		// Bend data of a shape not drawn for this many game seconds is freed
+		constexpr float kEvictSeconds = 60.0f;
 
 		bool IsTreeShapeName(const RE::BSGeometry* a_geometry)
 		{
@@ -277,50 +277,99 @@ namespace TreeShapes
 		return Kind::None;
 	}
 
-	ID3D11ShaderResourceView* BendWeights::Get(RE::BSGeometry* a_geometry, Kind a_kind, uint a_frame, bool a_treeModSupport)
+	ID3D11ShaderResourceView* BendWeights::Get(RE::BSGeometry* a_geometry, Kind a_kind, bool a_treeModSupport)
 	{
 		VertexView vertices;
 		if (!a_geometry || a_kind == Kind::None || !GetVertices(a_geometry, vertices))
 			return nullptr;
 
 		const auto firstVertex = vertices(0);
+		const float now = globals::state->timer;
 		if (auto it = entries.find(vertices.vertexBuffer); it != entries.end()) {
 			auto& entry = it->second;
-			// Tree-mod crowns rebuild when their block gains trunk cards
-			const bool stale = a_treeModSupport && entry.crown && [&] {
-				const auto blockIt = blocks.find(entry.blockKey);
-				return blockIt != blocks.end() && blockIt->second.generation != entry.generation;
-			}();
-			if (!stale && entry.vertexCount == vertices.count && entry.firstVertex[0] == firstVertex.x && entry.firstVertex[1] == firstVertex.y && entry.firstVertex[2] == firstVertex.z) {
-				entry.lastFrame = a_frame;
+			if (entry.vertexCount == vertices.count && entry.firstVertex[0] == firstVertex.x && entry.firstVertex[1] == firstVertex.y && entry.firstVertex[2] == firstVertex.z) {
+				entry.lastSeen = now;
+				// Crowns rebuild when their block gains trunk cards: tree-mod crowns always, others while they wait for the first
+				const auto generation = blockGenerations.find(entry.blockKey);
+				const bool stale = entry.crown && (a_treeModSupport || entry.waitsForCards) &&
+				                   (generation == blockGenerations.end() ? 0u : generation->second) != entry.generation;
+				if (stale && !entry.pendingJob)
+					entry.pendingJob = Queue(a_geometry, a_kind, a_treeModSupport);
+				// The old data stays bound until its rebuild lands
 				return entry.srv.get();
 			}
-			// Stale, or the vertex buffer address was reused by another shape
+			// The vertex buffer address was reused by another shape
 			entries.erase(it);
 		}
-
-		ZoneScopedN("TreeWind::BuildBendWeights");
-		const uint64_t blockKey = BlockKey(a_geometry);
-		auto& block = blocks[blockKey];
-		const float worldScale = a_geometry->world.scale;
-		const bool allQuads = IsAllQuads(a_geometry);
-		const auto indices = a_geometry->GetGeometryRuntimeData().rendererData->rawIndexData;
-		const uint32_t triangleCount = a_geometry->AsTriShape()->GetTrishapeRuntimeData().triangleCount;
 
 		Entry entry;
 		entry.vertexCount = vertices.count;
 		entry.firstVertex[0] = firstVertex.x;
 		entry.firstVertex[1] = firstVertex.y;
 		entry.firstVertex[2] = firstVertex.z;
-		entry.lastFrame = a_frame;
-		entry.blockKey = blockKey;
+		entry.lastSeen = now;
+		entry.blockKey = BlockKey(a_geometry);
 		entry.crown = a_kind == Kind::Crown;
+		entry.pendingJob = Queue(a_geometry, a_kind, a_treeModSupport);
+		entries.insert_or_assign(vertices.vertexBuffer, std::move(entry));
+		return nullptr;
+	}
 
-		// Remembers a shape with nothing to sway, so it is not scanned again
-		const auto keepStill = [&]() -> ID3D11ShaderResourceView* {
-			entry.generation = block.generation;
-			entries.insert_or_assign(vertices.vertexBuffer, std::move(entry));
-			return nullptr;
+	uint64_t BendWeights::Queue(RE::BSGeometry* a_geometry, Kind a_kind, bool a_treeModSupport)
+	{
+		VertexView vertices;
+		[[maybe_unused]] const bool valid = GetVertices(a_geometry, vertices);
+		assert(valid);
+
+		Job job;
+		job.id = nextJob++;
+		job.epoch = epoch;
+		job.vertexBuffer = vertices.vertexBuffer;
+		job.blockKey = BlockKey(a_geometry);
+		job.kind = a_kind;
+		job.treeModSupport = a_treeModSupport;
+		job.allQuads = IsAllQuads(a_geometry);
+		job.treeShapeName = IsTreeShapeName(a_geometry);
+		job.worldScale = a_geometry->world.scale;
+		// The build thread works on its own copy: the engine frees its CPU copies when the shape unloads
+		job.positions.resize(vertices.count);
+		for (uint32_t i = 0; i < vertices.count; ++i)
+			job.positions[i] = vertices(i);
+		if (const auto indices = a_geometry->GetGeometryRuntimeData().rendererData->rawIndexData)
+			job.indices.assign(indices, indices + static_cast<size_t>(a_geometry->AsTriShape()->GetTrishapeRuntimeData().triangleCount) * 3);
+
+		if (!builder)
+			builder = std::make_unique<BS::thread_pool<>>(1);
+		const uint64_t id = job.id;
+		builder->detach_task([this, job = std::move(job)] {
+			auto result = Build(job);
+			std::scoped_lock lock(resultsMutex);
+			results.push_back(std::move(result));
+		});
+		return id;
+	}
+
+	BendWeights::Result BendWeights::Build(const Job& a_job)
+	{
+		ZoneScopedN("TreeWind::BuildBendWeights");
+		static_assert(sizeof(RE::NiPoint3) == 3 * sizeof(float));
+		const VertexView vertices{ reinterpret_cast<const uint8_t*>(a_job.positions.data()), sizeof(RE::NiPoint3), static_cast<uint32_t>(a_job.positions.size()), a_job.vertexBuffer };
+		auto& block = blocks[a_job.blockKey];
+		const float worldScale = a_job.worldScale;
+		const bool allQuads = a_job.allQuads;
+		const uint16_t* indices = a_job.indices.empty() ? nullptr : a_job.indices.data();
+		const auto triangleCount = static_cast<uint32_t>(a_job.indices.size() / 3);
+
+		Result result;
+		result.id = a_job.id;
+		result.epoch = a_job.epoch;
+		result.vertexBuffer = a_job.vertexBuffer;
+		result.blockKey = a_job.blockKey;
+		// A shape without bend data stays still; one waiting for its block's trunk cards is rebuilt once they arrive
+		const auto finish = [&](bool a_waitsForCards) {
+			result.generation = block.generation;
+			result.waitsForCards = a_waitsForCards;
+			return std::move(result);
 		};
 
 		// Per vertex: bend weight (0 base, 1 top), tree random, tree sway scale, distance from the trunk (0 trunk, 1 crown edge)
@@ -332,7 +381,7 @@ namespace TreeShapes
 			data[a_index * 4 + 3] = DirectX::PackedVector::XMConvertFloatToHalf(std::clamp(a_radial, 0.0f, 1.0f));
 		};
 
-		if (a_kind == Kind::Trunk) {
+		if (a_job.kind == Kind::Trunk) {
 			// First vertex of each trunk card
 			std::vector<uint32_t> cardStarts;
 			if (allQuads) {
@@ -417,7 +466,7 @@ namespace TreeShapes
 				}
 			}
 			if (cardStarts.empty() && trunks.empty())
-				return keepStill();
+				return finish(false);
 
 			for (uint32_t i = 0; i < vertices.count && !trunks.empty(); ++i) {
 				const auto it = trunkOfPiece.find(roots[i]);
@@ -447,11 +496,11 @@ namespace TreeShapes
 				for (uint32_t k = 0; k < 4; ++k)
 					put(c + k, (vertices(c + k).z - q.base) / height, random, scale, 0.6f);
 			}
-		} else if (IsTreeShapeName(a_geometry)) {
+		} else if (a_job.treeShapeName) {
 			// A 'treepassthru' shape that is not all quads (external billboards, LOD tree models): each connected
 			// piece bends from its own foot, and the pieces of one tree share the random through their rounded centre
 			if (!indices)
-				return keepStill();
+				return finish(false);
 			const auto roots = PieceRoots(indices, triangleCount, vertices.count);
 			struct Piece
 			{
@@ -479,14 +528,14 @@ namespace TreeShapes
 				// Flat bits stay still
 				put(i, height > 8.0f ? (vertices(i).z - piece.base) / height : 0.0f, piece.random, piece.scale, 0.6f);
 			}
-		} else if (a_treeModSupport) {
+		} else if (a_job.treeModSupport) {
 			// Tree-mod crowns: each connected piece (a branch, a leaf cluster) follows the ONE trunk card nearest its
 			// centre, so a piece never tears between two trees; a piece with no card near stays still (full 3D LOD trees
 			// with real trunks). In the far rings tree-mod billboards are not plain quads and have no trunk cards, so
 			// each piece there bends from its own foot.
 			const bool farRing = worldScale >= 6.0f;
 			if (block.cards.empty() && !farRing)
-				return nullptr;
+				return finish(true);
 			const float crownRadius = kCrownRadius * 4.0f / std::max(worldScale, 0.01f);
 			const float maxDistance = 1.2f * crownRadius;
 			const auto roots = PieceRoots(indices, triangleCount, vertices.count);
@@ -547,11 +596,11 @@ namespace TreeShapes
 				}
 			}
 			if (matched == 0)
-				return keepStill();
+				return finish(false);
 		} else {
 			// 3D crowns follow the nearest trunk card of their block; until those trunks are drawn, the crown stays still
 			if (block.cards.empty())
-				return nullptr;
+				return finish(true);
 			const float crownRadius = kCrownRadius * 4.0f / std::max(worldScale, 0.01f);
 			for (uint32_t i = 0; i < vertices.count; ++i) {
 				const auto p = vertices(i);
@@ -570,35 +619,68 @@ namespace TreeShapes
 		bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
 		bufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		const D3D11_SUBRESOURCE_DATA initData{ data.data(), 0, 0 };
-		if (FAILED(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, entry.buffer.put())))
-			return nullptr;
-		Util::SetResourceName(entry.buffer.get(), "TreeWind::BendWeights");
+		// The device is free-threaded, so the build thread creates the buffer too
+		winrt::com_ptr<ID3D11Buffer> buffer;
+		if (FAILED(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, buffer.put())))
+			return finish(false);
+		Util::SetResourceName(buffer.get(), "TreeWind::BendWeights");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.NumElements = vertices.count;
-		if (FAILED(globals::d3d::device->CreateShaderResourceView(entry.buffer.get(), &srvDesc, entry.srv.put())))
-			return nullptr;
-		Util::SetResourceName(entry.srv.get(), "TreeWind::BendWeights SRV");
+		if (FAILED(globals::d3d::device->CreateShaderResourceView(buffer.get(), &srvDesc, result.srv.put())))
+			return finish(false);
+		Util::SetResourceName(result.srv.get(), "TreeWind::BendWeights SRV");
+		return finish(false);
+	}
 
-		entry.generation = block.generation;
-		return entries.insert_or_assign(vertices.vertexBuffer, std::move(entry)).first->second.srv.get();
+	void BendWeights::Commit()
+	{
+		std::vector<Result> done;
+		{
+			std::scoped_lock lock(resultsMutex);
+			done.swap(results);
+		}
+		for (auto& result : done) {
+			// Built before a Clear
+			if (result.epoch != epoch)
+				continue;
+			// Results arrive in build order, so the last one holds the block's current generation
+			blockGenerations[result.blockKey] = result.generation;
+			const auto it = entries.find(result.vertexBuffer);
+			if (it == entries.end() || it->second.pendingJob != result.id)
+				continue;
+			auto& entry = it->second;
+			entry.srv = std::move(result.srv);
+			entry.generation = result.generation;
+			entry.waitsForCards = result.waitsForCards;
+			entry.pendingJob = 0;
+		}
 	}
 
 	void BendWeights::Clear()
 	{
+		++epoch;
 		entries.clear();
-		blocks.clear();
+		blockGenerations.clear();
+		if (builder)
+			builder->detach_task([this] { blocks.clear(); });
 	}
 
-	void BendWeights::Evict(uint a_frame)
+	void BendWeights::Evict()
 	{
-		std::erase_if(entries, [a_frame](const auto& a_entry) { return a_frame - a_entry.second.lastFrame > kEvictFrames; });
+		const float now = globals::state->timer;
+		std::erase_if(entries, [now](const auto& a_entry) { return now - a_entry.second.lastSeen > kEvictSeconds; });
 		// A block lives only while one of its shapes does, so its cards do not pile up
 		std::unordered_set<uint64_t> liveBlocks;
 		for (const auto& [vertexBuffer, entry] : entries)
 			liveBlocks.insert(entry.blockKey);
-		std::erase_if(blocks, [&liveBlocks](const auto& a_block) { return !liveBlocks.contains(a_block.first); });
+		std::erase_if(blockGenerations, [&liveBlocks](const auto& a_block) { return !liveBlocks.contains(a_block.first); });
+		// Builds queued from here on run after this, so they never lose a block they just made
+		if (builder)
+			builder->detach_task([this, liveBlocks = std::move(liveBlocks)] {
+				std::erase_if(blocks, [&liveBlocks](const auto& a_block) { return !liveBlocks.contains(a_block.first); });
+			});
 	}
 }
