@@ -544,7 +544,7 @@ SceneSettingsManager::ResolvedSettingMap& SceneSettingsManager::BuildResolvedSet
 				collectGroupedBaselines(BuildWeatherValueGroups(weatherId));
 	}
 
-	const auto& locationTargets = GetCurrentLocationTargets();
+	const auto& locationTargets = GetCurrentLocationTargetKeys();
 	const bool rebuildLocationOverrides = collectLocationTransitionDurations || !cachedLocationOverridesValid;
 	if (rebuildLocationOverrides) {
 		for (const auto& target : locationTargets) {

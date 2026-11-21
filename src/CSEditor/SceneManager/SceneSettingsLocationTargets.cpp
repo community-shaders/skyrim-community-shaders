@@ -37,73 +37,84 @@ namespace SceneSettingsLocationTargets
 		return name.empty() ? Util::GetFormDisplayName(keyword->GetFormID()) : name;
 	}
 
+	/** @brief A target carrying only what config matching needs; DescribeLocationTarget fills the rest. */
+	static SceneSettingsManager::LocationTarget MakeTargetKey(LocationTargetType type, const RE::TESForm* form)
+	{
+		return { .type = type, .formKey = Util::GetFormFileKey(form), .formId = form->GetFormID() };
+	}
+
+	void DescribeLocationTarget(SceneSettingsManager::LocationTarget& target, const RE::TESForm* form,
+		const std::string& cocCode)
+	{
+		if (!form)
+			return;
+		target.editorId = Util::GetFormEditorID(form);
+		switch (target.type) {
+		case LocationTargetType::Worldspace:
+			target.name = GetLocationTargetDisplayName(form->As<RE::TESWorldSpace>());
+			break;
+		case LocationTargetType::LocationType:
+			target.name = GetLocationTypeDisplayName(form->As<RE::BGSKeyword>());
+			break;
+		case LocationTargetType::Region:
+			target.name = GetRegionTargetName(form->As<RE::TESRegion>());
+			target.cocCode = cocCode;
+			break;
+		case LocationTargetType::Location:
+			target.name = GetLocationTargetDisplayName(form->As<RE::BGSLocation>());
+			target.cocCode = cocCode;
+			break;
+		case LocationTargetType::Cell:
+			target.name = GetLocationTargetDisplayName(form->As<RE::TESObjectCELL>());
+			target.cocCode = target.editorId;  // The coc code is the cell's own editor ID.
+			break;
+		default:
+			break;
+		}
+	}
+
+	/** @brief A target with its display fields filled. */
+	static SceneSettingsManager::LocationTarget MakeDescribedTarget(LocationTargetType type, const RE::TESForm* form,
+		const std::string& cocCode = {})
+	{
+		auto target = MakeTargetKey(type, form);
+		DescribeLocationTarget(target, form, cocCode);
+		return target;
+	}
+
 	SceneSettingsManager::LocationTarget MakeWorldspaceTarget(const RE::TESWorldSpace* worldspace)
 	{
-		return {
-			.type = LocationTargetType::Worldspace,
-			.formKey = Util::GetFormFileKey(worldspace),
-			.name = GetLocationTargetDisplayName(worldspace),
-			.editorId = Util::GetFormEditorID(worldspace),
-			.formId = worldspace->GetFormID(),
-		};
+		return MakeDescribedTarget(LocationTargetType::Worldspace, worldspace);
 	}
 
 	SceneSettingsManager::LocationTarget MakeLocationTypeTarget(const RE::BGSKeyword* keyword)
 	{
-		return {
-			.type = LocationTargetType::LocationType,
-			.formKey = Util::GetFormFileKey(keyword),
-			.name = GetLocationTypeDisplayName(keyword),
-			.editorId = Util::GetFormEditorID(keyword),
-			.formId = keyword->GetFormID(),
-		};
+		return MakeDescribedTarget(LocationTargetType::LocationType, keyword);
 	}
 
 	SceneSettingsManager::LocationTarget MakeRegionTarget(const RE::TESRegion* region, const std::string& cocCode)
 	{
-		return {
-			.type = LocationTargetType::Region,
-			.formKey = Util::GetFormFileKey(region),
-			.name = GetRegionTargetName(region),
-			.editorId = Util::GetFormEditorID(region),
-			.cocCode = cocCode,
-			.formId = region->GetFormID(),
-		};
+		return MakeDescribedTarget(LocationTargetType::Region, region, cocCode);
 	}
 
 	SceneSettingsManager::LocationTarget MakeLocationTarget(const RE::BGSLocation* location, const std::string& cocCode)
 	{
-		return {
-			.type = LocationTargetType::Location,
-			.formKey = Util::GetFormFileKey(location),
-			.name = GetLocationTargetDisplayName(location),
-			.editorId = Util::GetFormEditorID(location),
-			.cocCode = cocCode,
-			.formId = location->GetFormID(),
-		};
+		return MakeDescribedTarget(LocationTargetType::Location, location, cocCode);
 	}
 
 	SceneSettingsManager::LocationTarget MakeCellTarget(const RE::TESObjectCELL* cell)
 	{
-		auto cocCode = Util::GetFormEditorID(cell);
-		return {
-			.type = LocationTargetType::Cell,
-			.formKey = Util::GetFormFileKey(cell),
-			.name = GetLocationTargetDisplayName(cell),
-			.editorId = cocCode,  // The coc code is the cell's own editor ID.
-			.cocCode = std::move(cocCode),
-			.formId = cell->GetFormID(),
-		};
+		return MakeDescribedTarget(LocationTargetType::Cell, cell);
 	}
 
 	std::vector<SceneSettingsManager::LocationTarget> BuildLocationTargetChain(
-		RE::BGSLocation* location, RE::TESObjectCELL* cell)
+		RE::BGSLocation* location, RE::TESObjectCELL* cell, bool describe)
 	{
 		// Away from the player a location still has a place in the world: the cell its marker stands in.
 		if (!cell && location && location->worldLocMarker)
 			if (auto marker = location->worldLocMarker.get())
 				cell = marker->GetParentCell();
-		const auto cocCode = cell ? Util::GetFormEditorID(cell) : std::string{};
+		const auto cocCode = describe && cell ? Util::GetFormEditorID(cell) : std::string{};
 
 		std::vector<RE::BGSLocation*> locationChain;
 		std::set<RE::FormID> visited;
@@ -112,9 +123,14 @@ namespace SceneSettingsLocationTargets
 		std::reverse(locationChain.begin(), locationChain.end());
 
 		std::vector<SceneSettingsManager::LocationTarget> targets;
+		const auto addTarget = [&](LocationTargetType type, const RE::TESForm* form) {
+			auto& target = targets.emplace_back(MakeTargetKey(type, form));
+			if (describe)
+				DescribeLocationTarget(target, form, cocCode);
+		};
 		if (cell && cell->IsExteriorCell())
 			if (auto* worldspace = cell->GetRuntimeData().worldSpace)
-				targets.push_back(MakeWorldspaceTarget(worldspace));
+				addTarget(LocationTargetType::Worldspace, worldspace);
 
 		// Only the innermost location's types describe where the player stands.
 		if (location) {
@@ -127,7 +143,7 @@ namespace SceneSettingsLocationTargets
 				return NormalizeLocationFormKey(Util::GetFormFileKey(keyword));
 			});
 			for (auto* locationType : locationTypes)
-				targets.push_back(MakeLocationTypeTarget(locationType));
+				addTarget(LocationTargetType::LocationType, locationType);
 		}
 
 		// The sky knows which of an exterior cell's overlapping regions actually won, but only for the
@@ -146,13 +162,13 @@ namespace SceneSettingsLocationTargets
 				}
 			}
 			if (region)
-				targets.push_back(MakeRegionTarget(region, cocCode));
+				addTarget(LocationTargetType::Region, region);
 		}
 
 		for (auto* current : locationChain)
-			targets.push_back(MakeLocationTarget(current, cocCode));
+			addTarget(LocationTargetType::Location, current);
 		if (cell)
-			targets.push_back(MakeCellTarget(cell));
+			addTarget(LocationTargetType::Cell, cell);
 		return targets;
 	}
 

@@ -81,6 +81,19 @@ const char* SceneSettingsManager::GetLocationTargetTypeName(LocationTargetType t
 
 const std::vector<SceneSettingsManager::LocationTarget>& SceneSettingsManager::GetCurrentLocationTargets() const
 {
+	GetCurrentLocationTargetKeys();
+	if (!locationTargetsDescribed) {
+		const auto* cell = RE::TESForm::LookupByID<RE::TESObjectCELL>(cachedTargetCellId);
+		const auto cocCode = cell ? Util::GetFormEditorID(cell) : std::string{};
+		for (auto& target : cachedLocationTargets)
+			DescribeLocationTarget(target, RE::TESForm::LookupByID(target.formId), cocCode);
+		locationTargetsDescribed = true;
+	}
+	return cachedLocationTargets;
+}
+
+const std::vector<SceneSettingsManager::LocationTarget>& SceneSettingsManager::GetCurrentLocationTargetKeys() const
+{
 	auto* player = RE::PlayerCharacter::GetSingleton();
 	auto* cell = player ? player->GetParentCell() : nullptr;
 	if (!player || !cell) {
@@ -103,7 +116,8 @@ const std::vector<SceneSettingsManager::LocationTarget>& SceneSettingsManager::G
 		cachedTargetCellId == cellId && cachedTargetRegionId == regionId)
 		return cachedLocationTargets;
 
-	cachedLocationTargets = BuildLocationTargetChain(location, cell);
+	cachedLocationTargets = BuildLocationTargetChain(location, cell, false);
+	locationTargetsDescribed = false;
 	cachedTargetRegionId = regionId;
 	cachedTargetLocationId = locationId;
 	cachedTargetCellId = cellId;

@@ -938,7 +938,7 @@ std::optional<SceneSettingsManager::SceneContextId> SceneSettingsManager::FindSu
 
 	// Narrowest first, mirroring the resolve order in reverse.
 	std::vector<SceneContextId> candidates;
-	const auto& locationTargets = GetCurrentLocationTargets();
+	const auto& locationTargets = GetCurrentLocationTargetKeys();
 	for (auto target = locationTargets.rbegin(); target != locationTargets.rend(); ++target)
 		candidates.push_back(withActiveSet(
 			{ .type = SceneContextType::Location, .locationType = target->type, .locationFormKey = target->formKey }));

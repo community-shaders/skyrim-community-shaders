@@ -78,8 +78,7 @@ public:
 	{
 		// If using a fallback ID, retry getting the real EditorID
 		if (isFallbackEditorID && form) {
-			const char* editorID = form->GetFormEditorID();
-			if (editorID && editorID[0] != '\0') {
+			if (auto editorID = Util::GetFormEditorID(form); !editorID.empty()) {
 				cachedEditorID = editorID;
 				isFallbackEditorID = false;
 				return editorID;
@@ -126,7 +125,7 @@ public:
 	}
 
 	/** @brief Cache the editor ID and save key from the form for fast subsequent lookups. */
-	void CacheFormData(Util::FormEditorIDIndex* editorIDs = nullptr)
+	void CacheFormData()
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
@@ -139,7 +138,7 @@ public:
 		cachedSaveKey = Util::GetFormFileKey(form);
 
 		// Try to resolve EditorID via shared utility
-		std::string editorId = Util::GetFormEditorID(form, editorIDs);
+		std::string editorId = Util::GetFormEditorID(form);
 		if (!editorId.empty()) {
 			cachedEditorID = editorId;
 			isFallbackEditorID = false;

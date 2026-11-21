@@ -592,7 +592,7 @@ bool SceneSettingsManager::IsCurrentSceneContext(const SceneContextId& context) 
 			return sky && sky->currentWeather && sky->currentWeather->GetFormID() == context.weatherId;
 		}
 	case SceneContextType::Location:
-		return std::ranges::any_of(GetCurrentLocationTargets(), [&](const auto& target) {
+		return std::ranges::any_of(GetCurrentLocationTargetKeys(), [&](const auto& target) {
 			return IsSameSceneContext(context, { .type = SceneContextType::Location,
 												   .period = context.period,
 												   .locationType = target.type,
