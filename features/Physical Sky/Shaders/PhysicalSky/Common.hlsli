@@ -242,7 +242,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 	// url: http://www.physics.hmc.edu/faculty/esin/a101/limbdarkening.pdf
 	float3 LimbDarkenHestroffer(float norm_dist)
 	{
-		float mu = sqrt(1.0 - norm_dist * norm_dist);
+		float mu = sqrt(saturate(1.0 - norm_dist * norm_dist));
 
 		// coefficient for RGB wavelength (680, 550, 440)
 		float3 a0 = float3(0.34685, 0.26073, 0.15248);
@@ -426,7 +426,7 @@ Texture2D<float4> TexSkyTail : register(t66);
 		if (data.trMix < 1e-8)
 			return 1;
 
-		float3 tr = SampleAtmosphereLightTr(TexTrLut, sampSv, float3(0, 0, data.zCameraPlanet), lightDir, angularRadius);
+		float3 tr = SampleAtmosphereLightTr(TexTrLut, sampSv, float3(0, 0, max(data.zCameraPlanet, data.rPlanet)), lightDir, angularRadius);
 		tr = lerp(1, tr, data.trMix);
 
 		return tr;
