@@ -114,7 +114,7 @@ void LensFlare::DrawSettings()
 		ImGui::BeginDisabled(cam != nullptr);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureBlades, 1.0f);
-			ImGui::SliderInt(T("feature.post_processing.lens_flare.aperture_blades", "Aperture Blades"), &apertureBlades, 3, 10);
+			ImGui::SliderInt(T("feature.post_processing.lens_flare.aperture_blades", "Aperture Blades"), &apertureBlades, 3, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
 		}
 		tooltip(T("feature.post_processing.lens_flare.tooltip_aperture_blades", "Number of aperture blades for the procedural bokeh shape."));
 
@@ -227,7 +227,7 @@ void LensFlare::DrawDebugSection()
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_threshold", "Disable Threshold"), &debugsettings.disableThreshold);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_ghosts", "Disable Ghosts"), &debugsettings.disableGhosts);
 		ImGui::Checkbox(T("feature.post_processing.lens_flare.disable_blur", "Disable Blur"), &debugsettings.disableBlur);
-		ImGui::SliderInt(T("feature.post_processing.lens_flare.blur_iterations", "Blur Iterations"), &debugsettings.blurIterations, 1, 4);
+		ImGui::SliderInt(T("feature.post_processing.lens_flare.blur_iterations", "Blur Iterations"), &debugsettings.blurIterations, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp);
 		tooltip(T("feature.post_processing.lens_flare.tooltip_blur_iterations", "Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother"));
 	}
 

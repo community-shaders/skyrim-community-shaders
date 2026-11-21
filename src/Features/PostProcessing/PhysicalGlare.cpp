@@ -111,7 +111,7 @@ void PhysicalGlare::DrawSettings()
 		ImGui::BeginDisabled(cam != nullptr);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureBlades, 1.0f);
-			ImGui::SliderInt(T("feature.post_processing.physical_glare.aperture_blades", "Aperture Blades"), &apertureBlades, 3, 10);
+			ImGui::SliderInt(T("feature.post_processing.physical_glare.aperture_blades", "Aperture Blades"), &apertureBlades, 3, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_aperture_blades_controls_starburst_pattern", "Number of aperture blades. Controls starburst pattern."));
@@ -160,7 +160,7 @@ void PhysicalGlare::DrawSettings()
 					"than central rays, producing concentric ring structure in the\n"
 					"PSF and softer glare edges. Physical range: 0-50."));
 
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.dust_count", "Dust Count"), &settings.DustCount, 0, 500);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.dust_count", "Dust Count"), &settings.DustCount, 0, 500, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.dust_particles_on_lens_element_surfaces_produces_scattered", "Dust particles on lens element surfaces.\nProduces scattered haze via Babinet's principle."));
 
@@ -175,12 +175,12 @@ void PhysicalGlare::DrawSettings()
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.micro_serrations_on_aperture_blade_edges_manufacturing_imperfections", "Micro-serrations on aperture blade edges (manufacturing imperfections).\nMakes star spikes slightly fuzzy/irregular. 0 = perfect edges."));
 
 		if (settings.BladeRoughnessAmp > 0.f) {
-			ImGui::SliderInt(T("feature.post_processing.physical_glare.roughness_frequency", "Roughness Frequency"), &settings.BladeRoughnessFreq, 5, 100);
+			ImGui::SliderInt(T("feature.post_processing.physical_glare.roughness_frequency", "Roughness Frequency"), &settings.BladeRoughnessFreq, 5, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_bumps_per_blade_edge_higher_finer", "Number of bumps per blade edge. Higher = finer serrations."));
 		}
 
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.scratch_count", "Scratch Count"), &settings.ScratchCount, 0, 20);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.scratch_count", "Scratch Count"), &settings.ScratchCount, 0, 20, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.linear_scratches_on_lens_element_surfaces_each_scratch", "Linear scratches on lens element surfaces.\nEach scratch produces a perpendicular streak in the glare."));
 
@@ -205,7 +205,7 @@ void PhysicalGlare::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.opacity_of_scatter_particles_in_pupil_mode_paper", "Opacity of scatter particles in pupil mode (paper section 2.4).\n0 = transparent (no scatter), 1 = fully opaque."));
 
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.particle_count", "Particle Count"), &settings.ParticleCount, 0, 1000);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.particle_count", "Particle Count"), &settings.ParticleCount, 0, 1000, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_scatter_particles_in_lens_vitreous_ritschel", "Number of scatter particles in lens/vitreous (Ritschel: 750).\nProduces ciliary corona needle pattern via Babinet's principle."));
 
@@ -213,7 +213,7 @@ void PhysicalGlare::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.radius_of_each_particle_in_pixels", "Radius of each particle in pixels."));
 
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.grating_count", "Grating Count"), &settings.GratingCount, 0, 400);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.grating_count", "Grating Count"), &settings.GratingCount, 0, 400, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_radial_lens_gratings_paper_section_2", "Number of radial lens gratings (paper section 2.4: Ritschel uses 200).\nProduces lenticular halo via edge diffraction."));
 
@@ -232,13 +232,13 @@ void PhysicalGlare::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.how_fast_the_tear_film_fluctuates_blink_refresh", "How fast the tear film fluctuates (blink refresh rate ~0.3Hz, breakup ~2-5Hz)."));
 
-			ImGui::SliderInt(T("feature.post_processing.physical_glare.tear_film_complexity", "Tear Film Complexity"), &settings.TearFilmComplexity, 3, 16);
+			ImGui::SliderInt(T("feature.post_processing.physical_glare.tear_film_complexity", "Tear Film Complexity"), &settings.TearFilmComplexity, 3, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_angular_harmonics_more_more_spikes_finer", "Number of angular harmonics. More = more spikes, finer detail."));
 		}
 
 		ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_lens_fibers", "Lens Fibers"));
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.suture_branches", "Suture Branches"), &settings.SutureBranches, 0, 8);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.suture_branches", "Suture Branches"), &settings.SutureBranches, 0, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
 				T("feature.post_processing.physical_glare.lens_suture_lines_y_shaped_junctions_where_lens",
@@ -256,7 +256,7 @@ void PhysicalGlare::DrawSettings()
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.pixel_width_of_each_suture_line_thinner_sharper", "Pixel width of each suture line. Thinner = sharper spikes."));
 		}
 
-		ImGui::SliderInt(T("feature.post_processing.physical_glare.starburst_spikes", "Starburst Spikes"), &settings.StarburstCount, 0, 128);
+		ImGui::SliderInt(T("feature.post_processing.physical_glare.starburst_spikes", "Starburst Spikes"), &settings.StarburstCount, 0, 128, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
 				T("feature.post_processing.physical_glare.lens_fiber_radial_phase_grating_creates_many_thin",
@@ -283,7 +283,7 @@ void PhysicalGlare::DrawSettings()
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.simulate_eyelash_occlusion_for_streak_effects_paper_section", "Simulate eyelash occlusion for streak effects (paper section 3.1)."));
 
 			if (settings.EnableEyelashes) {
-				ImGui::SliderInt(T("feature.post_processing.physical_glare.eyelash_count", "Eyelash Count"), &settings.EyelashCount, 5, 80);
+				ImGui::SliderInt(T("feature.post_processing.physical_glare.eyelash_count", "Eyelash Count"), &settings.EyelashCount, 5, 80, "%d", ImGuiSliderFlags_AlwaysClamp);
 				if (auto _tt = Util::HoverTooltipWrapper())
 					ImGui::TextUnformatted(T("feature.post_processing.physical_glare.total_number_of_eyelash_hairs_upper_lower", "Total number of eyelash hairs (upper + lower)."));
 
@@ -606,6 +606,15 @@ void PhysicalGlare::CompileComputeShaders()
 PhysicalGlare::Settings PhysicalGlare::GetEffectiveSettings() const
 {
 	Settings effective = settings;
+	effective.EyelashCount = std::clamp(effective.EyelashCount, 0, 80);
+	effective.DustCount = std::clamp(effective.DustCount, 0, 500);
+	effective.ParticleCount = std::clamp(effective.ParticleCount, 0, 1000);
+	effective.GratingCount = std::clamp(effective.GratingCount, 0, 400);
+	effective.StarburstCount = std::clamp(effective.StarburstCount, 0, 128);
+	effective.ScratchCount = std::clamp(effective.ScratchCount, 0, 20);
+	effective.SutureBranches = std::clamp(effective.SutureBranches, 0, 8);
+	effective.TearFilmComplexity = std::clamp(effective.TearFilmComplexity, 3, 16);
+	effective.BladeRoughnessFreq = std::clamp(effective.BladeRoughnessFreq, 5, 100);
 	// Lens mode only: a human pupil is not a camera aperture.
 	if (const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr) {
 		if (effective.ApertureMode == 0) {
@@ -614,6 +623,7 @@ PhysicalGlare::Settings PhysicalGlare::GetEffectiveSettings() const
 			effective.ApertureRotation = cam->ApertureBladeRotationDeg;
 		}
 	}
+	effective.ApertureBlades = std::clamp(effective.ApertureBlades, 3, 10);
 	return effective;
 }
 
