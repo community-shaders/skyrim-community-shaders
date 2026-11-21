@@ -48,7 +48,7 @@ float HistogramAutoExposure::GetPreExposure()
 HistogramAutoExposure::ExposureParameters HistogramAutoExposure::GetExposureParameters() const
 {
 	ExposureParameters parameters{
-		.LuminanceRange = { exp2(settings.AdaptationRange.x - 3.0f), exp2(settings.AdaptationRange.y - 3.0f) },
+		.LuminanceRange = { exp2(std::min(settings.AdaptationRange.x, settings.AdaptationRange.y) - 3.0f), exp2(std::max(settings.AdaptationRange.x, settings.AdaptationRange.y) - 3.0f) },
 		.CompensationEV = settings.ExposureCompensation,
 	};
 	if (const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr) {
