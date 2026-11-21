@@ -622,8 +622,14 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 
+	float moonDiscGain = 1.0;
+#			if defined(PHYSICAL_SKY) && defined(TEX) && !defined(DITHER) && !defined(CLOUDS) && !defined(MOONMASK)
+	if (SharedData::physSkyData.enabled && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMoon))
+		moonDiscGain = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSecunda) ? SharedData::physSkyData.diskBrightness.z : SharedData::physSkyData.diskBrightness.y;
+#			endif
+
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + skyScale;
+	psout.Color.xyz = input.Color.xyz * baseColor.xyz * moonDiscGain + skyScale;
 
 #			if defined(EFFECTS11_PROCEDURAL_SUN)
 	[branch] if (proceduralSunActive)

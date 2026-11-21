@@ -2237,6 +2237,8 @@
     "feature.physical_sky.middle_type": "Cloud Type (As to Ac)",
     "feature.physical_sky.middle_warp": "Cloud cell distortion",
     "feature.physical_sky.middle_weather": "Middle cloud weather",
+    "feature.physical_sky.moon_disc_brightness": "Disc Brightness",
+    "feature.physical_sky.moon_disc_brightness_hint": "Gain on the visible moon only, in stops. The moon's light is set by Lunar Illuminance.",
     "feature.physical_sky.moon_illuminance": "Lunar Illuminance",
     "feature.physical_sky.moon_illuminance_hint": "Illuminance on a surface perpendicular to the moon, before atmospheric extinction. Scales all channels together, preserving the color.",
     "feature.physical_sky.multiplies_directional_lighting_applied_to_sky_statics": "Multiplies directional lighting applied to sky statics.",

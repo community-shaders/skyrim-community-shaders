@@ -173,6 +173,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	sunDiskRad,
 	masserDiskRad,
 	secundaDiskRad,
+	masserDiscBrightnessEV,
+	secundaDiscBrightnessEV,
 
 	worldspaceWhitelist,
 	groundAlbedo,
@@ -281,6 +283,8 @@ namespace
 
 	constexpr float kSunIlluminanceSpeed = 0.1f;
 	constexpr float kMoonIlluminanceSpeed = 0.001f;
+	constexpr float kMoonDiscBrightnessMinEV = -4.f;
+	constexpr float kMoonDiscBrightnessMaxEV = 20.f;
 
 	/** @brief Zeroes negative or non-finite channels of a light color, since light cannot be negative. */
 	void ClampLightColor(float3& color)
@@ -795,6 +799,12 @@ void PhysicalSky::SettingsCelestials()
 			ImGui::TextUnformatted(T(TKEY("moon_illuminance_hint"), "Illuminance on a surface perpendicular to the moon, before atmospheric extinction. Scales all channels together, preserving the color."));
 	};
 
+	const auto drawMoonDiscBrightness = [](float& brightnessEV) {
+		ImGui::SliderFloat(T(TKEY("moon_disc_brightness"), "Disc Brightness"), &brightnessEV, kMoonDiscBrightnessMinEV, kMoonDiscBrightnessMaxEV, "%+.1f EV", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T(TKEY("moon_disc_brightness_hint"), "Gain on the visible moon only, in stops. The moon's light is set by Lunar Illuminance."));
+	};
+
 	ImGui::SeparatorText(T(TKEY("masser"), "Masser"));
 	{
 		ImGui::PushID("Masser");
@@ -804,6 +814,7 @@ void PhysicalSky::SettingsCelestials()
 			ImGui::Text("%s", T(TKEY("light_color_hint"), "Light color before it passes through the atmosphere (extraterrestrial radiance)."));
 		drawMoonIlluminance(settings.masserColor);
 		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.masserDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
+		drawMoonDiscBrightness(settings.masserDiscBrightnessEV);
 		ImGui::PopID();
 	}
 
@@ -816,6 +827,7 @@ void PhysicalSky::SettingsCelestials()
 			ImGui::Text("%s", T(TKEY("light_color_hint"), "Light color before it passes through the atmosphere (extraterrestrial radiance)."));
 		drawMoonIlluminance(settings.secundaColor);
 		ImGui::SliderAngle(T(TKEY("disk_angular_radius"), "Disk Angular Radius"), &settings.secundaDiskRad, 0.05f, 30.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
+		drawMoonDiscBrightness(settings.secundaDiscBrightnessEV);
 		ImGui::PopID();
 	}
 }
@@ -2095,6 +2107,12 @@ void PhysicalSky::Reset()
 		0.f  // the directional light's, blended below
 	};
 	cbData.diskBillboardScale = float4(1.f);
+	cbData.diskBrightness = {
+		1.f,
+		std::exp2(std::clamp(settings.masserDiscBrightnessEV, kMoonDiscBrightnessMinEV, kMoonDiscBrightnessMaxEV)),
+		std::exp2(std::clamp(settings.secundaDiscBrightnessEV, kMoonDiscBrightnessMinEV, kMoonDiscBrightnessMaxEV)),
+		1.f
+	};
 	if (const auto* sky = globals::game::sky; sky && sky->root) {
 		const auto& viewer = sky->root->world.translate;
 		const auto sunTan = sky->sun ? Util::GetBillboardHalfTan(sky->sun->sunBase.get(), viewer, 0.f) : 0.f;
