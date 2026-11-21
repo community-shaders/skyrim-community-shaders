@@ -6,6 +6,6 @@ namespace Util::EditorIDCache
 	/** @brief Hooks SetFormEditorID on the form types CS reads editor IDs for; must run before data load. */
 	void Install();
 
-	/** @brief The recorded editor ID, or "" when none; the pointer stays valid for the process lifetime. */
+	/** @brief The recorded editor ID, or "" when none; the pointer stays valid once data has loaded. */
 	const char* Find(RE::FormID formId);
 }

@@ -12,13 +12,13 @@ namespace
 	std::shared_mutex cacheMutex;
 	std::unordered_map<RE::FormID, std::string> editorIds;
 
-	/** @brief Records the first editor ID seen for a form; later ones for the same form are ignored. */
+	/** @brief Records a form's editor ID; later plugins overwrite earlier ones so the winning override's ID is kept. */
 	void Store(RE::FormID formId, const char* editorId)
 	{
 		if (!editorId || editorId[0] == '\0')
 			return;
 		std::unique_lock lock(cacheMutex);
-		editorIds.try_emplace(formId, editorId);
+		editorIds.insert_or_assign(formId, editorId);
 	}
 
 	/** @brief One instantiation per vtable, so each keeps its own original (po3 Tweaks may already hook it). */
