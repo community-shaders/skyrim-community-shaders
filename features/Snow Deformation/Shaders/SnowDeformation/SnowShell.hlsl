@@ -489,8 +489,7 @@ float ShellVertexZ(float2 gridLocal, out float coverage, out float terrainHeight
 #endif
 
 #if defined(VSHADER) && defined(SNOW_DRIFT_COAT)
-cbuffer StaticCB : register(b1)
-{
+cbuffer StaticCB : register(b1){
 #	include "SnowDeformation/StaticCBFields.hlsli"
 };
 
@@ -713,24 +712,24 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	float rawSceneDepth = SceneDepth.Load(int3(input.Position.xy, 0));
 	float sceneZ = ShellSceneViewDepth(rawSceneDepth);
 	float shellZ = input.CurrentClip.w;
-#		ifdef SNOW_PREPASS_ATTR
+#			ifdef SNOW_PREPASS_ATTR
 	const float4 attrGridDeriv = float4(ddx_coarse(input.GridLocal), ddy_coarse(input.GridLocal));
 	const float2 attrZDeriv = float2(ddx_coarse(input.WorldPos.z), ddy_coarse(input.WorldPos.z));
-#		endif
-#		if defined(SNOW_SHELL_DEPTH_PREPASS) && !defined(SNOW_PREPASS_KEEP_HIDDEN)
+#			endif
+#			if defined(SNOW_SHELL_DEPTH_PREPASS) && !defined(SNOW_PREPASS_KEEP_HIDDEN)
 	[branch] if (ShellPrepassQuadHidden(input.Position.z, rawSceneDepth, shellZ, sceneZ))
 	{
 		discard;
 		return (PS_PREPASS_OUTPUT)0;
 	}
-#		endif
+#			endif
 
-#		ifdef SNOW_SHELL_DEFERRED
+#			ifdef SNOW_SHELL_DEFERRED
 	float pixelRampDepth = gDeferredRampDepth;
 	float3 pixelTerrain = 0.0;
 	float pixelCoverage = 1.0;
 	float pixelClassDepth = 0.0;
-#		else
+#			else
 	float3 pixelTerrain = EndSnowAtWater(SampleTerrain(gridLocal), gridLocal);
 	float pixelCoverage = saturate(pixelTerrain.z);
 	float psEdgeFade = ShellEdgeFade(gridLocal);
@@ -739,15 +738,15 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	float pixelBare = saturate(1.0 - pixelCoverage);
 	float pixelRampDepth = pixelClassDepth + (-8.0) * pixelBare;
 	pixelRampDepth = ShellEdgeDepth(pixelRampDepth, psEdgeFade);
-#		endif
+#			endif
 
 	float pixelEffDepth = TouchDownToe(pixelRampDepth);
-#		ifdef SNOW_SHELL_DEFERRED
+#			ifdef SNOW_SHELL_DEFERRED
 	float coverageAlpha = 1.0;
-#		else
+#			else
 	const float pixelSnowWeight = LandSnowWeight(gridLocal);
 	float coverageAlpha = pixelSnowWeight > 0.002 ? 1.0 : 0.0;
-#		endif
+#			endif
 	float sheetAboveGround = smoothstep(0.25, 1.5, input.WorldPos.z + ShellCameraPosAdjust.z - pixelTerrain.x);
 	coverageAlpha = max(coverageAlpha, sheetAboveGround);
 
@@ -770,25 +769,25 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	bool landFilm = false;
 	float landRemaining = 0.0;
 	float landBurial = 0.0;
-#		ifndef SNOW_SHELL_DEFERRED
+#			ifndef SNOW_SHELL_DEFERRED
 	[branch] if (coverageAlpha > 0.001)
 	{
 		landRemaining = CarveProfile(pixelCarve, max(pixelEffDepth, 0.0), GridOrigin + gridLocal);
 		landFilm = landRemaining < kLandFilmDepth;
 		landBurial = max(pixelEffDepth, 0.0);
 	}
-#		endif
+#			endif
 	coverageAlpha *= landFilm ? 1.0 : max(proximityFade, saturate(carveOverride + smoothstep(0.1, 0.4, pixelMelt)));
 
-#		ifndef SNOW_SHELL_DEFERRED
-#			ifdef SNOW_SHELL_DEPTH_PREPASS
+#			ifndef SNOW_SHELL_DEFERRED
+#				ifdef SNOW_SHELL_DEPTH_PREPASS
 	[branch] if (coverageAlpha > 0.001 && (landFilm || pixelSnowWeight < 0.998) && LandSnowSide(landRemaining, pixelCarve) < 16.0)
 	{
 		[flatten] if (ShellMasksNotLand(input.WorldPos, input.Position.xy, shellZ, sceneZ))
 			coverageAlpha = 0.0;
 	}
-#			endif
-#			ifdef SNOW_PREPASS_EARLY
+#				endif
+#				ifdef SNOW_PREPASS_EARLY
 	bool landContest = false;
 	float landSide = 0.0;
 	[branch] if (coverageAlpha > 0.001 && (landFilm || pixelSnowWeight < 0.998))
@@ -796,25 +795,25 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 		landSide = LandSnowSide(landBurial, 0.0);
 		landContest = landSide < 16.0;
 	}
-#			else
+#				else
 	[branch] if (coverageAlpha > 0.001 && (landFilm || pixelSnowWeight < 0.998))
 	{
 		[flatten] if (LandSnowOdds(LandMasksCopy.Load(int3(input.Position.xy, 0)).y) + LandSnowSide(landBurial, 0.0) < 0.0)
 			coverageAlpha = 0.0;
 	}
+#				endif
 #			endif
-#		endif
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
-#		ifdef SNOW_SHELL_DEFERRED
+#			ifdef SNOW_SHELL_DEFERRED
 	coverageAlpha = 1.0;
-#		else
+#			else
 	{
 		float dust = saturate((coverageAlpha - 0.2) * (1.0 / 0.3));
 		if (screenNoise * screenNoise >= dust)
 			discard;
 		coverageAlpha = 1.0;
 	}
-#		endif
+#			endif
 
 	float exportEffDepth = lerp(pixelEffDepth, min(pixelEffDepth, kFireMeltFloor), pixelMelt);
 #		endif
@@ -909,7 +908,7 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	float detailImpact = 0.0;
 	const float2 detailPlane = gradZ;
 	float3 shadePos = input.WorldPos;
-#			if defined(SNOW_NOISE_TABLE)
+#				if defined(SNOW_NOISE_TABLE)
 	[branch] if (!pixelUntouched && detailFade > 0.0 && TrenchDetailRelief > 0.001)
 	{
 		const float2 detailField = BermFieldPair(gridLocal).xy;
@@ -941,7 +940,7 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	}
 	[branch] if (detailRelief > 0.001)
 		gradZ += TrenchDetailGrad(detailTaps, detailLod, detailImpact) * detailRelief;
-#			endif
+#				endif
 
 	float3 normalWS = normalize(float3(gradZ * -1.0, 1.0));
 	const float3 frameNormalWS = normalize(float3(-detailPlane, 1.0));
