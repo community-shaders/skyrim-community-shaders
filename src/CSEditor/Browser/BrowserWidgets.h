@@ -211,7 +211,7 @@ namespace BrowserUI
 	 * @brief Page title row: accent icon, title, muted subtitle. Leaves the line open so the caller
 	 * can right-align actions with RightAlign().
 	 */
-	void PageHeader(Icons::GlyphRef icon, const char* title, const char* subtitle);
+	void PageHeader(Icons::GlyphRef icon, const char* title, const char* subtitle, bool centered = false);
 
 	/** @brief Moves the cursor on the current line so the next `width` pixels end at the right edge. */
 	void RightAlign(float width);

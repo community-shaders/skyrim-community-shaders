@@ -1383,7 +1383,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const BuiltInMenu& menu)
 {
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 		if (menu.showHeader) {
-			BrowserUI::PageHeader(menu.icon, menu.name.c_str(), menu.hint.c_str());
+			BrowserUI::PageHeader(menu.icon, menu.name.c_str(), menu.hint.c_str(), menu.id == MenuPageIds::kProfiling);
 			ImGui::Separator();
 			ImGui::Spacing();
 		}
@@ -1411,7 +1411,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	DrawConstraintWarningDialog(pendingFeatureSelection);
 }
 
-void FeatureListRenderer::DrawMenuVisitor::DrawFeatureContent(Feature* feat)
+void FeatureListRenderer::DrawMenuVisitor::DrawFeatureContent(Feature* feat, bool showHeader)
 {
 	const bool isDisabled = globals::state->IsFeatureDisabled(feat->GetShortName());
 	const bool isLoaded = feat->loaded;
@@ -1420,7 +1420,8 @@ void FeatureListRenderer::DrawMenuVisitor::DrawFeatureContent(Feature* feat)
 	if (hooks.onFeatureShown)
 		hooks.onFeatureShown(feat);
 
-	RenderFeatureHeader(feat, isDisabled, isLoaded);
+	if (showHeader)
+		RenderFeatureHeader(feat, isDisabled, isLoaded);
 	RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
 }
 
@@ -1428,7 +1429,8 @@ void FeatureListRenderer::DrawEmbeddedFeaturePage(Feature* feat)
 {
 	static const Hooks noHooks{};
 	std::string pendingFeatureSelection;
-	DrawMenuVisitor{ pendingFeatureSelection, g_activeHooks ? *g_activeHooks : noHooks }.DrawFeatureContent(feat);
+	// No title bar here: the page it sits on already names it, and its tools live on the page's cards
+	DrawMenuVisitor{ pendingFeatureSelection, g_activeHooks ? *g_activeHooks : noHooks }.DrawFeatureContent(feat, false);
 	DrawConstraintWarningDialog(pendingFeatureSelection);
 	if (!pendingFeatureSelection.empty())
 		globals::menu->SelectFeatureMenu(pendingFeatureSelection);
