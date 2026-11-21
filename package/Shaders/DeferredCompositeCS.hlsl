@@ -12,6 +12,7 @@ Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 Texture2D<float3> MasksTexture : register(t3);
 Texture2D<unorm float> Masks2Texture : register(t9);
+Texture2D<float3> MainTexture : register(t23);
 
 RWTexture2D<float4> MainRW : register(u0);
 RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
@@ -106,7 +107,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	float3 diffuseColor = PreExposure::Decode(MainRW[dispatchID.xy].xyz);
+	float3 diffuseColor = PreExposure::Decode(MainTexture[dispatchID.xy]);
 	float3 specularColor = PreExposure::Decode(SpecularTexture[dispatchID.xy]);
 	float3 albedo = AlbedoTexture[dispatchID.xy];
 

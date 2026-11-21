@@ -32,6 +32,8 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowLightData);
 
+	eastl::unique_ptr<Texture2D> mainCopy = nullptr;
+
 	/** @brief Creates render targets, samplers, and the directional shadow structured buffer. */
 	void SetupResources();
 
