@@ -15,6 +15,8 @@ namespace SceneSettingsPolicy
 		{ "TerrainVariation" },
 		{ "ImageBasedLighting", "DisableInWorldMap" },
 		{ "ImageBasedLighting", "DisableInLoadingScreen" },
+		// Shader define: a change recompiles every shader.
+		{ "LinearLighting", "enableACEScg" },
 		{ "PhysicalSky", "enableAllExteriorCells" },
 		{ "PhysicalSky", "forceEnableAllInteriorCells" },
 		{ "PhysicalSky", "fallbackZBottom" },
@@ -82,6 +84,7 @@ namespace SceneSettingsPolicy
 		{ "ExponentialHeightFog" },
 		{ "HorizonFix" },
 		{ "ImageBasedLighting" },
+		{ "LinearLighting" },
 		{ "PhysicalSky" },
 		{ "PostProcessing" },
 		{ "ScreenSpaceGI" },
