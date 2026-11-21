@@ -44,6 +44,16 @@ namespace WaterEffects
 	// Caps the ray march so large amplitude multipliers cannot drive unbounded per-pixel work
 	static const uint MaxParallaxSteps = 64;
 
+	/**
+	 * @brief 1 up to the fade start, falling to 0 at the fade end (Water Effects' settings); 0 with the parallax off.
+	 * The relief is blurred away by the normal maps' mips at a distance, so it fades out and costs nothing there.
+	 */
+	float ParallaxFade(float3 viewSpacePosition)
+	{
+		const float4 settings = SharedData::waterEffectsSettings.Params;
+		return settings.z > 0.0 ? 1.0 - smoothstep(settings.y, settings.z, length(viewSpacePosition)) : 0.0;
+	}
+
 	/** @brief Intersects the last marched segment with the height field, or returns the last bound if the march hit MaxParallaxSteps. */
 	float GetParallaxAmount(float currBound, float currHeight, float prevHeight, float stepSize)
 	{
@@ -90,6 +100,10 @@ namespace WaterEffects
 		if (!any(normalsAmplitude))
 			return 0;
 
+		const float fade = ParallaxFade(input.WPosition.xyz);
+		if (fade <= 0.0)
+			return 0;
+
 		float3 viewDirection = normalize(input.WPosition.xyz);
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 
@@ -118,7 +132,7 @@ namespace WaterEffects
 			currHeight = GetHeight(input, (currBound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		}
 
-		return parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
+		return fade * parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
 	}
 
 #if defined(FLOWMAP)
@@ -147,7 +161,8 @@ namespace WaterEffects
 	{
 		float viewDotUp = -viewDirection.z;
 
-		if (viewDotUp < 0.05)
+		const float fade = ParallaxFade(input.WPosition.xyz);
+		if (viewDotUp < 0.05 || fade <= 0.0)
 			return 0.0;
 
 		float2 parallaxDir = viewDirection.xy / -viewDirection.z;
@@ -187,7 +202,7 @@ namespace WaterEffects
 		float delta1 = currBound - currHeight;
 		float denominator = delta2 - delta1;
 
-		return (denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound) - meanHeight;
+		return fade * ((denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound) - meanHeight);
 	}
 
 	float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float normalsAmplitude, float3 normalScalesRcp, float mipLevel)
@@ -201,6 +216,10 @@ namespace WaterEffects
 	float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float normalsAmplitude, float3 normalScalesRcp)
 	{
 		if (normalsAmplitude == 0.0)
+			return 0;
+
+		const float fade = ParallaxFade(input.WPosition.xyz);
+		if (fade <= 0.0)
 			return 0;
 
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
@@ -223,7 +242,7 @@ namespace WaterEffects
 			currHeight = GetFlowmapParallaxHeight(input, (currBound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevel);
 		}
 
-		return parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
+		return fade * parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
 	}
 
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 flowmapDimensions, float3 viewDirection, float normalsAmplitude, float3 normalScalesRcp)
