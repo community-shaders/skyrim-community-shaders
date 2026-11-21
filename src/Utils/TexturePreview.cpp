@@ -48,13 +48,13 @@ void TexturePreview::Draw(ID3D11ShaderResourceView* srv, const char* id, const c
 		if (inserted && scalar)
 			view.channel = 1;
 		view.mip = std::clamp(view.mip, 0, static_cast<int>(levels) - 1);
-		ImGui::SliderInt(T(TKEY("debug_texture_mip"), "Mip level"), &view.mip, 0, static_cast<int>(levels) - 1);
+		ImGui::SliderInt(T(TKEY("debug_texture_mip"), "Mip level"), &view.mip, 0, static_cast<int>(levels) - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
 		width = std::max(width >> view.mip, 1u);
 		height = std::max(height >> view.mip, 1u);
 		depth = std::max(depth >> view.mip, 1u);
 		view.slice = std::clamp(view.slice, 0, static_cast<int>(depth) - 1);
 		if (volume)
-			ImGui::SliderInt(T(TKEY("debug_texture_slice"), "Z slice"), &view.slice, 0, static_cast<int>(depth) - 1);
+			ImGui::SliderInt(T(TKEY("debug_texture_slice"), "Z slice"), &view.slice, 0, static_cast<int>(depth) - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
 		const char* channels[] = { "RGB", "R", "G", "B", "A" };
 		ImGui::Combo(T(TKEY("debug_texture_channel"), "Channel"), &view.channel, channels, IM_ARRAYSIZE(channels));
 		ImGui::DragFloat2(T(TKEY("debug_texture_range"), "Display range"), &view.range.x, 0.01f);
