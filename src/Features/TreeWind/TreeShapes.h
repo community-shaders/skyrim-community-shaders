@@ -29,6 +29,11 @@ namespace TreeShapes
 	class BendWeights
 	{
 	public:
+		BendWeights() = default;
+		BendWeights(const BendWeights&) = delete;
+		BendWeights& operator=(const BendWeights&) = delete;
+		~BendWeights();
+
 		/**
 		 * @brief Returns the bend data for a shape; a new shape is queued for the build thread.
 		 * @return nullptr while its first build runs, or when the shape has nothing to sway or its block's trunks have not been drawn yet.
@@ -102,8 +107,8 @@ namespace TreeShapes
 			bool waitsForCards = false;  // a crown built before its block had trunk cards
 		};
 
-		/** @brief Copies a shape and queues its build. @return the job id. */
-		uint64_t Queue(RE::BSGeometry* a_geometry, Kind a_kind, bool a_treeModSupport);
+		/** @brief Queues a shape's build, with its positions already copied. @return the job id. */
+		uint64_t Queue(RE::BSGeometry* a_geometry, const void* a_vertexBuffer, std::vector<RE::NiPoint3>&& a_positions, Kind a_kind, bool a_treeModSupport);
 
 		/** @brief Builds a shape's bend data and buffer. Build thread only. */
 		Result Build(const Job& a_job);

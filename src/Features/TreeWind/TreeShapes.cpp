@@ -84,6 +84,15 @@ namespace TreeShapes
 			}
 		};
 
+		// The build thread works on its own copy: the engine frees its CPU copies when the shape unloads
+		std::vector<RE::NiPoint3> CopyPositions(const VertexView& a_vertices)
+		{
+			std::vector<RE::NiPoint3> positions(a_vertices.count);
+			for (uint32_t i = 0; i < a_vertices.count; ++i)
+				positions[i] = a_vertices(i);
+			return positions;
+		}
+
 		bool GetVertices(RE::BSGeometry* a_geometry, VertexView& a_out)
 		{
 			auto rendererData = a_geometry->GetGeometryRuntimeData().rendererData;
@@ -294,7 +303,7 @@ namespace TreeShapes
 				const bool stale = entry.crown && (a_treeModSupport || entry.waitsForCards) &&
 				                   (generation == blockGenerations.end() ? 0u : generation->second) != entry.generation;
 				if (stale && !entry.pendingJob)
-					entry.pendingJob = Queue(a_geometry, a_kind, a_treeModSupport);
+					entry.pendingJob = Queue(a_geometry, vertices.vertexBuffer, CopyPositions(vertices), a_kind, a_treeModSupport);
 				// The old data stays bound until its rebuild lands
 				return entry.srv.get();
 			}
@@ -310,31 +319,24 @@ namespace TreeShapes
 		entry.lastSeen = now;
 		entry.blockKey = BlockKey(a_geometry);
 		entry.crown = a_kind == Kind::Crown;
-		entry.pendingJob = Queue(a_geometry, a_kind, a_treeModSupport);
+		entry.pendingJob = Queue(a_geometry, vertices.vertexBuffer, CopyPositions(vertices), a_kind, a_treeModSupport);
 		entries.insert_or_assign(vertices.vertexBuffer, std::move(entry));
 		return nullptr;
 	}
 
-	uint64_t BendWeights::Queue(RE::BSGeometry* a_geometry, Kind a_kind, bool a_treeModSupport)
+	uint64_t BendWeights::Queue(RE::BSGeometry* a_geometry, const void* a_vertexBuffer, std::vector<RE::NiPoint3>&& a_positions, Kind a_kind, bool a_treeModSupport)
 	{
-		VertexView vertices;
-		[[maybe_unused]] const bool valid = GetVertices(a_geometry, vertices);
-		assert(valid);
-
 		Job job;
 		job.id = nextJob++;
 		job.epoch = epoch;
-		job.vertexBuffer = vertices.vertexBuffer;
+		job.vertexBuffer = a_vertexBuffer;
 		job.blockKey = BlockKey(a_geometry);
 		job.kind = a_kind;
 		job.treeModSupport = a_treeModSupport;
 		job.allQuads = IsAllQuads(a_geometry);
 		job.treeShapeName = IsTreeShapeName(a_geometry);
 		job.worldScale = a_geometry->world.scale;
-		// The build thread works on its own copy: the engine frees its CPU copies when the shape unloads
-		job.positions.resize(vertices.count);
-		for (uint32_t i = 0; i < vertices.count; ++i)
-			job.positions[i] = vertices(i);
+		job.positions = std::move(a_positions);
 		if (const auto indices = a_geometry->GetGeometryRuntimeData().rendererData->rawIndexData)
 			job.indices.assign(indices, indices + static_cast<size_t>(a_geometry->AsTriShape()->GetTrishapeRuntimeData().triangleCount) * 3);
 
@@ -664,8 +666,20 @@ namespace TreeShapes
 		++epoch;
 		entries.clear();
 		blockGenerations.clear();
-		if (builder)
+		if (builder) {
+			// Queued builds belong to the old settings: drop them, then clear the blocks after the running one
+			builder->purge();
 			builder->detach_task([this] { blocks.clear(); });
+		}
+	}
+
+	BendWeights::~BendWeights()
+	{
+		// Queued builds would create buffers during shutdown: drop them and wait for the running one
+		if (builder) {
+			builder->purge();
+			builder.reset();
+		}
 	}
 
 	void BendWeights::Evict()
