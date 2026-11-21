@@ -17,6 +17,8 @@ namespace TreeShapes
 		// Crown vertices sit within this many model units (at LOD4 scale) of their trunk
 		constexpr float kCrownRadius = 100.0f;
 		constexpr float kCellSize = 128.0f;
+		// Neighbouring trunk-card quads pair up when their centres are closer than this, in model units
+		constexpr float kPairDistance = 8.0f;
 		// Bend data of a shape not drawn for this many frames is freed
 		constexpr uint kEvictFrames = 600;
 
@@ -68,6 +70,11 @@ namespace TreeShapes
 		int CellOf(float a_value)
 		{
 			return static_cast<int>(std::floor(a_value / kCellSize));
+		}
+
+		int PairCellOf(float a_value)
+		{
+			return static_cast<int>(std::floor(a_value / kPairDistance));
 		}
 
 		struct VertexView
@@ -351,15 +358,33 @@ namespace TreeShapes
 					}
 				}
 				std::vector<QuadBounds> bounds;
-				for (const auto c : candidates)
-					bounds.push_back(GetQuadBounds(vertices, c));
+				bounds.reserve(candidates.size());
+				// Bucket the quad centres in kPairDistance cells: a partner closer than that lies in one of the 3x3 neighbouring cells
+				std::unordered_map<int64_t, std::vector<size_t>> pairGrid;
 				for (size_t a = 0; a < candidates.size(); ++a) {
-					for (size_t b = 0; b < candidates.size(); ++b) {
-						if (a != b && std::hypot(bounds[a].cx - bounds[b].cx, bounds[a].cy - bounds[b].cy) < 8.0f) {
-							cardStarts.push_back(candidates[a]);
-							break;
+					bounds.push_back(GetQuadBounds(vertices, candidates[a]));
+					pairGrid[CellKey(PairCellOf(bounds[a].cx), PairCellOf(bounds[a].cy))].push_back(a);
+				}
+				constexpr float kPairDistanceSq = kPairDistance * kPairDistance;
+				for (size_t a = 0; a < candidates.size(); ++a) {
+					const int px = PairCellOf(bounds[a].cx), py = PairCellOf(bounds[a].cy);
+					bool paired = false;
+					for (int dy = -1; dy <= 1 && !paired; ++dy) {
+						for (int dx = -1; dx <= 1 && !paired; ++dx) {
+							const auto it = pairGrid.find(CellKey(px + dx, py + dy));
+							if (it == pairGrid.end())
+								continue;
+							for (const size_t b : it->second) {
+								const float ox = bounds[a].cx - bounds[b].cx, oy = bounds[a].cy - bounds[b].cy;
+								if (a != b && ox * ox + oy * oy < kPairDistanceSq) {
+									paired = true;
+									break;
+								}
+							}
 						}
 					}
+					if (paired)
+						cardStarts.push_back(candidates[a]);
 				}
 			}
 
