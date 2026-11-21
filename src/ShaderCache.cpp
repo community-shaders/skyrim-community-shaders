@@ -333,14 +333,10 @@ namespace SIE
 				}
 			}
 
-			constexpr auto captureFlag = static_cast<uint32_t>(ShaderCache::SkyShaderFlags::CloudShadowsCapture);
-			uint32_t flags = (descriptor & ~captureFlag) >> 8;
+			uint32_t flags = descriptor >> 8;
 
 			if (flags) {
 				defines[lastIndex++] = { "DEFERRED", nullptr };
-			}
-			if (descriptor & captureFlag) {
-				defines[lastIndex++] = { "CLOUD_SHADOWS_CAPTURE", nullptr };
 			}
 
 			for (auto* feature : Feature::GetFeatureList()) {
