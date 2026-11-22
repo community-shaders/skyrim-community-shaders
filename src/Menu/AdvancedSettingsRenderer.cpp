@@ -726,11 +726,19 @@ const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
 		"Only runs in a loaded game (not the main menu) while a menu is open.");
 }
 
+namespace
+{
+	// tai and tcl are toggles, so they run once per loaded game; a repeat press must not undo them.
+	bool freezeTogglesApplied = false;
+}
+
+void AdvancedSettingsRenderer::ResetDevelopmentConditionsState()
+{
+	freezeTogglesApplied = false;
+}
+
 void AdvancedSettingsRenderer::RunDevelopmentConditions()
 {
-	// tai and tcl are toggles, so apply them once per loaded game; a repeat press must not undo them.
-	// The flag resets when the player is gone (main menu or unloaded game).
-	static bool freezeTogglesApplied = false;
 	auto player = RE::PlayerCharacter::GetSingleton();
 	if (!player || !player->GetParentCell())
 		freezeTogglesApplied = false;

@@ -5,6 +5,7 @@
 #include "Hooks.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "NativeMenu/NativeMenu.h"
 #include "ShaderCache.h"
@@ -84,6 +85,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPreLoadGame:
 	case SKSE::MessagingInterface::kNewGame:
 		{
+			AdvancedSettingsRenderer::ResetDevelopmentConditionsState();
 			if (errors.empty())
 				Feature::ForEachLoadedFeature("GameReset", [](Feature* feature) { feature->GameReset(); });
 			break;
@@ -151,6 +153,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 		}
 	case SKSE::MessagingInterface::kPostLoadGame:
 		{
+			AdvancedSettingsRenderer::ResetDevelopmentConditionsState();
 			if (errors.empty())
 				Feature::ForEachLoadedFeature("GameLoaded", [](Feature* feature) { feature->GameLoaded(); });
 			break;

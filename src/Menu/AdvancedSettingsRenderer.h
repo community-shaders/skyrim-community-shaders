@@ -44,4 +44,7 @@ public:
 
 	/** @brief Tooltip for the Development Conditions button, listing what it sets. */
 	static const char* GetDevelopmentConditionsTooltip();
+
+	/** @brief Clears the once-per-game state, so the next Development Conditions run reapplies tai and tcl. Call on game load and reset. */
+	static void ResetDevelopmentConditionsState();
 };
