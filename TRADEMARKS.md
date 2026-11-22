@@ -2,8 +2,6 @@
 
 This policy explains how the "Community Shaders" name and logo may be used.
 
-
-
 The code in this repository is free software under the GPL-3.0 with the
 exceptions listed in [EXCEPTIONS.md](EXCEPTIONS.md). **Nothing in this policy
 limits your rights under that licence.** You may use, modify and redistribute
