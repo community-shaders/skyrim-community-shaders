@@ -341,7 +341,9 @@ void ScreenSpaceGI::DrawDebugSection()
 	BUFFER_VIEWER_NODE(texNoise, debugRescale)
 	BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
 	BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
-	BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+	if (settings.EnableGI) {
+		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+	}
 	BUFFER_VIEWER_NODE(texAo[0], debugRescale)
 	BUFFER_VIEWER_NODE(texAo[1], debugRescale)
 	BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
