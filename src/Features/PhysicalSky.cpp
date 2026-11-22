@@ -2560,18 +2560,25 @@ void PhysicalSky::RestoreGrassSampler()
 
 void PhysicalSky::ModifyWater()
 {
+	if (waterSamplerModified)
+		RestoreWaterSampler();
 	waterSamplerModified = cbData.enabled != 0;
 	if (!waterSamplerModified)
 		return;
 	auto context = globals::d3d::context;
 	context->PSGetSamplers(13, 1, originalPSWaterSampler.put());
-
-	auto& samplerModifiedBits = globals::game::shadowState->GetRuntimeData().PSSamplerModifiedBits;
-	originalPSWaterSamplerModifiedBits = samplerModifiedBits & (1u << 13);
-	samplerModifiedBits &= ~(1u << 13);
-
 	auto sampler = sampSv.get();
 	context->PSSetSamplers(13, 1, &sampler);
+}
+
+void PhysicalSky::HoldWaterSampler()
+{
+	if (!waterSamplerModified)
+		return;
+	// The renderer re-binds slots marked modified when it flushes before a draw: drop s13's so ours stays for the batch.
+	auto& samplerModifiedBits = globals::game::shadowState->GetRuntimeData().PSSamplerModifiedBits;
+	originalPSWaterSamplerModifiedBits |= samplerModifiedBits & (1u << 13);
+	samplerModifiedBits &= ~(1u << 13);
 }
 
 void PhysicalSky::RestoreWaterSampler()
@@ -2613,11 +2620,19 @@ void PhysicalSky::Hooks::BSGrassShader_RestoreGeometry::thunk(RE::BSShader* This
 void PhysicalSky::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
-	globals::features::physicalSky.ModifyWater();
+	globals::features::physicalSky.HoldWaterSampler();
 }
 
-void PhysicalSky::Hooks::BSWaterShader_RestoreGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+bool PhysicalSky::Hooks::BSWaterShader_SetupTechnique::thunk(RE::BSShader* This, uint32_t Technique)
 {
-	func(This, Pass, RenderFlags);
+	const bool ok = func(This, Technique);
+	if (ok)
+		globals::features::physicalSky.ModifyWater();
+	return ok;
+}
+
+void PhysicalSky::Hooks::BSWaterShader_RestoreTechnique::thunk(RE::BSShader* This, uint32_t Technique)
+{
 	globals::features::physicalSky.RestoreWaterSampler();
+	func(This, Technique);
 }
