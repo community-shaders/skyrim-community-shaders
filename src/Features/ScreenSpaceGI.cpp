@@ -867,7 +867,8 @@ void ScreenSpaceGI::DrawSSGI()
 		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling.
 		// radianceDisocc wrote mip 0 directly to texRadianceTemp above, so we can bind it
 		// as SRV input here without an intermediate CopySubresourceRegion.
-		{
+		// Only gi.cs's GI path reads it.
+		if (settings.EnableGI) {
 			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
 
 			resetViews();
