@@ -18,6 +18,57 @@ std::list<std::string> errors;
 
 bool Load();
 
+namespace
+{
+	/**
+	 * @brief Reads the LegalCopyright string from a DLL's version resource.
+	 * @param dllPath Path to the DLL. The file is only read, never loaded.
+	 * @return The copyright string, or an empty string if the DLL has none.
+	 */
+	std::wstring GetDllCopyright(const std::filesystem::path& dllPath)
+	{
+		DWORD handle = 0;
+		const auto size = GetFileVersionInfoSizeW(dllPath.c_str(), &handle);
+		if (!size)
+			return {};
+
+		std::vector<std::byte> data(size);
+		if (!GetFileVersionInfoW(dllPath.c_str(), 0, size, data.data()))
+			return {};
+
+		struct LangCodePage
+		{
+			WORD language;
+			WORD codePage;
+		};
+		LangCodePage* translations = nullptr;
+		UINT translationsSize = 0;
+		std::vector<std::wstring> subBlocks;
+		if (VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translations), &translationsSize) && translations) {
+			for (UINT i = 0; i < translationsSize / sizeof(LangCodePage); ++i)
+				subBlocks.push_back(std::format(L"\\StringFileInfo\\{:04x}{:04x}\\LegalCopyright", translations[i].language, translations[i].codePage));
+		}
+		subBlocks.push_back(L"\\StringFileInfo\\040904b0\\LegalCopyright");
+		subBlocks.push_back(L"\\StringFileInfo\\040904e4\\LegalCopyright");
+
+		for (const auto& subBlock : subBlocks) {
+			wchar_t* value = nullptr;
+			UINT valueSize = 0;
+			if (VerQueryValueW(data.data(), subBlock.c_str(), reinterpret_cast<void**>(&value), &valueSize) && value && valueSize)
+				return value;
+		}
+		return {};
+	}
+
+	/**
+	 * @brief Case-insensitive substring search for wide strings.
+	 */
+	bool ContainsInsensitive(std::wstring_view haystack, std::wstring_view needle)
+	{
+		return std::ranges::search(haystack, needle, [](wchar_t a, wchar_t b) { return std::towlower(a) == std::towlower(b); }).begin() != haystack.end();
+	}
+}
+
 void InitializeLog([[maybe_unused]] spdlog::level::level_enum a_level = spdlog::level::info)
 {
 #ifndef NDEBUG
@@ -204,14 +255,48 @@ bool Load()
 		L"Data/SKSE/Plugins/MARA.dll",
 		L"Data/SKSE/Plugins/NativeWaterLightStabilizer.dll",
 		L"Data/SKSE/Plugins/DynamicWetness.dll",
-		L"Data/SKSE/Plugins/NMN_DeformableTerrain.dll"
+		L"Data/SKSE/Plugins/NMN_DeformableTerrain.dll",
+		L"Data/SKSE/Plugins/EstatesFramework.dll",
+		L"Data/SKSE/Plugins/HjertestenHeal.dll",
+		L"Data/SKSE/Plugins/RealmUI.dll",
+		L"Data/SKSE/Plugins/WarbandUI.dll",
+		L"Data/SKSE/Plugins/SethNemesis.dll",
+		L"Data/SKSE/Plugins/SethsGrass.dll",
+		L"Data/SKSE/Plugins/TerrainBuilder.dll",
+		L"Data/SKSE/Plugins/WARHOLD.dll"
 	};
 
+	auto pushIncompatibleDllError = [&](const std::filesystem::path& dll) {
+		auto errorMessage = std::format("Incompatible DLL {} detected", stl::utf16_to_utf8(dll.generic_wstring()).value_or("<unicode conversion error>"s));
+		logger::error("{}", errorMessage);
+		errors.push_back(errorMessage);
+	};
+
+	std::set<std::wstring> reportedDLLs;
 	for (const auto dll : incompatibleDLLs) {
 		if (std::filesystem::exists(dll)) {
-			auto errorMessage = std::format("Incompatible DLL {} detected", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
-			logger::error("{}", errorMessage);
-			errors.push_back(errorMessage);
+			pushIncompatibleDllError(dll);
+			reportedDLLs.insert(std::filesystem::path(dll).filename().wstring());
+		}
+	}
+
+	// Also block any SKSE plugin whose version resource names an incompatible author,
+	// so renamed or newly released DLLs are caught without a list update.
+	constexpr std::array incompatibleCopyrights = { L"Seth Summers" };
+	std::error_code ec;
+	for (const auto& entry : std::filesystem::directory_iterator("Data/SKSE/Plugins", std::filesystem::directory_options::skip_permission_denied, ec)) {
+		if (!entry.is_regular_file(ec) || _wcsicmp(entry.path().extension().c_str(), L".dll") != 0)
+			continue;
+		if (reportedDLLs.contains(entry.path().filename().wstring()))
+			continue;
+		const auto copyright = GetDllCopyright(entry.path());
+		if (copyright.empty())
+			continue;
+		for (const auto author : incompatibleCopyrights) {
+			if (ContainsInsensitive(copyright, author)) {
+				pushIncompatibleDllError(entry.path());
+				break;
+			}
 		}
 	}
 
