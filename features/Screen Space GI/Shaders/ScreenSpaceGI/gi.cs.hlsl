@@ -89,6 +89,12 @@ uint HorizonBitmask(float2 angleRange)
 	return (bitsRange.y >= 32u ? 0xFFFFFFFFu : ((1u << bitsRange.y) - 1u)) << bitsRange.x;
 }
 
+// FastMath::ACos(1 + e) returns ~-1e35: fastSqrtNR0 of a negative.
+float ACosClamped(float x)
+{
+	return FastMath::ACos(clamp(x, -1, 1));
+}
+
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
 	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
@@ -218,8 +224,8 @@ void CalculateGI(
 				// Back-side horizon vector for the surface-thickness offset.
 				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness);
 
-				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));  // either clamp or use float version for whatever reason
-				float angleBack = FastMath::ACos(dot(sampleBackHorizonVec, viewVec));
+				float angleFront = ACosClamped(dot(sampleHorizonVec, viewVec));
+				float angleBack = ACosClamped(dot(sampleBackHorizonVec, viewVec));
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
@@ -230,7 +236,7 @@ void CalculateGI(
 #ifdef GI
 				// Back-side horizon vector for GI-radius sampling depth (~300 units).
 				float3 sampleBackHorizonVecGI = normalize(sampleDelta - viewVec * 300);
-				float angleBackGI = FastMath::ACos(dot(sampleBackHorizonVecGI, viewVec));
+				float angleBackGI = ACosClamped(dot(sampleBackHorizonVecGI, viewVec));
 				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
 
 #	ifdef GI_SPECULAR
