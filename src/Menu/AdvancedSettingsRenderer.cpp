@@ -728,11 +728,22 @@ const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
 
 void AdvancedSettingsRenderer::RunDevelopmentConditions()
 {
+	// tai and tcl are toggles, so apply them once per loaded game; a repeat press must not undo them.
+	// The flag resets when the player is gone (main menu or unloaded game).
+	static bool freezeTogglesApplied = false;
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player || !player->GetParentCell())
+		freezeTogglesApplied = false;
 	if (!CanRunConsoleCommands())
 		return;
 	RE::Console::ExecuteCommand("player.setav speedmult 500");
-	RE::Console::ExecuteCommand("tai");
-	RE::Console::ExecuteCommand("tcl");
+	if (!freezeTogglesApplied) {
+		RE::Console::ExecuteCommand("tai");
+		// prid 14 selects the player (form ID 0x14) so tcl cannot act on a leftover console selection
+		RE::Console::ExecuteCommand("prid 14");
+		RE::Console::ExecuteCommand("tcl");
+		freezeTogglesApplied = true;
+	}
 	EditorWindow::GetSingleton()->PauseTime();
 	RE::Console::ExecuteCommand("set gamehour to 12");
 	RE::Console::ExecuteCommand("fw 81a");
