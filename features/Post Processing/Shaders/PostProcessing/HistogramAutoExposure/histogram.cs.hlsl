@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 /// By ProfJack/五脚猫, 2024-2-17 UTC
 /// ref:
 /// https://bruop.github.io/exposure/
@@ -73,7 +74,7 @@ float4 ComputeBoxBounds(float2 dims)
 
 	if (inBox) {
 		float3 color = TexColor[pxCoord].rgb;
-		float luma = Color::RGBToLuminance(color);
+		float luma = PreExposure::Decode(Color::RGBToLuminance(color));
 
 		// Optimized bin calculation - avoid unnecessary saturate
 		if (luma > 1e-10) {

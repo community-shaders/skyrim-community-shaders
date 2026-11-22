@@ -205,21 +205,24 @@ namespace Skylighting
 					if (any(cellID < 0) || any((uint3)cellID >= ARRAY_DIM))
 						continue;
 
-					float3 cellCentreMS = (cellID + 0.5 - ARRAY_DIM / 2) * CELL_SIZE;
-
-					float3 trilinearWeights = 1 - abs(cellOffset - trilinearPos);
+					// cellCentreMS - positionMSAdjusted == probeOffset * CELL_SIZE, and CELL_SIZE is the same on every axis.
+					float3 probeOffset = cellOffset - trilinearPos;
+					float3 trilinearWeights = 1 - abs(probeOffset);
 					float triW = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
 
 					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
 
 					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
 					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
-					float tangentWeight = saturate(dot(normalize(cellCentreMS - positionMSAdjusted), normalWS)) + MIN_TANGENT_WEIGHT;
+					float tangentWeight = saturate(dot(probeOffset, normalWS) * rsqrt(max(dot(probeOffset, probeOffset), EPSILON_LENGTH_SQ))) + MIN_TANGENT_WEIGHT;
 #	if defined(SKYLIGHTING_COVERAGE)
 					// An open probe above the occluder covering the receiver sees sky through that roof; open probes below it are beside the receiver
-					[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN &&
-								 ZenithProject(cellCentreMS + SharedData::skylightingSettings.PosOffset.xyz).z < receiverOccluderDepth)
-						tangentWeight = MIN_TANGENT_WEIGHT;
+					[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN)
+					{
+						float3 cellCentreMS = (cellID + 0.5 - ARRAY_DIM / 2) * CELL_SIZE;
+						if (ZenithProject(cellCentreMS + SharedData::skylightingSettings.PosOffset.xyz).z < receiverOccluderDepth)
+							tangentWeight = MIN_TANGENT_WEIGHT;
+					}
 #	endif
 					float shW = triW * tangentWeight;
 					shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));

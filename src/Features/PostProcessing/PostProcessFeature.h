@@ -107,6 +107,9 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 	/// Whether this feature's enabled state is automatically managed based on other features.
 	virtual bool IsAutoEnabled() const { return false; }
 
+	/// Whether this feature is experimental and should display an Experimental badge in the menu.
+	virtual bool IsExperimental() const { return false; }
+
 	/// Called each frame for auto-enabled features to update their enabled state.
 	virtual void UpdateAutoEnabled() {}
 
@@ -123,6 +126,17 @@ struct PostProcessFeature : public std::enable_shared_from_this<PostProcessFeatu
 	/// Rewrites defaults that depend on the current settings; a_settings is shaped like SaveSettings output.
 	virtual void ApplyContextualDefaults(json& a_settings) const { (void)a_settings; }
 	virtual void DrawSettings() = 0;
+
+	/**
+	 * @brief A short muted note explaining that Cinematic Camera drives the greyed-out settings below it.
+	 * @param text Note to show; null uses the shared lens-and-focus wording.
+	 */
+	static void DrawCameraControlledNote(const char* text = nullptr);
+
+	/** @brief Whether this effect has debug views; the Post Processing Debug section then adds a tab for it. */
+	virtual bool HasDebugSection() const { return false; }
+	/** @brief Draws this effect's debug views (cards, buffer viewers). Called inside the Debug section's tab, so it draws no heading of its own. */
+	virtual void DrawDebugSection() {}
 
 	struct TextureInfo
 	{

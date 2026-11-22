@@ -45,6 +45,11 @@ struct ScreenshotFeature : public Feature
 	void SnapshotCleanScene();
 	/** @brief Returns this frame's pre-UI snapshot, or nullptr if none was taken. */
 	ID3D11Texture2D* GetFreshCleanScene() const;
+	/**
+	 * @brief Drops a queued vanilla Multi-Screenshot (Ctrl+PrintScreen) while vanilla screenshots are disabled.
+	 * Its TestCameraPath mode locks game time to 33 ms per frame, speeding the game up. Call after input dispatch.
+	 */
+	void SuppressVanillaMultiScreenshot() const;
 	bool applyCropToScreenshot = true;
 
 	// Settings
@@ -58,7 +63,7 @@ struct ScreenshotFeature : public Feature
 	bool sdrUsePng = true;
 	// After save, put the file path on the clipboard (CF_HDROP).
 	bool copyToClipboard = true;
-	// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory.
+	// Suppress the game's own PrintScreen capture by clearing bAllowScreenShot in memory, and its Multi-Screenshot.
 	bool disableVanillaScreenshot = true;
 
 	std::atomic<bool> captureRequested{ false };

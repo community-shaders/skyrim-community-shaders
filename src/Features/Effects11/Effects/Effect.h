@@ -22,7 +22,8 @@ public:
 
 	// Settings methods
 	bool Load();
-	void Save();
+	/** @brief Writes the values and weather overrides to the preset. @return False when a write failed. */
+	bool Save();
 
 	// Effect lifecycle
 	virtual bool Apply();   // Clear resources, load settings, recompile, create resources
@@ -165,13 +166,24 @@ public:
 	std::vector<UIVariable> uiVariables;
 
 	static bool IsWeatherSeparated(const UIVariable& uiVar) { return !uiVar.separation.empty() && uiVar.separation != "None"; }
+	/** @brief True for a vector saved as one key per component (KeyX, KeyY, ...). */
+	static bool IsPerComponentVector(const UIVariable& uiVar);
+	/** @brief Ini key suffixes of a per-component vector's components. */
+	static constexpr const char* kComponentSuffixes[] = { "X", "Y", "Z", "W" };
+	/** @brief Component count of a Float or FloatN variable. */
+	static int GetComponentCount(UIVariableType type);
+	/** @brief The ini key a variable is saved under: its UniqueName, else Group.UIName. */
+	static std::string GetVariableIniKey(const UIVariable& uiVar);
+	/** @brief Removes spaces around dots, which D3DPreprocess and ENB's #x place differently. */
+	static std::string NormalizeIniKey(std::string_view key);
 	static void CaptureBaseValue(UIVariable& uiVar);
 	/** @brief Records the current value as the shader default. Only meaningful before the ini is applied. */
 	static void CaptureDefaultValue(UIVariable& uiVar);
 	/** @brief Restores the shader default captured by CaptureDefaultValue. @return False when none was captured. */
 	static bool RestoreDefaultValue(UIVariable& uiVar);
 	void CaptureBaseValues();
-	virtual void SaveWeatherOverrides() {}
+	/** @brief Writes edited weather values to their files. @return False when a write failed. */
+	virtual bool SaveWeatherOverrides() { return true; }
 
 	struct GroupMeta
 	{
@@ -290,10 +302,6 @@ public:
 
 	virtual bool IsTechniqueEnabled(TechniqueInfo&) { return true; }
 
-protected:
-	static bool IsPerComponentVector(const UIVariable& uiVar);
-	std::string GetVariableIniKey(const UIVariable& uiVar);
-
 private:
 	bool LoadFXFile();
 	/** @brief Builds variable, texture, technique and UI state from the created effect. */
@@ -314,4 +322,12 @@ private:
 
 	void LoadUIVariableValue(UIVariable& uiVar);
 	void LoadVariableFromString(UIVariable& uiVar, const std::string& value);
+
+	/** @brief Each ini key once, with the last value written to it, in first-write order. */
+	std::vector<std::pair<std::string, std::string>> SerializeValues() const;
+	/** @brief Records the current values as the ones on disk. */
+	void CaptureSavedValues();
+
+	/// Ini values as last loaded or saved, so Save writes only edited keys and an unedited preset needs no write access.
+	std::unordered_map<std::string, std::string> savedValues;
 };

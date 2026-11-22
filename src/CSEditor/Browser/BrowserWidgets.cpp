@@ -194,9 +194,13 @@ namespace BrowserUI
 	float MeasureChip(const char* label, bool withIcon)
 	{
 		const float scale = Util::GetUIScale();
-		float width = kChipPadX * scale * 2.0f + ImGui::CalcTextSize(label).x;
-		if (withIcon)
-			width += ImGui::GetFontSize() * kChipIconScale + ThemeManager::Constants::ICON_LABEL_GAP * scale;
+		const bool hasLabel = label && *label;
+		float width = kChipPadX * scale * 2.0f + (hasLabel ? ImGui::CalcTextSize(label).x : 0.0f);
+		if (withIcon) {
+			width += ImGui::GetFontSize() * kChipIconScale;
+			if (hasLabel)
+				width += ThemeManager::Constants::ICON_LABEL_GAP * scale;
+		}
 		return width;
 	}
 

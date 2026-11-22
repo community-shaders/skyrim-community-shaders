@@ -1,6 +1,10 @@
 #include "PostProcessFeature.h"
 
+#include "I18n/I18n.h"
+#include "Menu.h"
+#include "Menu/Fonts.h"
 #include "ShaderCache.h"
+#include "Utils/UI.h"
 
 namespace
 {
@@ -57,4 +61,17 @@ void PostProcessFeature::CompileRasterShadersAsync(
 		EnqueueStandaloneCompile(*this, path, info.entry, info.defines,
 			SIE::ShaderCache::StandaloneShaderClass::Pixel, info.programPtr);
 	}
+}
+
+void PostProcessFeature::DrawCameraControlledNote(const char* text)
+{
+	if (!text)
+		text = T("feature.post_processing.controlled_by_cinematic_camera", "Lens and focus are currently controlled by Cinematic Camera.");
+	{
+		MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetInfo());
+		ImGui::TextWrapped("%s", text);
+		ImGui::PopStyleColor();
+	}
+	ImGui::Spacing();
 }

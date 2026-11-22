@@ -2,7 +2,6 @@
 
 #include "Features/Effects11.h"
 #include "Features/Effects11/EffectManager.h"
-#include "Features/LinearLighting.h"
 #include "Features/PostProcessing.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -14,7 +13,6 @@
 
 #include <array>
 #include <optional>
-#include <utility>
 
 namespace PostProcessingMode
 {
@@ -30,8 +28,6 @@ namespace PostProcessingMode
 		std::optional<Mode> pendingMode;
 		/** @brief The pending mode is only a placeholder, so ApplyPending() picks the default from what is installed. */
 		bool detectPreset = false;
-		/** @brief The pending mode is the one a pack applied after the last save, not the saved one. */
-		bool pendingFromPack = false;
 		/** @brief A loaded choice whose pipeline could not run, saved in place of the fallback so it returns with its pipeline. */
 		std::optional<Mode> heldMode;
 		/** @brief Startup applied a mode, so the pipeline flags reflect a choice and later loads apply right away. */
@@ -95,9 +91,6 @@ namespace PostProcessingMode
 		heldMode.reset();
 		resolved = true;
 		Apply(mode);
-		// Switching to Post Processing always starts linear; running without it is a manual opt-out.
-		if (mode == Mode::PostProcessing)
-			globals::features::linearLighting.settings.enableLinearLighting = true;
 		return true;
 	}
 
@@ -110,7 +103,6 @@ namespace PostProcessingMode
 		// Save() keeps the mode out of the code defaults, so a missing value means the user never saved one.
 		detectPreset = !savedMode;
 		pendingMode = savedMode.value_or(kDefaultMode);
-		pendingFromPack = false;
 
 		// A pack applied after these settings were saved chose the pipeline since, so its choice stands, as it
 		// does when there is no saved choice.
@@ -120,7 +112,6 @@ namespace PostProcessingMode
 		if (const auto packPipeline = catalog.GetActivePipeline(); packPipeline && (detectPreset || savedRevision != catalog.GetPipelineRevision())) {
 			pendingMode = *packPipeline;
 			detectPreset = false;
-			pendingFromPack = true;
 		}
 		// Effects 11 is not initialized this early, so only the bypass can apply now.
 		globals::features::postProcessing.bypass = *pendingMode != Mode::PostProcessing;
@@ -149,9 +140,6 @@ namespace PostProcessingMode
 		const Mode mode = IsAvailable(chosen) ? chosen : ResolveDefaultMode();
 		heldMode = mode != chosen ? std::optional(chosen) : std::nullopt;
 		Apply(mode);
-		// Set() turns Linear Lighting on with Post Processing; a pack's choice gets the same at startup.
-		if (std::exchange(pendingFromPack, false) && mode == Mode::PostProcessing && !heldMode)
-			globals::features::linearLighting.settings.enableLinearLighting = true;
 		pendingMode.reset();
 		resolved = true;
 	}
@@ -162,7 +150,7 @@ namespace PostProcessingMode
 			ApplyPending();
 	}
 
-	void DrawSelector(const SelectorAction* action)
+	void DrawSelector(std::span<const SelectorAction> actions)
 	{
 		std::array<Mode, kModeCount> modes{};
 		std::array<const char*, kModeCount> labels{};
@@ -183,33 +171,53 @@ namespace PostProcessingMode
 			addSegment(Mode::Effects11, T("ui.post_processing_mode.effects11", "Effects 11"));
 
 		const float rowTop = ImGui::GetCursorPosY();
-		// Re-clicking the active mode must not undo a manual Linear Lighting opt-out.
 		if (Util::SegmentedControl("PostProcessingMode", labels.data(), count, selected) && modes[selected] != current) {
 			Set(modes[selected]);
 			// Every pipeline change reloads the shader cache.
 			globals::shaderCache->SetRecachePending(true);
 			// The segmented control does not flag an ImGui edit, so the overlay's check never sees this change.
 			globals::state->CheckCoreSettingsChanged();
-			// Set() may have turned Linear Lighting on, which the host page's own feature check does not cover.
-			globals::state->CheckFeatureSettingsChanged(&globals::features::linearLighting);
 		}
 
 		Util::AddTooltip(T("ui.post_processing_mode.tooltip",
 			"Only one pipeline runs at a time. Vanilla uses the game's original post processing."));
 
-		if (!action || !action->label)
+		// Wider than a plain button's padding, so the buttons read as balanced beside the taller selector
+		const auto measure = [](const SelectorAction& action) {
+			const float padding = ImGui::GetStyle().FramePadding.x * 2.0f;
+			return padding + (action.icon ? Util::MeasureLabeledButton(Icons::TI(action.icon), action.label) :
+											ImGui::CalcTextSize(action.label).x + padding);
+		};
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		float totalWidth = 0.0f;
+		for (const auto& action : actions) {
+			if (action.label)
+				totalWidth += measure(action) + (totalWidth > 0.0f ? spacing : 0.0f);
+		}
+		if (totalWidth <= 0.0f)
 			return;
 
-		// The page's action sits on the selector's row, flush right and as tall as the selector
+		// The page's actions sit on the selector's row, flush right and as tall as the selector
 		const float rowBottom = ImGui::GetCursorPosY();
 		const float stripHeight = rowBottom - rowTop - ImGui::GetStyle().ItemSpacing.y;
-		const float buttonWidth = ImGui::CalcTextSize(action->label).x + ImGui::GetStyle().FramePadding.x * 4.0f;
-		const float right = ImGui::GetContentRegionMax().x;
-		ImGui::SetCursorPos(ImVec2(right - buttonWidth, rowTop));
-		if (Util::Button(action->label, ImVec2(buttonWidth, stripHeight)) && action->onClick)
-			action->onClick();
-		if (action->tooltip)
-			Util::AddTooltip(action->tooltip);
+		float x = ImGui::GetContentRegionMax().x - totalWidth;
+		for (size_t i = 0; i < actions.size(); ++i) {
+			const auto& action = actions[i];
+			if (!action.label)
+				continue;
+			const float width = measure(action);
+			ImGui::SetCursorPos(ImVec2(x, rowTop));
+			ImGui::PushID(static_cast<int>(i));
+			const bool clicked = action.icon ?
+			                         Util::LabeledButton("##SelectorAction", Icons::TI(action.icon), action.label, ImVec2(width, stripHeight)) :
+			                         Util::Button(action.label, ImVec2(width, stripHeight));
+			ImGui::PopID();
+			if (clicked && action.onClick)
+				action.onClick();
+			if (action.tooltip)
+				Util::AddTooltip(action.tooltip);
+			x += width + spacing;
+		}
 		ImGui::SetCursorPosY(rowBottom);
 	}
 }

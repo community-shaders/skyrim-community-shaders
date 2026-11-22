@@ -1,6 +1,7 @@
 #include "Game.h"
 
 #include <atomic>
+#include <cmath>
 #include <limits>
 
 #include "Globals.h"
@@ -400,6 +401,20 @@ namespace Util
 
 		const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(a_sun->sunBase->GetGeometryRuntimeData().shaderProperty.get());
 		return property ? std::clamp(property->kBlendColor.alpha, 0.0f, 1.0f) : 0.0f;
+	}
+
+	float GetBillboardHalfTan(const RE::NiAVObject* a_billboard, const RE::NiPoint3& a_viewer, float a_fallback)
+	{
+		if (!a_billboard)
+			return a_fallback;
+
+		const auto& bound = a_billboard->worldBound;
+		const float distance = bound.center.GetDistance(a_viewer);
+		if (!std::isfinite(bound.radius) || !std::isfinite(distance) || bound.radius <= 0.0f || distance <= 0.0f)
+			return a_fallback;
+
+		// The bound sphere encloses the square billboard, so its half-width is radius / sqrt(2)
+		return bound.radius * 0.70710678f / distance;
 	}
 
 	bool IsInterior()

@@ -59,6 +59,8 @@ public:
 
 	/** @brief Draws the ImGui settings UI for PBR texture sets and material objects. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 	/** @brief Loads PBR texture set and material object configurations from disk. */
 	virtual void SetupResources() override;
 	/** @brief Per-frame prepass that initializes the glint noise texture and binds it to the pipeline. */

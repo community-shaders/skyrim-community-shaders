@@ -24,6 +24,7 @@
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PostProcessing.h"
+#include "Features/ProceduralAurora.h"
 #include "Features/RainRefraction.h"
 #include "Features/RemoteControl/FrameRecorder.h"
 #include "Features/RemoteControl/NvPerf.h"
@@ -390,6 +391,7 @@ namespace WeatherExtensions
 			if (globals::features::effects11.loaded)
 				globals::features::effects11.OnSkyUpdateColors(sky);
 			globals::features::skySync.OnSkyUpdateColors(sky);
+			globals::features::proceduralAurora.OnSkyUpdate(sky);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -444,13 +446,17 @@ namespace PostProcessingExtensions
 			if (state->HandlePostProcessing(input, output))
 				return;
 
-			// Post Processing runs its pipeline into kMAIN/kMAIN_COPY, then lets the vanilla
-			// pass run so ISHDR can take its POSTPROCESS passthrough branch.
 			auto& postProcessing = globals::features::postProcessing;
-			if (postProcessing.loaded)
-				postProcessing.PreProcess(input);
-
-			func(a1, a2, a3, a4, a5);
+			const bool renderToUI = state->permutationData.RenderToUI;
+			const bool previousFallback = state->IsPostProcessingFallback();
+			const auto fallback = postProcessing.loaded ? postProcessing.PreProcess(input) : std::nullopt;
+			state->SetPostProcessingFallback(fallback.has_value());
+			// On failure the scene is still in its original target. Refraction may
+			// have routed it through kMAIN_COPY independently of the hook input.
+			const auto source = fallback && *fallback != output ? static_cast<uint32_t>(*fallback) : a3;
+			func(a1, a2, source, a4, a5);
+			if (renderToUI)
+				state->SetPostProcessingFallback(previousFallback);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -699,18 +705,15 @@ struct BSInputDeviceManager_PollInputDevices
 			}
 		}
 
-		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
-			// During active flying preview, let input reach the game for movement/camera
-			if (menu->IsPreviewFlying()) {
-				func(a_dispatcher, a_events);
-				return;
-			}
+		// The menu is open, eat all keypresses; during active flying preview, let input reach the game for movement/camera
+		if (blockedDevice && menu->ShouldSwallowInput() && !menu->IsPreviewFlying()) {
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;
 		}
 
 		func(a_dispatcher, a_events);
+		globals::features::screenshotFeature.SuppressVanillaMultiScreenshot();
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };

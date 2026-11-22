@@ -40,6 +40,7 @@ namespace
 	auto* RealInputInt = &ImGui::InputInt;
 	auto* RealSliderInt = &ImGui::SliderInt;
 	auto* RealSliderScalar = &ImGui::SliderScalar;
+	auto* RealInputScalar = &ImGui::InputScalar;
 	auto* RealSliderAngle = &ImGui::SliderAngle;
 	auto* RealCheckbox = &ImGui::Checkbox;
 	auto* RealColorEdit3 = &ImGui::ColorEdit3;
@@ -222,6 +223,16 @@ namespace
 		return guard.Finish(Util::Anim::EasedSliderScalar(RealSliderScalar, label, dataType, guard.Raw(), min, max, format, flags));
 	}
 
+	bool DetouredInputScalar(const char* label, ImGuiDataType dataType, void* data,
+		const void* step, const void* stepFast, const char* format, ImGuiInputTextFlags flags)
+	{
+		if (!ShouldIntercept())
+			return RealInputScalar(label, dataType, data, step, stepFast, format, flags);
+		InterceptedCall interceptedCall;
+		SceneWidgetBinding::Guard guard(label, SceneWidgetBinding::Value::Scalar(data, dataType));
+		return guard.Finish(RealInputScalar(label, dataType, guard.Raw(), step, stepFast, format, flags));
+	}
+
 	bool DetouredSliderAngle(const char* label, float* radians, float degreesMin, float degreesMax,
 		const char* format, ImGuiSliderFlags flags)
 	{
@@ -348,6 +359,7 @@ namespace
 			{ "InputInt", reinterpret_cast<PVOID*>(&RealInputInt), reinterpret_cast<PVOID>(&DetouredInputInt) },
 			{ "SliderInt", reinterpret_cast<PVOID*>(&RealSliderInt), reinterpret_cast<PVOID>(&DetouredSliderInt) },
 			{ "SliderScalar", reinterpret_cast<PVOID*>(&RealSliderScalar), reinterpret_cast<PVOID>(&DetouredSliderScalar) },
+			{ "InputScalar", reinterpret_cast<PVOID*>(&RealInputScalar), reinterpret_cast<PVOID>(&DetouredInputScalar) },
 			{ "SliderAngle", reinterpret_cast<PVOID*>(&RealSliderAngle), reinterpret_cast<PVOID>(&DetouredSliderAngle) },
 			{ "Checkbox", reinterpret_cast<PVOID*>(&RealCheckbox), reinterpret_cast<PVOID>(&DetouredCheckbox) },
 			{ "ColorEdit3", reinterpret_cast<PVOID*>(&RealColorEdit3), reinterpret_cast<PVOID>(&DetouredColorEdit3) },
@@ -456,6 +468,15 @@ bool SceneWidgetInterceptor::InterceptInt(const char* a_label, int& a_value, con
 	if (!ShouldIntercept())
 		return a_draw(a_value);
 	return InterceptScalar([&a_draw](const char*, int* a_bound) { return a_draw(*a_bound); }, a_label, &a_value);
+}
+
+bool SceneWidgetInterceptor::InterceptFloat3(const char* a_label, float* a_value, const std::function<bool(float*)>& a_draw)
+{
+	if (!ShouldIntercept())
+		return a_draw(a_value);
+	InterceptedCall interceptedCall;
+	SceneWidgetBinding::Guard guard(a_label, SceneWidgetBinding::Value::FloatVector(a_value, 3));
+	return guard.Finish(a_draw(guard.Float()));
 }
 
 const SceneWidgetInterceptor::Context* SceneWidgetInterceptor::GetArmedContext()

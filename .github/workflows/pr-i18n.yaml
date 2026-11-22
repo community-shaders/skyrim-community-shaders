@@ -8,6 +8,8 @@ on:
             - "package/SKSE/Plugins/CommunityShaders/Translations/**"
             - "tools/extract-i18n.py"
             - "tools/sort-i18n.py"
+            - "tools/check-hardcoded-ui-strings.py"
+            - "tools/hardcoded-ui-strings-baseline.json"
 
 permissions:
     contents: read
@@ -32,6 +34,10 @@ jobs:
             # pre-commit.ci regenerates en.json and sorts locales; this gates merges if the autofix didn't land.
             - name: Check en.json is up to date
               run: python tools/extract-i18n.py --check
+
+            # Not autofixable (a human picks the key and wording), so it gates here rather than in pre-commit.
+            - name: Check for hardcoded UI strings
+              run: python tools/check-hardcoded-ui-strings.py --check
 
             - name: Validate translation file formats
               run: |

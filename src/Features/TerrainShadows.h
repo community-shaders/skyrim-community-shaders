@@ -82,6 +82,8 @@ public:
 
 	/** @brief Checks whether a valid heightmap is loaded for the current worldspace. */
 	bool IsHeightMapReady();
+	/** @brief Checks whether shadows are enabled and the shadow height texture is computed for the current heightmap. */
+	bool IsShadowMapReady();
 
 	/** @brief Scans for heightmap DDS files and creates constant buffers and compute shaders. */
 	virtual void SetupResources() override;
@@ -98,6 +100,8 @@ public:
 
 	/** @brief Draws the ImGui settings panel for Terrain Shadows configuration. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 
 	/** @brief Loads heightmaps, precomputes shadow textures, and updates shadows in the early prepass. */
 	virtual void EarlyPrepass() override;

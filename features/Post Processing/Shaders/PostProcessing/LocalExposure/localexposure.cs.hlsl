@@ -1,3 +1,4 @@
+#include "Common/PreExposure.hlsli"
 /// Local Exposure luminance analysis
 /// Builds the luminance pyramid and edge-aware grid. Composite resolves the
 /// base layer and evaluates tonal remapping using the final global exposure.
@@ -50,7 +51,7 @@ RWTexture3D<float2> RWTexLuminanceGrid : register(u1);
 
 float SceneLogLuminance(float3 color)
 {
-	float luminance = Color::RGBToLuminance(max(color, 0.0));
+	float luminance = PreExposure::Decode(Color::RGBToLuminance(max(color, 0.0)));
 	return clamp(log2(max(luminance, exp2(LogLuminanceMin))), LogLuminanceMin, LogLuminanceMax);
 }
 

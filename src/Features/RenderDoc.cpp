@@ -315,7 +315,7 @@ void RenderDoc::DrawSettings()
 				Util::DrawColorCodedValue(T(TKEY("capture_size"), "Capture Size"), totalSizeGB, std::format("{:.2f} GB", totalSizeGB), totalSizeConfig);
 
 				ImGui::SameLine();
-				ImGui::TextDisabled("(%zu files)", captureFiles.size());
+				ImGui::TextDisabled(T(TKEY("capture_file_count"), "(%zu files)"), captureFiles.size());
 
 				const std::string capturesDir = Util::PathHelpers::ToUtf8(GetCapturesPath());
 				const float copyButton = Util::IconButtonSize();

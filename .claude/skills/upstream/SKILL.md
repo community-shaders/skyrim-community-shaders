@@ -82,22 +82,29 @@ pip install -q git+https://github.com/alandtse/hlslkit.git   # buffer-scan only;
     git log --first-parent --since="$cutoff" <remote/branch>
     ```
 
-- Also collect every `(sync)` commit, merges included, because `--first-parent` misses the follow-ups and any sync merge that sits on a side branch a `chore(sync)` merge brought in:
+- Expand every **sync** in the window, because its branch carries fork fixes that `--first-parent` never shows, often untagged and dated before the window. Detect a merge-shaped sync by structure, not message: open-shaders lands syncs as PR merges whose second parent is the sync branch tip, and Bottled's are plain `Merge ... 'upstream/dev'` merges.
 
     ```bash
-    git log --grep='(sync)' --since-as-filter="$cutoff" <remote/branch>
+    [ "$(git merge-base <sha>^1 upstream/dev)" != "$(git merge-base <sha> upstream/dev)" ]   # true = sync
     ```
 
-    A commit can appear in both logs, so deduplicate by SHA before triage. Triage `fix(sync)` and `refactor(sync)` commits like any other commit. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
+    A single-parent commit whose message says it merges upstream is a **squashed** sync. If its subject ends in `(#N)`, recover the branch with `git fetch <remote> pull/N/head:refs/upstream-skill/<remote>-N` and expand that ref, adding `<sha>^1` to the `--not` list below.
 
-- Drop only the `chore(sync): merge upstream` commits themselves from triage, but first extract their **sync residue**: fork-side changes that rode along with the sync. Let `P` be the sync's first parent and `U` the upstream commit it pulled in (the second parent, or for a squash-style sync the commit named in its message). If a squash-style sync names no upstream commit, review the whole sync by hand instead of inferring `U` from commit dates. The expected result is the clean merge of the two, so the residue is what the sync changed beyond it:
+    1. **Ridden-along commits:** `git log --no-merges <sha>^1..<sha> --not upstream/dev`. Triage each like any other commit, whatever its tag. `chore(sync): bump ...` version bumps are not relevant to upstream; mark them so.
+    2. **Merge residue:** for each `M` in `git log --merges --format=%H <sha>^1..<sha> --not upstream/dev` (the sync included), the residue is what `M` changed beyond the clean merge of its parents:
 
-    ```bash
-    tree=$(git merge-tree --write-tree <P> <U>)   # exit 1 = conflicts: review the whole sync by hand; any other non-zero exit is a git error (bad ref?): stop and report it
-    git diff "$tree" <sync-sha>                   # empty = clean sync, nothing to triage
-    ```
+        ```bash
+        out=$(git merge-tree --write-tree --name-only <M>^1 <M>^2); rc=$?   # 1 = conflicts; any other non-zero is a git error: stop and report it
+        git diff "$(echo "$out" | head -1)" <M>                              # empty = clean merge, nothing to triage
+        ```
 
-    A non-empty diff is one candidate (source `sync <sha>`), triaged like any other commit. If `merge-tree` exits 1 (conflicts), the sync was not a clean merge, so its residue cannot be computed: review that merge's whole diff by hand (`git diff <sha>^1 <sha>`), as was needed for `9a0c2a67`. A very large diff means `U` is probably wrong: try the neighbouring upstream commit, else report it and move on.
+        On conflicts, the lines after the tree list the conflicted files. Outside them the diff is still residue; inside them it is mostly conflict markers, so review each by hand with `git diff <M>^2 <M> -- <file>`. A non-empty residue is one candidate (source `sync <M>`).
+
+        Triage and port that candidate from its residue alone, never the whole merge. Its patch is the residue diff limited to the non-conflicted files (`git diff <tree> <M> -- <files>`); use it wherever 2b and 2e say `git show <sha>`, and carry the conflicted-file changes over by hand. A residue candidate is always ported by hand (step 4); the merge-level `git show`, `git diff <sha>^1 <sha>` and `cherry-pick -m 1` commands below do not apply to it.
+
+    3. **Squashed sync without a recoverable branch:** diff `git merge-tree --write-tree <sha>^1 <U>` against `<sha>` as above, where `U` is the upstream commit named in the message (verify with `git merge-base --is-ancestor <U> upstream/dev`). If none is named, review the whole sync by hand, as was needed for `9a0c2a67`; never infer `U` from dates.
+
+    Once expanded, drop the sync commits themselves from triage.
 
 - For a remaining merge commit (more than one parent), use its first-parent diff everywhere below: `git diff <sha>^1 <sha>` instead of `git show <sha>`, because `git show` prints a combined diff that can hide changes. A clean merge port uses `git cherry-pick -m 1 <sha>`.
 - After filtering, group non-merge commits only when they are adjacent in the original first-parent history and touch the same area (e.g. "opt pass" + "opt fixes"). A filtered-out commit or a merge commit always ends a group, so a group's `git diff A^ B` never contains anything that was not selected. Record each group as its exact list of SHAs and triage its **combined** diff.
@@ -108,7 +115,7 @@ There is no committed ledger. The record of what has been ported is the `Ported 
 
 1. Search upstream PRs in every state, open, closed and merged, for the source SHA (short and full) and for `<owner/repo>#<pr>`, e.g. `repo:community-shaders/skyrim-community-shaders is:pr "alandtse/open-shaders#921"`. A closed-unmerged hit means a maintainer already declined it: report it, and don't re-port it unless the commit was named explicitly.
 2. Run `git log upstream/dev --grep="<sha-or-pr-ref>"` to catch ported commits.
-3. Run `git show <sha> | git -C "$SCRATCH/upstream-dev" apply -R --check` (the step 1a worktree). If it succeeds, the change is already applied.
+3. Run `git show <sha> | git -C "$SCRATCH/upstream-dev" apply -R --check` (the step 1a worktree). If it succeeds, the change is already applied. A residue candidate's patch covers only its non-conflicted files: skip this check when none remain (an empty patch proves nothing), and whether it succeeds or fails, review the conflicted-file changes by hand against upstream/dev. Call the candidate already applied only when every change is confirmed present; otherwise keep triaging and carry the missing changes through step 4.
 4. Compare `git patch-id --stable` against patch-ids of upstream/dev commits from the last ~2 weeks.
 5. Grep upstream/dev for the commit's distinctive new identifiers and strings (new functions, members, log messages).
 6. If the commit message references an upstream PR (`#NNNN` ≥ 2000), check whether that PR has merged and how its merged version differs.
@@ -127,10 +134,11 @@ There is no committed ledger. The record of what has been ported is the `Ported 
     - **open-shaders:** NeuralRendering, FoveatedRender, ShadowAtlas/ShadowScheduler/ShadowCasterManager (SCM), CSUtility, LazyShader, the VR HMD mask, DLSS stereo fallback, CommonLib bumps beyond upstream's pinned version.
     - **Bottled:** SnowCover, ReverseZ, lite lighting variants (`NoWetness`/`NoSnowCover` flags), SkySync helpers absent upstream.
 - If a commit depends on earlier fork-only work, name that prerequisite in the reason.
+- **VR is fork-only.** Community Shaders does not support VR; only open-shaders does. A commit whose fix, symptom or reasoning is VR-only (per-eye or HMD paths, `isVR` branches, VR shader configs, a repro that only happens in VR) is `not-relevant (VR-only)`, even when the code it touches exists upstream. When a commit mixes VR and flat changes, port only the flat part. Never cite VR behaviour to justify a port, and never ask for VR testing in a PR.
 
 ### 2e. Portable? Classify the patch
 
-- `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**
+- `git show <sha> | git -C "$SCRATCH/upstream-dev" apply --check` → **clean**, unless the commit mixes VR and flat changes (step 2d): that is always **adapted**, however cleanly it applies.
 - `git apply --3way` or a hand port → **adapted**: list every place where upstream's code differs.
 - Generated or config files (shader-validation yaml, en.json) → **regenerate** against upstream; never hand-merge them.
 
@@ -145,19 +153,19 @@ Present one triage table and wait for approval before any push.
 | Fork | SHA / PR | Title | Outcome | Reason (one line, concrete) |
 | ---- | -------- | ----- | ------- | --------------------------- |
 
-Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)`.
+Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR (#NNNN)`, `declined-before (#NNNN)`, `fork-only (<missing file/symbol>)`, `superseded`, `needs-decision (<size/risk>)`, `not-relevant (<why>)` (e.g. `not-relevant (VR-only)`).
 
 ## 4. Port, one item at a time
 
 1. Branch from fresh upstream/dev: `git checkout -B port/<fork>-<slug> upstream/dev`, where `<fork>` is `open` or `bottle`. If the session requires a specific branch prefix, use `<prefix>-<slug>`. Use one branch per logical change; combine only tightly coupled items.
-2. Apply every commit in the item. When it's clean, use `git cherry-pick <sha>` for a single commit. Cherry-pick keeps the original author; then rewrite the message per step 6 with `git commit --amend`. For a grouped item (step 2a), apply the group's exact recorded SHAs in order without committing, then make one commit for the whole group: `git cherry-pick -n <sha-1> <sha-2> ... <sha-n>` followed by `git commit --author="<original author>"`, with a step 6 message whose `Ported from` line names every source SHA (add `Co-authored-by:` for any other original authors). Never use a `<first>^..<last>` range, which can pull in filtered or side-branch commits. A merge commit is never part of a group; cherry-pick it on its own with `-m 1`. Otherwise port the whole item by hand and commit with `git commit --author="<original author>"`.
+2. Apply every commit in the item. When it's clean, use `git cherry-pick <sha>` for a single commit. Cherry-pick keeps the original author; then rewrite the message per step 6 with `git commit --amend`. For a grouped item (step 2a), apply the group's exact recorded SHAs in order without committing, then make one commit for the whole group: `git cherry-pick -n <sha-1> <sha-2> ... <sha-n>` followed by `git commit --author="<original author>"`, with a step 6 message whose `Ported from` line names every source SHA (add `Co-authored-by:` for any other original authors). Never use a `<first>^..<last>` range, which can pull in filtered or side-branch commits. A merge commit is never part of a group; cherry-pick it on its own with `-m 1`. Otherwise port the whole item by hand and commit with `git commit --author="<original author>"`. Whatever the route, the committed result holds only flat changes: for a commit that mixes VR and flat changes (or a group that includes any VR-only commit or VR hunks), apply without committing (`git cherry-pick -n <sha>`, or `git cherry-pick -n -m 1 <sha>` for a merge; the group's SHAs in order for a group), revert the VR hunks, then commit with the original author, and say in the step 6 body which VR parts were dropped.
 3. **Re-derive the claim.** Write one sentence explaining why the commit's reasoning holds in _upstream's_ code. If it doesn't hold, stop and reclassify.
 4. Run the C++ checklist and fix whatever applies:
     - **D3D state:** restored or unbound afterwards, with no extra per-draw state changes.
     - **Resource naming:** every new resource goes through `Util::SetResourceName` or the Buffer.h wrappers.
     - **Threading:** check render-thread vs compile-worker vs game-thread access; locks are scoped with no nested locking; no lock on hot per-draw paths unless it's justified.
     - **Failure paths:** shader compile failure disables cleanly, and Map/Create failures are handled.
-    - **SE/AE/VR:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs; VR configs updated where they exist.
+    - **SE/AE:** `RELOCATION_ID`/`REL::Relocate` pairs; `GetRuntimeData()` for classes whose layout differs. Upstream ships no VR build, so add no VR configs or VR-only branches.
     - **Settings struct change:** bump the feature `.ini` version and validate inputs.
     - **i18n:** user-visible strings use `T()`/`TKEY()`.
     - **Conventions:** ImGui via RAII guards, colors and spacing from `ThemeManager::Constants`, Doxygen comments on public methods, no TODO/FIXME.
@@ -185,7 +193,7 @@ Outcomes: `port-clean`, `port-adapted`, `already-upstream (#NNNN)`, `in-open-PR 
 
 1. Re-fetch upstream/dev. If it moved, rebase the branch (it's yours and unpublished) and re-run step 5.
 2. Re-check the guard from step 1b, then run `git push -u fork <branch>`. Retry up to 4 times with backoff (2s, 4s, 8s, 16s) on network errors only.
-3. Open the PR to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Body sections:
+3. Open the PR as a draft (`draft: true`) to `community-shaders/skyrim-community-shaders:dev`, with head `<login>:<branch>` and `maintainer_can_modify: true`. Every PR starts as a draft; the maintainer marks it ready for review. Body sections:
     - **Summary**
     - **Source:** fork, PR/commit, original author. Include the exact `Ported from ...` line.
     - **Differences from the fork version**
@@ -219,3 +227,5 @@ Final message to the maintainer:
 - Hand-merge generated files or reformat untouched code.
 - Commit run reports, ledgers or other per-run artifacts.
 - Skip the checkpoint on scheduled or unattended runs.
+- Open a PR that is not a draft.
+- Port a VR-only change, or justify a port by VR behaviour.

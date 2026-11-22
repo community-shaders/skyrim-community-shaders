@@ -6,56 +6,56 @@
 #include "Buffer.h"
 #include "GrassBucket.h"
 
-/** @brief Owns a registered group snapshot through packing and render-thread admission. */
+/** @brief Retains a captured group and its resources until the render thread admits it. */
 struct PendingCapture
 {
-	GrassChunk slice;
+	GrassInstanceSlice slice;
 	std::vector<uint8_t> sourceData;
-	std::shared_ptr<GrassShape> shape;
-	GrassAsset asset;
+	std::shared_ptr<GrassShapeRegistration> shape;
+	GrassDrawResources drawResources;
 };
 
 /** @brief Owns grass buckets, staged lifecycle events and GPU resources. */
 class GrassBucketStore
 {
 public:
-	/** @brief Stores feature settings refreshed once per grass frame. */
+	/** @brief Settings used for this frame's uploads and LOD selection. */
 	struct FrameParams
 	{
 		bool enableMeshLOD = false;
 		bool enableMidLOD = false;
 		bool enableFarLOD = false;
-		float fadeStart = 0.0f;  // New slices begin fading at this time.
+		float fadeStart = 0.0f;  // Slices uploaded this frame begin fading in at this time.
 	};
 
-	/** @brief The native shapes and draw proxies one frame renders, published once per frame by the render thread. */
+	/** @brief Proxy groups published by the render thread for drawing. */
 	struct CullSnapshot
 	{
-		struct NativeShape
+		/** @brief Buckets with matching engine pass state, drawn through one proxy. */
+		struct ProxyGroup
 		{
-			std::shared_ptr<GrassShape> registration;
-			bool direct = false;
-			// Render thread only. Setup and draw both ask per pass, and a group the engine adds mid-frame invalidates the answer.
-			mutable uint32_t optimizedFrame = UINT32_MAX;
-			mutable uint32_t optimizedGroups = 0;
-			mutable bool optimized = false;
+			RE::NiPointer<RE::BSMultiStreamInstanceTriShape> proxy;
+			std::vector<GrassBucket*> buckets;
 		};
 
-		/** @brief Returns the published state of a native shape, or null when it has none. */
-		const NativeShape* Find(const RE::NiAVObject* shape) const
+		/** @brief Returns the bucket group this proxy draws, or null for any other geometry. */
+		const ProxyGroup* FindGroup(const RE::BSGeometry* geometry) const
 		{
-			const auto it = nativeShapes.find(shape);
-			return it != nativeShapes.end() ? &it->second : nullptr;
+			for (const auto& group : proxyGroups) {
+				if (group.proxy.get() == geometry)
+					return &group;
+			}
+			return nullptr;
 		}
 
-		ankerl::unordered_dense::map<const RE::NiAVObject*, NativeShape> nativeShapes;
-		std::vector<RE::NiPointer<RE::BSMultiStreamInstanceTriShape>> proxies;
+		// Bucket membership changes at frame end, before a replacement snapshot is published.
+		std::vector<ProxyGroup> proxyGroups;
 	};
 
-	/** @brief Stops preparation and releases engine references while lifecycle locks remain alive. */
+	/** @brief Joins workers and releases engine references before the lifecycle mutex is destroyed. */
 	~GrassBucketStore();
 
-	/** @brief Refreshes the settings used for new captures and this frame's LOD selection. */
+	/** @brief Updates this frame's upload and LOD settings. */
 	void BeginFrame(const FrameParams& params)
 	{
 		frameParams = params;
@@ -64,84 +64,81 @@ public:
 	/** @brief Uploads admitted slices without changing this frame's bucket membership. */
 	void UploadPending(ID3D11DeviceContext* ctx);
 
-	/** @brief Releases proxies after their queued frame passes finish, then applies completed events. */
+	/** @brief Applies completed lifecycle events and publishes the next frame's proxies. */
 	void EndFrame();
 
-	/** @brief Registers a model before admitting its existing instance groups. */
+	/** @brief Registers a model and queues captures of its existing instance groups. */
 	void RegisterModel(RE::BSMultiStreamInstanceTriShape* shape, const char* modelPath);
 
-	/** @brief Copies a registered engine group into the ordered preparation queue. */
+	/** @brief Copies an engine group's instance data for background packing. */
 	void CaptureEngineGroup(RE::BSMultiStreamInstanceTriShape* shape, uint32_t engineGroup);
 
-	/** @brief Captures newly attached cache groups without duplicating groups already in preparation. */
+	/** @brief Captures attached cache groups that have not already been queued. */
 	void CaptureQueuedGroups();
 
-	/** @brief Retires an engine group's coverage and stages removal at the next frame boundary. */
+	/** @brief Removes the engine group, invalidates its captures, and queues render-thread removal. */
 	void RemoveEngineGroup(RE::BSMultiStreamInstanceTriShape* shape, uint32_t engineGroup,
 		void (*remove)(RE::BSMultiStreamInstanceTriShape*, uint32_t));
 
-	/** @brief Stages a shape's destruction for the render thread. */
+	/** @brief Invalidates a shape's registration and queues removal of its captured chunks. */
 	void StageRemoval(RE::BSMultiStreamInstanceTriShape* shape);
 
-	/** @brief Returns the latest published snapshot, valid on any thread until the frame after the next publish. */
+	/** @brief Returns the current draw snapshot; consume its bucket pointers before frame-end updates. */
 	const CullSnapshot* GetCullSnapshot() const { return publishedSnapshot.load(std::memory_order_acquire); }
 
 	/** @brief Publishes the proxy set after frame-end lifecycle changes. */
 	void PublishCullSnapshot();
 
-	/** @brief Invalidates direct native submission when a bucket enters or leaves optimized rendering. */
-	void SetOptimizedReady(GrassBucket& bucket, bool ready);
+	/** @brief Looks up and retains a registration under the lifecycle mutex. */
+	std::shared_ptr<GrassShapeRegistration> FindShape(RE::BSMultiStreamInstanceTriShape* shape);
 
-	/** @brief Returns the bucket that owns this render proxy. */
-	GrassBucket* FindBucket(const RE::BSGeometry* shape);
-
-	/** @brief Retains the current registration while holding the lifecycle lock. */
-	std::shared_ptr<GrassShape> FindShape(RE::BSMultiStreamInstanceTriShape* shape);
-
-	/** @brief Returns whether this frame's optimized draw covers every native instance. */
-	static bool IsShapeOptimized(const GrassShape& shape);
-
-	/** @brief IsShapeOptimized for a published shape, cached per frame and per engine group count. */
-	static bool IsShapeOptimized(const CullSnapshot::NativeShape& native, uint32_t frame);
-
-	/** @brief Returns whether this native group has resident records in a ready bucket. */
-	static bool IsGroupOptimized(const GrassShape& shape, uint32_t group);
-
-	/** @brief Resolves LODs and refreshes conservative bounds before CPU culling. */
+	/** @brief Resolves LOD meshes and updates bounds padding before culling. */
 	void PrepareBucket(GrassBucket& bucket);
 
-	/** @brief Recomputes a bucket's padded union AABB over all of its slices. */
-	void UpdateCoarseBounds(GrassBucket& b);
+	/** @brief Adds uploaded slices to cached runs, rebuilding invalidated runs. */
+	void MergeSlicesIntoRuns(GrassBucket& bucket);
 
-	/** @brief Extends cached runs with uploaded slices and rebuilds invalidated runs. */
-	void MergeSlicesIntoRuns(GrassBucket& b);
+	/** @brief Recomputes the coarse bounds from the live cached runs. */
+	static void RecomputeCoarseBounds(GrassBucket& bucket);
 
-	/** @brief Uploads changed cull groups and returns false if allocation fails. */
-	bool UploadCullGroups(GrassBucket& b, ID3D11DeviceContext* ctx);
+	/** @brief Uploads changed cull groups up to the bucket's available capacity. */
+	void UploadCullGroups(GrassBucket& bucket, ID3D11DeviceContext* ctx);
 
-	/** @brief Assigns visible buckets reusable output pages without copying previous contents. */
+	/** @brief Allocates shared cull output and assigns each visible bucket a range. */
 	bool PrepareCullOutputs(std::span<GrassBucket*> visible);
 
 	/** @brief Shared indirect arguments for the current visible-bucket order. */
 	std::unique_ptr<Buffer> arguments;
 
-	std::unordered_map<BucketKey, GrassBucket, BucketKeyHash> buckets;
+	/** @brief Compacted records written by culling and read by the draws. */
+	GrassCullBuffers cullOutput;
+
+	/** @brief Packed source records of every bucket, read by culling and the vertex shader. */
+	ID3D11ShaderResourceView* InstancePoolSRV() const { return instancePool.buffer ? instancePool.buffer->srv.get() : nullptr; }
+	/** @brief Shared cull groups read by culling and the vertex shader. */
+	ID3D11ShaderResourceView* GroupPoolSRV() const { return groupPool.buffer ? groupPool.buffer->srv.get() : nullptr; }
+
+	/** @brief Creates a shader-readable structured buffer with its SRV; throws on failure. */
+	static std::unique_ptr<Buffer> CreateStructuredBuffer(uint32_t count, uint32_t stride, const char* name);
+
+	// Records address groups relative to their bucket, so the group pool is bounded only by the 128 MB every device supports;
+	// raw views address at most 2^27 DWORDs of instances.
+	inline static constexpr uint32_t kMaxPoolGroups = (128u << 20) / sizeof(CullGroup);
+	inline static constexpr uint32_t kMaxPoolInstances = (1u << 27) * 4 / kSourceStride;
+
+	std::unordered_map<GrassBucketKey, GrassBucket, GrassBucketKeyHash> buckets;
 	GrassMeshLibrary meshLibrary;
 
 private:
-	/** @brief Interleaves a packed cell's coordinates so nearby cells sort together. */
-	static uint64_t MortonCode(uint64_t cell);
-
-	ankerl::unordered_dense::map<const RE::BSGeometry*, GrassBucket*> proxyBuckets;
-
 	struct Removal
 	{
-		std::shared_ptr<GrassShape> shape;
+		std::shared_ptr<GrassShapeRegistration> shape;
 		uint32_t engineGroup = UINT32_MAX;
-		std::shared_ptr<GrassGroup> lifetime;
+		std::shared_ptr<GrassGroupLifetime> lifetime;
 	};
 	using PendingEvent = std::variant<PendingCapture, Removal>;
 
+	/** @brief Locks the engine's shared instance-group table. */
 	class EngineGroupLock
 	{
 	public:
@@ -154,90 +151,116 @@ private:
 		inline static REL::Relocation<volatile long*> word{ REL::RelocationID(524610, 411250) };
 	};
 
-	static void PackInstances(GrassChunk& slice, const void* sourceData);
+	/** @brief Packs native 32-byte records into the layout decoded by Common/GrassInstance.hlsli. */
+	static void PackInstances(GrassInstanceSlice& slice, const void* sourceData);
 
 	static std::optional<PendingCapture> CaptureMetadata(RE::BSMultiStreamInstanceTriShape* shape, uint32_t count, uint32_t stride);
 
-	// The caller holds pendingMutex and EngineGroupLock while copying native group data.
-	void CaptureEngineGroup(const std::shared_ptr<GrassShape>& registration, uint32_t engineGroup);
+	// Requires pendingMutex and EngineGroupLock while reading native group data.
+	void CaptureEngineGroup(const std::shared_ptr<GrassShapeRegistration>& registration, uint32_t engineGroup);
 
-	// The caller holds pendingMutex while updating native group lifetimes.
+	// Requires pendingMutex while invalidating lifetimes and updating the queues.
 	void QueueEvent(PendingEvent event);
 
+	/** @brief Packs current captures on the worker and transfers them to readyEvents. */
 	void PreparePending();
 
+	/** @brief Applies ready events and prunes detached chunks on the render thread. */
 	void DrainPending();
 
-	void ApplyCapture(PendingCapture& capture, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassChunk>>& retired);
+	void ApplyCapture(PendingCapture& capture, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassInstanceSlice>>& retired);
 
-	void ApplyRemoval(const Removal& removal, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassChunk>>& retired);
+	void ApplyRemoval(const Removal& removal, std::unordered_set<GrassBucket*>& affected, std::vector<std::unique_ptr<GrassInstanceSlice>>& retired);
 
-	void AppendSlice(GrassBucket& bucket, GrassChunk& chunk);
+	void AppendSlice(GrassBucket& bucket, GrassInstanceSlice& chunk);
 
 	/** @brief Removes detached chunk references and repairs the bucket's resident prefixes. */
 	void PruneSlices(GrassBucket& bucket);
 
-	void MigrateShapeSlices(GrassBucket& source, GrassBucket& destination, GrassShape& shape);
+	/** @brief Removes a slice's groups from its cached run, emptying the run once none remain. */
+	static void RetireRunGroups(GrassBucket& bucket, uint32_t firstGroup, uint32_t groupCount);
+
+	void MigrateShapeSlices(GrassBucket& source, GrassBucket& destination, GrassShapeRegistration& shape);
 
 	void EraseBucket(GrassBucket& bucket);
 
-	void UpdateShapeResidency(const GrassChunk& slice, bool resident);
-
-	// Bound every instance allocation by D3D11's 32-bit buffer byte width.
-	inline static constexpr uint32_t kMaxBucketInstances = UINT32_MAX / kSourceStride;
 	static uint32_t ReservedInstanceCapacity(uint32_t needed);
-	static uint32_t GrownInstanceCapacity(uint32_t current, uint32_t needed);
 	static bool CanReduceInstanceCapacity(uint32_t capacity, uint32_t needed);
 
-	void AdoptBucketBuffers(GrassBucket& b, GrassSourceBuffers& replacement, ID3D11DeviceContext* ctx);
+	/** @brief Starts creating a pool buffer with room for `extra` more elements off the render thread, unless one is
+	    already pending or `maxCapacity` cannot fit them. */
+	void RequestPoolGrowth(const GrassPool& pool, std::shared_ptr<GrassPoolGrowth>& growth, uint32_t extra, uint32_t minCapacity, uint32_t maxCapacity,
+		std::unique_ptr<Buffer> (*create)(uint32_t));
 
-	/** @brief Creates buffers of `capacity` on the allocation thread, or adopts a finished allocation that fits the resident data. Returns true when buffers were adopted this call. */
-	bool ResizeBucketAsync(GrassBucket& b, uint32_t capacity, ID3D11DeviceContext* ctx);
+	/** @brief Adopts a finished pool buffer, copying every existing range to the same offset. */
+	static void AdoptPoolGrowth(GrassPool& pool, std::shared_ptr<GrassPoolGrowth>& growth, uint32_t stride, ID3D11DeviceContext* ctx);
 
-	void QueueAllocation(std::shared_ptr<BucketAllocation> job);
-
-	void RetireSlices(std::vector<std::unique_ptr<GrassChunk>>& slices);
+	void RetireSlices(std::vector<std::unique_ptr<GrassInstanceSlice>>& slices);
 
 	static std::unique_ptr<Buffer> CreateRawBuffer(uint64_t bytes, uint32_t bindings, uint32_t misc, const char* name);
 
-	static bool CreateBucketSourceBuffers(GrassSourceBuffers& b, uint32_t capacity);
+	static std::unique_ptr<Buffer> CreateInstancePoolBuffer(uint32_t capacity);
+	static std::unique_ptr<Buffer> CreateGroupPoolBuffer(uint32_t capacity);
 
-	static bool CreateBucketCullScratch(GrassCullBuffers& b, uint32_t capacity, uint32_t tiers);
+	static bool CreateCullOutput(GrassCullBuffers& buffers, uint32_t capacity);
 
-	bool EnsureArgsCapacity(uint32_t buckets);
+	bool EnsureArgsCapacity(uint32_t count);
 
-	/** @brief Slides resident slices down over removal gaps within a per-frame byte budget, keeping their groups pointed at the moved data. Returns true once no gaps remain. */
-	bool DefragBucket(GrassBucket& b, uint64_t& budgetBytes, ID3D11DeviceContext* ctx);
-
-	bool MoveInstances(GrassBucket& b, uint32_t oldFirst, uint32_t newFirst, uint32_t count, ID3D11DeviceContext* ctx);
-
-	void AppendNewSlices(GrassBucket& bucket, uint64_t& budgetBytes, ID3D11DeviceContext* ctx);
-	void UploadSlices(GrassBucket& bucket, uint32_t from, uint32_t to, uint32_t prefix, ID3D11DeviceContext* ctx);
+	/** @brief Returns the end slice index that fits the budget, and outputs the selected byte count. */
+	static uint32_t SelectUploadSlices(const GrassBucket& bucket, uint64_t& budgetBytes, uint64_t& uploadBytes);
+	/** @brief Uploads pending slices within the frame's budget through one staging map, into per-slice pool ranges. */
+	void UploadNewSlices(ID3D11DeviceContext* ctx);
+	/** @brief Maps room for `bytes` in the staging ring and outputs its offset; null when it cannot be mapped. */
+	uint8_t* MapUploadStaging(ID3D11DeviceContext* ctx, uint64_t bytes, uint64_t& offset);
+	/** @brief Queues a staging-to-pool copy, extending the previous copy when both ranges continue it. */
+	void AddUploadCopy(uint64_t stagingOffset, uint32_t poolOffset, uint32_t count);
 
 	FrameParams frameParams;
 	uint32_t argsCapacity = 0;
-	std::vector<std::unique_ptr<GrassCullBuffers>> outputPages;
-	uint64_t outputReserveBytes = 0;
-	uint32_t outputReserveFrames = 0;
-	std::unordered_set<GrassBucket*> maintenance;
+	std::unordered_set<GrassBucket*> pendingUploads;
 	std::unique_ptr<BS::thread_pool<>> allocator;
 
-	std::vector<PendingEvent> pendingEvents;
+	std::vector<PendingCapture> pendingCaptures;
 	std::vector<PendingEvent> readyEvents;
-	std::unordered_map<RE::BSMultiStreamInstanceTriShape*, std::shared_ptr<GrassShape>> shapes;
-	std::vector<std::shared_ptr<GrassShape>> activeShapes;
+	std::unordered_map<RE::BSMultiStreamInstanceTriShape*, std::shared_ptr<GrassShapeRegistration>> shapes;
+	std::vector<std::shared_ptr<GrassShapeRegistration>> activeShapes;
 
+	// Protects registrations, group lifetimes, and both event queues.
 	std::mutex pendingMutex;
 	bool preparing = false;
 	bool stopping = false;
 	bool snapshotDirty = true;
 
 	std::vector<RE::NiPointer<RE::BSMultiStreamInstanceTriShape>> retiredProxies;
-	// Like retiredProxies, the previous snapshot outlives one publish for readers still finishing the last frame.
+	// Retain the previous snapshot across one publication for readers finishing the last frame.
 	std::unique_ptr<const CullSnapshot> cullSnapshot;
 	std::unique_ptr<const CullSnapshot> retiredSnapshot;
 	std::atomic<const CullSnapshot*> publishedSnapshot{ nullptr };
 
-	std::unique_ptr<Buffer> compactionScratch;
+	// Stage new slices in a dynamic ring, then copy them into the shared pool.
+	std::unique_ptr<Buffer> uploadStaging;
+	uint64_t uploadStagingOffset = 0;  // End of the bytes written since the ring was last discarded.
+
+	struct UploadBatch
+	{
+		GrassBucket* bucket;
+		uint32_t endSlice;
+		uint32_t instances;
+	};
+	std::vector<UploadBatch> uploadBatches;
+
+	struct UploadCopy
+	{
+		uint64_t stagingOffset;
+		uint32_t poolOffset;
+		uint32_t count;
+	};
+	std::vector<UploadCopy> uploadCopies;
+
+	GrassPool instancePool;
+	GrassPool groupPool;
+
+	std::shared_ptr<GrassPoolGrowth> instancePoolGrowth;
+	std::shared_ptr<GrassPoolGrowth> groupPoolGrowth;
 	std::unique_ptr<BS::thread_pool<>> preparation;
 };

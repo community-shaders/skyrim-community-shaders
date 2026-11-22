@@ -28,12 +28,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FogAmount,
 	DALCMode,
 	DisableInWorldMap,
-	DisableInLoadingScreen)
+	DisableInLoadingScreen,
+	EnableReflectionFallback,
+	ReflectionFallbackDistance)
 
 void IBL::DrawSettings()
 {
-	const Util::LockedSection enbLock(IsManagedByENB(),
+	const bool managedByENB = IsManagedByENB();
+	const Util::LockedSection enbLock(managedByENB,
 		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const Util::DefaultsWhileActive<Settings> shownDefaults(settings, managedByENB);
 
 	ImGui::Checkbox(T(TKEY("enable_ibl"), "Enable IBL"), (bool*)&settings.EnableIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -85,6 +89,14 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("use_static_ibl_tooltip"), "Uses pre-baked static IBL cubemap textures for objects rendered outside the game world (e.g. inventory items, loading screens)."));
 	}
+	ImGui::Checkbox(T(TKEY("enable_reflection_fallback"), "Reflection Cubemap Distance Fallback"), (bool*)&settings.EnableReflectionFallback);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("enable_reflection_fallback_tooltip"), "Fades the dynamic environment IBL toward the ReflectionsCubemap-only IBL at distance, matching Water's reflection cubemap distance fallback."));
+	}
+	ImGui::SliderFloat(T(TKEY("reflection_fallback_distance"), "Reflection Fallback Distance"), &settings.ReflectionFallbackDistance, 0.0f, 100000.0f, "%.0f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("reflection_fallback_distance_tooltip"), "Distance at which IBL is fully transitioned to the ReflectionsCubemap-only contribution."));
+	}
 	ImGui::SliderFloat(T(TKEY("fog_mix"), "Fog Mix"), &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("fog_mix_tooltip"), "Blends the fog color toward the IBL ambient color.\n0 = vanilla fog, 1 = fog fully tinted by IBL."));
@@ -123,21 +135,25 @@ void IBL::RestoreDefaultSettings()
 IBL::PerFrame IBL::GetCommonBufferData() const
 {
 	const bool sceneDisabled = IsDisabledForCurrentScene();
+	const bool managedByENB = IsManagedByENB();
+	const Settings source = managedByENB ? Settings{} : settings;
 	PerFrame data = {
-		.EnableIBL = sceneDisabled ? 0u : settings.EnableIBL,
-		.PreserveFogLuminance = settings.PreserveFogLuminance,
-		.UseStaticIBL = settings.UseStaticIBL,
-		.DALCAmount = settings.DALCAmount,
-		.EnvIBLScale = settings.EnvIBLScale,
-		.SkyIBLScale = settings.SkyIBLScale,
-		.EnvIBLSaturation = settings.EnvIBLSaturation,
-		.SkyIBLSaturation = settings.SkyIBLSaturation,
-		.FogAmount = settings.FogAmount,
-		.DALCMode = settings.DALCMode,
+		.EnableIBL = sceneDisabled ? 0u : source.EnableIBL,
+		.PreserveFogLuminance = source.PreserveFogLuminance,
+		.UseStaticIBL = source.UseStaticIBL,
+		.DALCAmount = source.DALCAmount,
+		.EnvIBLScale = source.EnvIBLScale,
+		.SkyIBLScale = source.SkyIBLScale,
+		.EnvIBLSaturation = source.EnvIBLSaturation,
+		.SkyIBLSaturation = source.SkyIBLSaturation,
+		.FogAmount = source.FogAmount,
+		.DALCMode = source.DALCMode,
+		.EnableReflectionFallback = source.EnableReflectionFallback,
+		.ReflectionFallbackDistance = source.ReflectionFallbackDistance,
 		.ENBSkyFalloff = globals::features::effects11.OwnsFeature(E11Handoff::Feature::IBL)
 	};
 
-	if (!sceneDisabled && IsManagedByENB()) {
+	if (!sceneDisabled && managedByENB) {
 		auto& settingManager = SettingManager::GetSingleton();
 		data.EnableIBL = Util::IsInterior() ? 0u : 1u;
 		data.EnvIBLScale = 0.0f;

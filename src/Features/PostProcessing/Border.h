@@ -26,8 +26,6 @@ struct Border : public PostProcessFeature
 	};
 	eastl::unique_ptr<ConstantBuffer> borderCB = nullptr;
 
-	eastl::unique_ptr<Texture2D> texOutput = nullptr;
-
 	winrt::com_ptr<ID3D11ComputeShader> borderCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> borderClearMVCS = nullptr;
 
@@ -43,7 +41,6 @@ struct Border : public PostProcessFeature
 
 	virtual void Draw(TextureInfo&) override;
 
-	/// Clear motion vectors in border areas before frame generation copies them.
-	/// Must be called before CopySharedD3D12Resources to prevent FrameGen artifacts.
+	/// Clear the copied frame-generation vectors after the border color is committed.
 	void ClearMotionVectorsForFrameGen();
 };

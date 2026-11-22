@@ -34,7 +34,12 @@ float3 TriDither(float2 screenPos, uint frameCount)
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
+#if defined(BROADCAST_FIRST_TEXEL)
+	// Engine luminance targets hold the adapted luminance in .x and its tonemap reference in .y
+	return SourceTexture.Load(int3(0, 0, 0)).xxxx;
+#else
 	float3 color = SourceTexture.Load(int3(input.pos.xy, 0)).rgb;
 	color += TriDither(input.pos.xy, FrameCount) * DitherAmplitude;
 	return float4(color, 1.0);
+#endif
 }
