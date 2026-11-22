@@ -692,10 +692,17 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RunTestConditions()
+/** @brief True while in a loaded game (not the main menu) with a menu open, the things the console needs. */
+static bool CanRunConsoleCommands()
 {
 	auto ui = RE::UI::GetSingleton();
-	if (!ui || ui->menuStack.empty() || !RE::PlayerCharacter::GetSingleton())
+	auto player = RE::PlayerCharacter::GetSingleton();
+	return ui && !ui->menuStack.empty() && !ui->IsMenuOpen(RE::MainMenu::MENU_NAME) && player && player->GetParentCell();
+}
+
+void AdvancedSettingsRenderer::RunTestConditions()
+{
+	if (!CanRunConsoleCommands())
 		return;
 	RE::Console::ExecuteCommand("player.setav speedmult 1000");
 	RE::Console::ExecuteCommand("tgm");
@@ -716,7 +723,55 @@ const char* AdvancedSettingsRenderer::GetTestConditionsTooltip()
 		"  set gamehour to 12 - noon, with time paused\n"
 		"  coc whiterun - teleport to Whiterun\n"
 		"  fw 81a - force weather 81A\n"
-		"Only runs while a game is loaded and a menu is open.");
+		"Only runs in a loaded game (not the main menu) while a menu is open.");
+}
+
+namespace
+{
+	// tai and tcl are toggles, so they run once per loaded game; a repeat press must not undo them.
+	bool freezeTogglesApplied = false;
+}
+
+void AdvancedSettingsRenderer::ResetDevelopmentConditionsState()
+{
+	freezeTogglesApplied = false;
+}
+
+void AdvancedSettingsRenderer::RunDevelopmentConditions()
+{
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player || !player->GetParentCell())
+		freezeTogglesApplied = false;
+	if (!CanRunConsoleCommands())
+		return;
+	RE::Console::ExecuteCommand("player.setav speedmult 500");
+	if (!freezeTogglesApplied) {
+		RE::Console::ExecuteCommand("tai");
+		// prid 14 selects the player (form ID 0x14) so tcl cannot act on a leftover console selection
+		RE::Console::ExecuteCommand("prid 14");
+		RE::Console::ExecuteCommand("tcl");
+		freezeTogglesApplied = true;
+	}
+	EditorWindow::GetSingleton()->PauseTime();
+	RE::Console::ExecuteCommand("set gamehour to 12");
+	RE::Console::ExecuteCommand("fw 81a");
+	// Stops the idle auto-vanity camera from orbiting the player
+	if (auto* vanityDelay = RE::GetINISetting("fAutoVanityModeDelay:Camera"))
+		vanityDelay->data.f = 99999.0f;
+}
+
+const char* AdvancedSettingsRenderer::GetDevelopmentConditionsTooltip()
+{
+	return T("menu.advanced.development_conditions_tooltip",
+		"Freezes the world for development and agent use, without moving the player:\n"
+		"  player.setav speedmult 500 - move fast\n"
+		"  tai - disable AI\n"
+		"  tcl - no collision\n"
+		"  timescale 0 - time paused\n"
+		"  set gamehour to 12 - noon\n"
+		"  fw 81a - force weather 81A\n"
+		"  fAutoVanityModeDelay - stops the idle camera spin\n"
+		"Only runs in a loaded game (not the main menu) while a menu is open.");
 }
 
 void AdvancedSettingsRenderer::RenderTestingSection()
@@ -736,5 +791,9 @@ void AdvancedSettingsRenderer::RenderTestingSection()
 		if (Util::LabeledButton("##TestConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.test_conditions", "Test Conditions")))
 			RunTestConditions();
 		Util::AddTooltip(GetTestConditionsTooltip());
+
+		if (Util::LabeledButton("##DevelopmentConditions", Icons::TI(MenuIcons::kTestScene), T("menu.advanced.development_conditions", "Development Conditions")))
+			RunDevelopmentConditions();
+		Util::AddTooltip(GetDevelopmentConditionsTooltip());
 	}
 }
