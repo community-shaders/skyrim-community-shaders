@@ -1109,6 +1109,8 @@ private:
 	mutable RE::FormID cachedTargetCellId = 0;
 	mutable RE::FormID cachedTargetRegionId = 0;
 	mutable bool locationTargetsCached = false;
+	/// The resolver only matches on keys, so names are filled the first time the editor asks.
+	mutable bool locationTargetsDescribed = false;
 	mutable std::vector<LocationTarget> cachedLocationTargets;
 	mutable std::optional<std::vector<LocationTarget>> cachedLocationCatalog;
 
@@ -1177,6 +1179,9 @@ private:
 	/// FindWinningContext's search against one period and weather (0 for none).
 	std::optional<SceneContextId> FindSupplyingContext(const SettingIdentity& setting, TimeOfDayPeriod period,
 		RE::FormID weatherId) const;
+
+	/** @brief The player's location chain with only type, form key and FormID filled, for the resolver. */
+	const std::vector<LocationTarget>& GetCurrentLocationTargetKeys() const;
 
 	// --- Per-Weather helpers ---
 	/// Load weather overwrites/user settings once game data is available for SPID resolution.

@@ -9,6 +9,7 @@
 #include "NativeMenu/NativeMenu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/EditorIDCache.h"
 
 #define DLLEXPORT __declspec(dllexport)
 
@@ -93,6 +94,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			if (errors.empty()) {
 				Deferred::Hooks::Install();
 				Hooks::Install();
+				Util::EditorIDCache::Install();
 				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
 
