@@ -1230,7 +1230,7 @@ void Menu::ProcessInputEventQueue()
 					{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 					{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 					{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
-					{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
+					{ settings.OverlayToggleKey, []() { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.settings.ShowInOverlay); } },
 					{ settings.CSEditorToggleKey, []() {
 						 auto* ew = EditorWindow::GetSingleton();
 						 if (!ew)

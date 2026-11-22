@@ -438,9 +438,24 @@ namespace BrowserUI
 		ImGui::PopStyleColor();
 	}
 
-	void PageHeader(Icons::GlyphRef icon, const char* title, const char* subtitle)
+	void PageHeader(Icons::GlyphRef icon, const char* title, const char* subtitle, bool centered)
 	{
 		ImGui::AlignTextToFramePadding();
+		if (centered) {
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			float width = 0.0f;
+			if (icon)
+				width += ImGui::CalcTextSize(icon.utf8).x + spacing;
+			{
+				MenuFonts::FontRoleGuard heading(Menu::FontRole::Subheading);
+				width += ImGui::CalcTextSize(title).x;
+			}
+			if (subtitle && subtitle[0])
+				width += spacing + ImGui::CalcTextSize(subtitle).x;
+			const float x = (ImGui::GetContentRegionAvail().x - width) * 0.5f;
+			if (x > 0.0f)
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + x);
+		}
 		if (icon) {
 			Icons::FontGuard font(icon);
 			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetAccent());
