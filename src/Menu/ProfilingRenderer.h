@@ -12,16 +12,35 @@
 #include "Utils/LegitProfiler.h"
 
 /**
- * @brief Renders GPU and CPU profiling statistics, timing graphs, and per-feature timer breakdowns.
+ * @brief Renders the Profiling page, GPU and CPU profiling statistics, timing graphs, and per-feature timer breakdowns.
  *
- * Provides the Profiling page in the menu with frame time graphs, sortable
- * timing tables grouped by rendering pass, the cost chip in each feature's
- * header with its per-feature popover, and the Performance Overlay's filtered
- * render-pass graph.
+ * Provides the Profiling page in the menu: a card per tool (Pass Timings, and the Performance Overlay feature's
+ * settings) over the selected tool's panel. Pass Timings holds the frame time graphs and sortable timing tables
+ * grouped by rendering pass. Also draws the cost chip in each feature's header with its per-feature popover, and
+ * the Performance Overlay's filtered render-pass graph.
  */
 class ProfilingRenderer
 {
 public:
+	/** @brief The Profiling page's tools, one card each. */
+	enum class Tab : int
+	{
+		PassTimings,
+		PerformanceOverlay,
+		Count
+	};
+
+	/**
+	 * @brief Renders the Profiling page: a status card per tool, then the selected tool's panel.
+	 */
+	static void RenderPage();
+
+	/**
+	 * @brief Selects the Profiling page's tool, shown the next time the page is drawn.
+	 * @param tab The tool to show.
+	 */
+	static void SelectTab(Tab tab);
+
 	/** @brief Selects whether profiling displays GPU or CPU timing data. */
 	enum class TimingMode
 	{
@@ -53,6 +72,13 @@ public:
 	 * @return True when the chip was drawn.
 	 */
 	static bool RenderFeatureCostChip(const std::string& featurePrefix, float rightLimit);
+
+	/**
+	 * @brief Width RenderFeatureCostChip would draw its chip at this frame, so a header can reserve room for it.
+	 * @param featurePrefix The profiler timer name prefix identifying the feature.
+	 * @return The chip width, or 0 when the feature has no timers and no chip would be drawn.
+	 */
+	static float MeasureFeatureCostChip(const std::string& featurePrefix);
 
 	/**
 	 * @brief Checks whether any profiler timer results exist for the given feature.
@@ -95,6 +121,8 @@ public:
 
 private:
 	static inline TimingMode timingMode = TimingMode::GPU;
+	// UI state only: the Profiling page's selected tool
+	static inline Tab selectedTab = Tab::PassTimings;
 	static inline float timeSinceLastUpdate = 0.0f;
 	static inline float lastFrameTime = 0.0f;
 
@@ -194,6 +222,8 @@ private:
 	static std::string GetGroupName(std::string_view timerName);
 	/** @brief Gathers a feature's timings in the current mode, refreshing its cached statistics once a second. */
 	static FeatureTimings CollectFeatureTimings(const std::string& featurePrefix, GraphState& state);
+	/** @brief The cost chip's text: the timing mode and the feature's total average time. */
+	static std::string FeatureCostChipLabel(const FeatureTimings& timings);
 	static std::vector<legit::ProfilerTask> BuildFeatureTasks(const std::string& featurePrefix, const FeatureTimings& timings);
 	/** @brief The popover's body: mode toggle, graph, per-pass table, overlay toggle and the Profiling page link. */
 	static void RenderFeatureTimersPopover(const std::string& featurePrefix, GraphState& state, const FeatureTimings& timings);

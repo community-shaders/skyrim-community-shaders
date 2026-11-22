@@ -204,6 +204,6 @@ private:
 	static constexpr size_t MAX_STRING_LENGTH = 1000;
 	static constexpr size_t MAX_ARRAY_SIZE = 100;
 	static constexpr size_t MAX_OBJECT_SIZE = 100;
-	static constexpr double MAX_NUMERIC_VALUE = 1e6;
-	static constexpr double MIN_NUMERIC_VALUE = -1e6;
+	static constexpr double MAX_NUMERIC_VALUE = std::numeric_limits<float>::max();
+	static constexpr double MIN_NUMERIC_VALUE = std::numeric_limits<float>::lowest();
 };

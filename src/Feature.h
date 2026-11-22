@@ -17,15 +17,15 @@ struct SharedLighting;
 
 struct Feature
 {
-	// For global settings search
+	/** @brief A setting the Go To palette lists for a feature, for controls the settings catalog cannot see. */
 	struct SettingSearchEntry
 	{
-		std::string label;
-		std::string description;
-		std::function<void()> focusCallback;  // Called to focus/highlight this setting in the UI
-		std::string featureName;              // For display context
+		std::string id;                       ///< Stable per feature; keys the recent picks
+		std::string label;                    ///< Shown as the result title
+		std::string description;              ///< Extra searchable text
+		std::function<void()> focusCallback;  ///< Runs when the palette queues the feature page, before it draws; set state for the next draw rather than assume the page is open
 	};
-	// Override in features to expose settings for search
+	/** @brief Override to list settings the Go To palette should find; none by default. */
 	virtual std::vector<SettingSearchEntry> GetSettingsSearchEntries() { return {}; }
 
 	// Restart-required settings introspection. Default: none.
@@ -156,6 +156,14 @@ public:
 	virtual bool IsInMenu() const { return true; }
 
 	/**
+	 * @brief Whether the feature gets its own entry in the menu's feature list.
+	 *
+	 * False for a feature drawn inside a built-in page instead (the Performance Overlay lives on the
+	 * Profiling page). Such a feature stays in the menu everywhere else: scene settings, presets, search tools.
+	 */
+	virtual bool IsInFeatureList() const { return IsInMenu(); }
+
+	/**
 	 * Whether to print the INI version missing message when this feature is unloaded
 	 */
 	virtual bool DrawFailLoadMessage() const { return true; }
@@ -176,6 +184,12 @@ public:
 	virtual void Reset() {}
 
 	virtual void DrawSettings() {}
+
+	/** @brief Opt-in: whether the feature page shows a Debug section (see Util::DebugSection). */
+	virtual bool HasDebugSection() const { return false; }
+
+	/** @brief Draws the Debug section body; only called when HasDebugSection() is true. Use Util::DebugSection. */
+	virtual void DrawDebugSection() {}
 
 	/** @brief Draws the UI shown when this feature failed to load. */
 	virtual void DrawUnloadedUI();
@@ -209,6 +223,9 @@ public:
 
 	/** @brief Called after all game data files have been loaded. */
 	virtual void DataLoaded() {}
+
+	/** @brief Invalidates session state before loading a save or on starting a new game. */
+	virtual void GameReset() {}
 
 	/** @brief Called after loading an existing save. */
 	virtual void GameLoaded() {}

@@ -6,9 +6,11 @@
 #include "Features/PostProcessing.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "Menu/MenuIcons.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/DebugView.h"
 
 namespace
 {
@@ -71,14 +73,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void PhysicalGlare::DrawSettings()
 {
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.threshold", "Threshold"), &settings.ThresholdEV, -7.f, 23.f, "%+.2f EV100");
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.threshold", "Threshold (Neutral EV100)"), &settings.ThresholdEV, -7.f, 23.f, "%+.2f EV100");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.per_channel_brightness_threshold_for_glare_extraction_in", "Per-channel brightness threshold for glare extraction in EV100 (0 EV100 = 0.125 linear luminance)."));
+		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.per_channel_brightness_threshold_for_glare_extraction_in", "Threshold applied separately to each RGB channel before exposure. EV100 denotes equivalent neutral luminance on the Physical Sky / Linear Lighting scale: 0 EV100 = RGB 0.125 = 0.125 cd/m2 for neutral gray (K = 12.5). Colored pixels are not thresholded by luminance."));
 
 	ImGui::SliderFloat(T("feature.post_processing.physical_glare.intensity", "Intensity"), &settings.Intensity, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.overall_glare_intensity", "Overall glare intensity."));
 
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.adapt_speed", "Adapt Speed"), &settings.AdaptSpeed, 0.5f, 10.f, "%.1f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.how_fast_the_glare_adapts_to_brightness_changes", "How fast the glare adapts to brightness changes."));
+
+	ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_aperture", "Aperture"));
 	{
 		const char* modeNames[] = {
 			T("feature.post_processing.physical_glare.aperture_mode_lens", "Lens (N-polygon)"),
@@ -99,6 +106,8 @@ void PhysicalGlare::DrawSettings()
 		if (cam)
 			fStop = cam->FNumber;
 
+		if (cam)
+			DrawCameraControlledNote();
 		ImGui::BeginDisabled(cam != nullptr);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureBlades, 1.0f);
@@ -119,7 +128,29 @@ void PhysicalGlare::DrawSettings()
 			settings.ApertureBlades = apertureBlades;
 			settings.FStop = fStop;
 		}
+	}
 
+	{
+		const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
+		const bool camLens = cam && settings.ApertureMode == 0;
+		float apertureRotation = settings.ApertureRotation;
+		if (camLens)
+			apertureRotation = cam->ApertureBladeRotationDeg;
+
+		ImGui::BeginDisabled(camLens);
+		{
+			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureRotation, 1.0f);
+			ImGui::SliderFloat(T("feature.post_processing.physical_glare.aperture_rotation", "Aperture Rotation"), &apertureRotation, -180.f, 180.f, "%.1f deg");
+		}
+		ImGui::EndDisabled();
+		if (!camLens && !SceneWidgetInterceptor::IsArmed())
+			settings.ApertureRotation = apertureRotation;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.rotation_angle_of_the_aperture", "Rotation angle of the aperture."));
+	}
+
+	if (settings.ApertureMode == 0) {
+		ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_lens_imperfections", "Lens Imperfections"));
 		ImGui::SliderFloat(T("feature.post_processing.physical_glare.spherical_aberration", "Spherical Aberration"), &settings.SphericalAberration, 0.f, 100.f, "%.1f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -168,26 +199,8 @@ void PhysicalGlare::DrawSettings()
 		}
 	}
 
-	{
-		const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
-		const bool camLens = cam && settings.ApertureMode == 0;
-		float apertureRotation = settings.ApertureRotation;
-		if (camLens)
-			apertureRotation = cam->ApertureBladeRotationDeg;
-
-		ImGui::BeginDisabled(camLens);
-		{
-			const SceneWidgetInterceptor::ProxyScope proxy(&settings.ApertureRotation, 1.0f);
-			ImGui::SliderFloat(T("feature.post_processing.physical_glare.aperture_rotation", "Aperture Rotation"), &apertureRotation, -180.f, 180.f, "%.1f deg");
-		}
-		ImGui::EndDisabled();
-		if (!camLens && !SceneWidgetInterceptor::IsArmed())
-			settings.ApertureRotation = apertureRotation;
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.rotation_angle_of_the_aperture", "Rotation angle of the aperture."));
-	}
-
 	if (settings.ApertureMode == 1) {
+		ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_eye_scattering", "Eye Scattering"));
 		ImGui::SliderFloat(T("feature.post_processing.physical_glare.scatter_strength", "Scatter Strength"), &settings.ScatterStrength, 0.f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.physical_glare.opacity_of_scatter_particles_in_pupil_mode_paper", "Opacity of scatter particles in pupil mode (paper section 2.4).\n0 = transparent (no scatter), 1 = fully opaque."));
@@ -224,6 +237,7 @@ void PhysicalGlare::DrawSettings()
 				ImGui::TextUnformatted(T("feature.post_processing.physical_glare.number_of_angular_harmonics_more_more_spikes_finer", "Number of angular harmonics. More = more spikes, finer detail."));
 		}
 
+		ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_lens_fibers", "Lens Fibers"));
 		ImGui::SliderInt(T("feature.post_processing.physical_glare.suture_branches", "Suture Branches"), &settings.SutureBranches, 0, 8);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
@@ -284,10 +298,24 @@ void PhysicalGlare::DrawSettings()
 		}
 	}
 
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.adapt_speed", "Adapt Speed"), &settings.AdaptSpeed, 0.5f, 10.f, "%.1f");
+	ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_diffraction", "Diffraction"));
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.fresnel_exponent", "Fresnel Exponent"), &settings.FresnelExponent, 0.f, 80.f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.how_fast_the_glare_adapts_to_brightness_changes", "How fast the glare adapts to brightness changes."));
+		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.fresnel_phase_at_aperture_edge_radians_paper_eq", "Fresnel phase at aperture edge (radians). Paper eq 2.12: e^(i*pi/(lambda*z) * r^2).\nHigher = more Fresnel rings. 0 = pure Fraunhofer (no rings)."));
 
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.chromatic_spread", "Chromatic Spread"), &settings.ChromaticSpread, 0.f, 3.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.multiplier_on_wavelength_dependent_uv_scaling_paper_section", "Multiplier on wavelength-dependent UV scaling (paper section 2.3: lambda/575nm).\n1.0 = physically correct. Higher = more rainbow spread. 0 = monochrome."));
+
+	ImGui::SliderFloat(T("feature.post_processing.physical_glare.kernel_scale", "Kernel Scale"), &settings.KernelScale, 0.01f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			T("feature.post_processing.physical_glare.scale_of_the_glare_kernel_size_on_screen",
+				"Scale of the glare kernel size on screen.\n"
+				"1.0 = default. Smaller = more concentrated glare.\n"
+				"Does not affect aperture physics."));
+
+	ImGui::SeparatorText(T("feature.post_processing.physical_glare.section_quality", "Quality"));
 	{
 		const char* resNames[] = { "128", "256", "512", "1024" };
 		int resValues[] = { 128, 256, 512, 1024 };
@@ -315,22 +343,6 @@ void PhysicalGlare::DrawSettings()
 				"0.0  = 100%% (maximum sharpness, may wrap at edges).\n"
 				"Lower = sharper glare on high-res screens."));
 
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.kernel_scale", "Kernel Scale"), &settings.KernelScale, 0.01f, 1.f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text(
-			T("feature.post_processing.physical_glare.scale_of_the_glare_kernel_size_on_screen",
-				"Scale of the glare kernel size on screen.\n"
-				"1.0 = default. Smaller = more concentrated glare.\n"
-				"Does not affect aperture physics."));
-
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.fresnel_exponent", "Fresnel Exponent"), &settings.FresnelExponent, 0.f, 80.f, "%.1f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.fresnel_phase_at_aperture_edge_radians_paper_eq", "Fresnel phase at aperture edge (radians). Paper eq 2.12: e^(i*pi/(lambda*z) * r^2).\nHigher = more Fresnel rings. 0 = pure Fraunhofer (no rings)."));
-
-	ImGui::SliderFloat(T("feature.post_processing.physical_glare.chromatic_spread", "Chromatic Spread"), &settings.ChromaticSpread, 0.f, 3.f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextUnformatted(T("feature.post_processing.physical_glare.multiplier_on_wavelength_dependent_uv_scaling_paper_section", "Multiplier on wavelength-dependent UV scaling (paper section 2.3: lambda/575nm).\n1.0 = physically correct. Higher = more rainbow spread. 0 = monochrome."));
-
 	if (ImGui::CollapsingHeader(T("feature.post_processing.physical_glare.psf_shaping", "PSF Shaping"))) {
 		ImGui::SliderFloat(T("feature.post_processing.physical_glare.psf_sharpness", "PSF Sharpness"), &settings.PSFSharpness, 0.2f, 1.f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
@@ -347,11 +359,17 @@ void PhysicalGlare::DrawSettings()
 					"Threshold to remove low-level FFT noise from the PSF.\n"
 					"Paper default: 0.001. Higher = cleaner glare wings."));
 	}
+}
 
-	if (Util::ShowDebugSections() && texGlarePacked) {
-		ImGui::SeparatorText(T("feature.post_processing.physical_glare.debug", "Debug"));
-		ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
+void PhysicalGlare::DrawDebugSection()
+{
+	Util::SectionCard card("##PhysicalGlarePsf", ICON_TI_SPARKLES, T("feature.post_processing.physical_glare.debug_card_psf", "Glare Kernel"));
+	if (!outputReady || !texGlarePacked || !texGlarePacked->srv) {
+		Util::SettingHint(T("feature.post_processing.physical_glare.debug_no_kernel", "The glare kernel has not been generated yet."), false);
+		return;
 	}
+	Util::SettingHint(T("feature.post_processing.physical_glare.debug_kernel_hint", "The packed point spread function the glare is convolved with."), false);
+	ImGui::Image(texGlarePacked->srv.get(), { 256.f, 256.f });
 }
 
 void PhysicalGlare::RestoreDefaultSettings()
@@ -371,10 +389,6 @@ void PhysicalGlare::SaveSettings(json& o_json)
 
 void PhysicalGlare::CreateFFTTextures(uint resolution)
 {
-	currentFFTResolution = resolution;
-	psfDirty = true;
-	apertureDirty = true;
-
 	D3D11_TEXTURE2D_DESC texDesc = {
 		.Width = resolution,
 		.Height = resolution,
@@ -428,50 +442,83 @@ void PhysicalGlare::CreateFFTTextures(uint resolution)
 	texGlarePacked = eastl::make_unique<Texture2D>(packedDesc);
 	texGlarePacked->CreateSRV(srvDesc);
 	texGlarePacked->CreateUAV(uavDesc);
+
+	currentFFTResolution = resolution;
+	psfDirty = true;
+	apertureDirty = true;
+}
+
+void PhysicalGlare::ReleaseFFTTextures()
+{
+	for (auto& channel : texFFT)
+		for (auto& texture : channel)
+			texture.reset();
+	for (auto& texture : texPSF_FFT)
+		texture.reset();
+	texApertureBase.reset();
+	texGlarePacked.reset();
+	currentFFTResolution = 0;
+	outputReady = false;
+}
+
+bool PhysicalGlare::EnsureTargets(uint resolution)
+{
+	if (texOutput && currentFFTResolution == resolution)
+		return true;
+
+	const auto now = std::chrono::steady_clock::now();
+	if (now < nextTargetAttempt)
+		return false;
+
+	try {
+		if (!texOutput) {
+			auto gameTexMainCopy = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+
+			D3D11_TEXTURE2D_DESC texDesc;
+			gameTexMainCopy.texture->GetDesc(&texDesc);
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+			};
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MipSlice = 0 }
+			};
+
+			texDesc.MipLevels = 1;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			texDesc.MiscFlags = 0;
+
+			auto output = eastl::make_unique<Texture2D>(texDesc, "PostProcessing::PhysicalGlare::Output");
+			output->CreateSRV(srvDesc);
+			output->CreateUAV(uavDesc);
+			texOutput = std::move(output);
+		}
+
+		if (currentFFTResolution != resolution) {
+			ReleaseFFTTextures();
+			CreateFFTTextures(resolution);
+		}
+		return true;
+	} catch (const std::exception& e) {
+		ReleaseFFTTextures();
+		logger::error("[PostProcessing] Could not create Physical Glare targets: {}", e.what());
+		nextTargetAttempt = now + std::chrono::seconds(5);
+		return false;
+	}
 }
 
 void PhysicalGlare::SetupResources()
 {
-	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
 	logger::debug("PhysicalGlare: Creating buffers...");
 	{
 		glareCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<GlareCB>());
-	}
-
-	logger::debug("PhysicalGlare: Creating FFT textures...");
-	{
-		currentFFTResolution = NormaliseFFTResolution(settings.FFTResolution);
-		CreateFFTTextures(currentFFTResolution);
-	}
-
-	logger::debug("PhysicalGlare: Creating output texture...");
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc);
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateUAV(uavDesc);
 	}
 
 	logger::debug("PhysicalGlare: Creating samplers...");
@@ -530,7 +577,6 @@ void PhysicalGlare::ClearShaderCache()
 	psfDirty = true;
 	apertureDirty = true;
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/PhysicalGlare");
 	CompileComputeShaders();
 }
 
@@ -891,13 +937,12 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 		}))
 		return;
 
-	state->BeginPerfEvent("Physical Glare");
-
-	// Handle FFT resolution change
-	uint targetRes = NormaliseFFTResolution(settings.FFTResolution);
-	if (targetRes != currentFFTResolution) {
-		CreateFFTTextures(targetRes);
+	if (!EnsureTargets(NormaliseFFTResolution(settings.FFTResolution))) {
+		outputReady = false;
+		return;
 	}
+
+	state->BeginPerfEvent("Physical Glare");
 
 	// Cinematic Camera adapter: effective settings carry the unified aperture
 	// while Lens mode is active; saved settings stay untouched.

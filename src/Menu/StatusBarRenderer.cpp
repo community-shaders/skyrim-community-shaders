@@ -104,13 +104,16 @@ namespace
 		return clicked;
 	}
 
-	/** @brief Icon button of the bar's left group: eased hover / press / selected fill, glyph larger than the bar's text glyphs. */
-	bool NavButton(Row& row, const char* id, Icons::GlyphRef glyph, const char* tooltip, bool selected)
+	/**
+	 * @brief Icon button of the bar's left group: eased hover / press / selected fill, glyph larger than the bar's text glyphs.
+	 * @param caption Small text under the glyph, or null.
+	 */
+	bool NavButton(Row& row, const char* id, Icons::GlyphRef glyph, const char* tooltip, bool selected, const char* caption = nullptr)
 	{
 		const float size = NavButtonSize();
 		row.Place(size);
 		// The help button's helper; it pads the glyph box by FramePadding.y each side
-		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected);
+		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected, caption);
 		row.Advance(0.0f);
 		return clicked;
 	}
@@ -130,13 +133,17 @@ namespace
 	void NavGroup(Row& row, bool trailingDivider = true)
 	{
 		// Divider adds the gap on both sides, so each divider sits midway between its neighbours
-		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip) {
-			if (NavButton(row, widgetId, Icons::TI(glyph), tooltip, FeatureListRenderer::IsPageOpen(id)))
+		const auto page = [&](std::string_view id, const char* widgetId, const char* glyph, const char* tooltip, const char* caption = nullptr) {
+			if (NavButton(row, widgetId, Icons::TI(glyph), tooltip, FeatureListRenderer::IsPageOpen(id), caption))
 				FeatureListRenderer::RequestPage(id);
 		};
 		page(MenuPageIds::kSettings, "##StatusSettings", MenuIcons::kSettings, T("menu.features.settings", "Settings"));
 		Divider(row);
-		page(MenuPageIds::kProfiling, "##StatusProfiling", MenuIcons::kProfiling, T("menu.features.profiling", "Profiling"));
+		// The overlay toggle key under the icon: the Performance Overlay is managed on this page. None when unbound.
+		const auto& overlayToggleKey = globals::menu->GetSettings().OverlayToggleKey;
+		const std::string overlayKey = overlayToggleKey.empty() ? std::string() : Util::Input::KeyIdToString(overlayToggleKey);
+		page(MenuPageIds::kProfiling, "##StatusProfiling", MenuIcons::kProfiling,
+			T("menu.status.profiling_tooltip", "Performance Metrics & Overlay"), overlayKey.c_str());
 		if (trailingDivider)
 			Divider(row);
 	}

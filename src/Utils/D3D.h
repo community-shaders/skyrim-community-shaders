@@ -110,7 +110,7 @@ namespace Util
 	};
 
 	/**
-	 * @brief Compile an HLSL shader from file and create the appropriate D3D11 shader object.
+	 * @brief Compile an HLSL shader from file (or load it from the persistent shader store) and create the matching D3D11 shader object.
 	 * @param FilePath Path to the HLSL source file.
 	 * @param Defines Preprocessor macro name/value pairs to pass to the compiler.
 	 * @param ProgramType Shader model target (e.g. "ps_5_0", "vs_5_0", "cs_5_0").

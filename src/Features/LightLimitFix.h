@@ -76,6 +76,7 @@ public:
 		Simple = (1 << 2),
 		ShadowCaster = (1 << 3), /**< Is a BSShadowLight, whether or not it has shadow data this frame. */
 		LocalShadow = (1 << 4),  /**< Has a cached local shadow slice (localShadowIndex). */
+		Lightning = (1 << 5),    /**< Current-frame source; excluded from fog's light history. */
 
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),
@@ -317,6 +318,8 @@ public:
 
 	/** @brief Draws the ImGui settings UI for light limit fix configuration and debug visualization. */
 	virtual void DrawSettings() override;
+	virtual bool HasDebugSection() const override { return true; }
+	virtual void DrawDebugSection() override;
 	/** @brief Draws the debug overlay warning when light visualization is enabled. */
 	virtual void DrawOverlay() override;
 	/** @brief Returns whether the debug overlay should be displayed. */

@@ -41,9 +41,6 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	/** @brief Captures the current directional shadow map SRV for use in volumetric fog light scattering. */
-	void CaptureDirectionalShadowMap();
-
 	struct alignas(16) Settings
 	{
 		uint enabled = 0;
@@ -66,37 +63,28 @@ public:
 		float4 fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 		float originalFogColorAmount = 0.0f;
 		uint volumetricFogEnabled = 0;
-		uint volumetricGridPixelSize = 16;
-		uint volumetricGridSizeZ = 64;
-		float volumetricFogDistance = 60000.0f;
 		float volumetricFogStartDistance = 0.0f;
 		float volumetricFogNearFadeInDistance = 1000.0f;
-		float volumetricFogExtinctionScale = 1.0f;
 		float4 volumetricFogAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float volumetricDirectionalScatteringIntensity = 1.0f;
-		float volumetricShadowBias = 0.002f;
-		float volumetricDepthDistributionScale = 8.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
 		float volumetricFogScatteringDistribution = 0.2f;
-		float volumetricHistoryWeight = 0.96f;
-		uint volumetricHistoryMissSampleCount = 4;
-		float volumetricSampleJitterMultiplier = 0.0f;
-		float volumetricUpsampleJitterMultiplier = 1.0f;
-		float volumetricNearGridDistance = 8000.0f;
-		uint volumetricFarGridPixelSize = 64;
-		uint volumetricFarGridSizeZ = 32;
+		float volumetricFogExtinctionScale = 1.0f;
 		float volumetricLocalLightScatteringIntensity = 1.0f;
 		float volumetricFogNoiseScale = 0.0f;  // noise frequency per unit; 0 = disabled
 		float volumetricFogNoiseThreshold = 0.5f;
 		float pad3 = 0.0f;
 		float3 volumetricFogNoiseVelocity = { 0.0f, 0.0f, 0.0f };
-		float pad0;
+		float pad0 = 0.0f;
 		float4 originalFogColorOverride = { 1.0f, 1.0f, 1.0f, 0.0f };  // rgb = replaces the weather fog colour, a = blend amount
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
+	static_assert(sizeof(Settings) == 208);
 
 	Settings GetCommonBufferData() const;
+	/** @brief Reports whether height fog contributes in the current scene. */
+	bool IsActive() const { return loaded && settings.enabled && !IsSuppressed(); }
 
 private:
 	struct VolumetricFogCB
@@ -108,7 +96,7 @@ private:
 		float4 frameJitterOffsets[16] = {};
 		float4 historyParameters = {};  // x = near weight, y = miss sample count, z = far weight, w = unused
 		float4 jitterParameters = {};   // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused
-		// Far volume grid (starts where the near volume ends, runs to volumetricFogDistance).
+		// The far grid continues from the near grid to the shared local range.
 		DirectX::XMUINT4 farGridSizeAndFlags = {};
 		float4 farInvGridSizeAndNearFade = {};
 		float4 farGridZParams = {};
@@ -121,7 +109,6 @@ private:
 	void EnsureVolumetricResources();
 	void ReleaseVolumetricResources();
 	void BindIntegratedLightScattering();
-	ID3D11ShaderResourceView* UpdateEngineLocalShadowData();
 	ID3D11ComputeShader* GetMaterialSetupCS();
 	ID3D11ComputeShader* GetFarMaterialSetupCS();
 	ID3D11ComputeShader* GetConservativeDepthCS(bool a_groupReduce);
@@ -144,10 +131,8 @@ private:
 	std::unique_ptr<Texture3D> integratedLightScattering;
 	std::unique_ptr<Texture3D> integratedLightScatteringFar;
 	std::unique_ptr<ConstantBuffer> volumetricFogCB;
-	std::unique_ptr<ConstantBuffer> engineLocalShadowCB;
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	winrt::com_ptr<ID3D11SamplerState> shadowSampler;
-	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;
 	ID3D11ComputeShader* materialSetupCS = nullptr;
 	ID3D11ComputeShader* farMaterialSetupCS = nullptr;
 	ID3D11ComputeShader* conservativeDepthCS = nullptr;

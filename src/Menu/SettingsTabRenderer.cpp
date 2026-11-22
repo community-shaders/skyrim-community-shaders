@@ -606,8 +606,10 @@ namespace
 		ImGui::SameLine();
 		const auto tooltip = I18n::GetSingleton()->Format("menu.settings.reset_keybinding_tooltip",
 			{ { "key", Util::Input::KeyIdToString(defaultCombo) } }, "Reset to default ({key})");
-		if (Util::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str()))
+		if (Util::IconButton(std::format("##Reset{}", id).c_str(), Icons::TI(ICON_TI_RESTORE), tooltip.c_str())) {
 			combo = defaultCombo;
+			globals::state->CheckCoreSettingsChanged();
+		}
 	}
 
 	bool IsPresetThemeSelected()
@@ -707,7 +709,7 @@ void SettingsTabRenderer::RenderShadersSection()
 			ShaderCacheStatusWidget::DrawBreakdownLegend();
 			if (globals::state->IsDeveloperMode()) {
 				MenuFonts::FontRoleGuard subtext(Menu::FontRole::Subtext);
-				ImGui::TextDisabled("Threads: %d compile, %d background, %d pool | P-cores: %d",
+				ImGui::TextDisabled(T("menu.settings.shader_thread_summary", "Threads: %d compile, %d background, %d pool | P-cores: %d"),
 					(int)shaderCache->compilationThreadCount,
 					(int)shaderCache->backgroundCompilationThreadCount,
 					(int)shaderCache->compilationPool.get_thread_count(),

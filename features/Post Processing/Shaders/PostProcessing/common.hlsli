@@ -1,11 +1,12 @@
 #include "Common/Color.hlsli"
+#include "Common/PreExposure.hlsli"
 
 float4 KarisAverage(float4 a, float4 b, float4 c, float4 d)
 {
-	float wa = rcp(1 + Color::RGBToLuminance(a.rgb));
-	float wb = rcp(1 + Color::RGBToLuminance(b.rgb));
-	float wc = rcp(1 + Color::RGBToLuminance(c.rgb));
-	float wd = rcp(1 + Color::RGBToLuminance(d.rgb));
+	float wa = rcp(1 + PreExposure::Decode(Color::RGBToLuminance(a.rgb)));
+	float wb = rcp(1 + PreExposure::Decode(Color::RGBToLuminance(b.rgb)));
+	float wc = rcp(1 + PreExposure::Decode(Color::RGBToLuminance(c.rgb)));
+	float wd = rcp(1 + PreExposure::Decode(Color::RGBToLuminance(d.rgb)));
 	float wsum = wa + wb + wc + wd;
 	return (a * wa + b * wb + c * wc + d * wd) / wsum;
 }

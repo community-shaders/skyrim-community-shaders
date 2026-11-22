@@ -3,6 +3,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Permutation.hlsli"
+#include "Common/PreExposure.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -161,11 +162,26 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #		endif
 
+#		if defined(POSTPROCESS)
+	const bool postProcessingFallback = SharedData::TonemapOwner == SharedData::TonemapOwnerPostProcessingFallback;
+	if (postProcessingFallback) {
+		// Post Processing owns the frame, so the vanilla bloom may have been skipped.
+		inputColor = PreExposure::Decode(inputColor);
+#			if defined(ENABLE_ACESCG)
+		inputColor = AP1TosRGB(inputColor);
+#			endif
+	}
+#		else
+	const bool postProcessingFallback = false;
+#		endif
+
 	float3 bloomColor = 0;
-	if (Flags.x > 0.5) {
-		bloomColor = ImageTex.Sample(ImageSampler, uv).xyz;
-	} else {
-		bloomColor = ImageTex.Sample(ImageSampler, input.TexCoord.xy).xyz;
+	if (!postProcessingFallback) {
+		if (Flags.x > 0.5) {
+			bloomColor = ImageTex.Sample(ImageSampler, uv).xyz;
+		} else {
+			bloomColor = ImageTex.Sample(ImageSampler, input.TexCoord.xy).xyz;
+		}
 	}
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;

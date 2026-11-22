@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <span>
 
 /** @brief Picks the one post-processing pipeline that drives the frame, keeping Post Processing and Effects 11 exclusive. */
 namespace PostProcessingMode
@@ -40,12 +41,15 @@ namespace PostProcessingMode
 	{
 		const char* label = nullptr;
 		const char* tooltip = nullptr;
+		/** @brief Tabler glyph (ICON_TI_*) before the label, or null for a text-only button. */
+		const char* icon = nullptr;
 		std::function<void()> onClick;
 	};
 
 	/**
 	 * @brief Draws the Vanilla / Post Processing / Effects 11 selector shared by both feature menus.
-	 * @param action Optional button for the page (open its editor), drawn right-aligned on the selector's row.
+	 * @param actions Buttons for the page (open its editor, its presets), drawn right-aligned on the selector's row
+	 *        in the given order. Actions without a label are skipped.
 	 */
-	void DrawSelector(const SelectorAction* action = nullptr);
+	void DrawSelector(std::span<const SelectorAction> actions = {});
 }

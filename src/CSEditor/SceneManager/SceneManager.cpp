@@ -13,6 +13,7 @@
 #include "ScenePresetExport.h"
 #include "SceneSettingsManager.h"
 #include "SceneSettingsUI.h"
+#include "Utils/DebugSection.h"
 #include "Utils/UI.h"
 
 // The debug view is developer-facing validation output and is intentionally not translated.
@@ -21,7 +22,7 @@ namespace
 	using DebugEntry = SceneSettingsManager::DebugEntry;
 	using DebugLayer = SceneSettingsManager::DebugLayer;
 	using DebugSnapshot = SceneSettingsManager::DebugSnapshot;
-	using PeriodValues = std::array<std::optional<float>, SceneSettingsManager::kPeriodCount>;
+	using PeriodValues = std::array<std::optional<json>, SceneSettingsManager::kPeriodCount>;
 	using PeriodWeights = std::array<float, SceneSettingsManager::kPeriodCount>;
 
 	constexpr ImGuiTableFlags kDebugTableFlags =
@@ -107,7 +108,7 @@ namespace
 		for (const auto& value : values) {
 			ImGui::TableNextColumn();
 			if (value)
-				ImGui::Text("%.4f", *value);
+				ImGui::TextUnformatted(value->dump().c_str());
 			else
 				Util::Text::Disabled(kMissingValue);
 		}
@@ -537,7 +538,7 @@ void SceneManager::DrawSettings()
 		"Files that set feature settings at startup: your own exports, files shipped by mods, and those of applied preset packs."));
 	if (overwritesOpen)
 		FeatureOverwritesPanel::Draw();
-	if (Util::ShowDebugSections() && ImGui::CollapsingHeader(T("feature.scene_manager.debug", "Debug")))
+	if (Util::DebugSection section; section)
 		DrawDebug(*this);
 }
 
