@@ -154,6 +154,9 @@ struct PhysicalSky final : public Feature
 		float sunDiskRad = DirectX::XMConvertToRadians(0.53f);
 		float masserDiskRad = DirectX::XMConvertToRadians(8.f);
 		float secundaDiskRad = DirectX::XMConvertToRadians(4.f);
+		// Visible moon billboard gain in stops; does not change the moon's light.
+		float masserDiscBrightnessEV = 0.f;
+		float secundaDiscBrightnessEV = 0.f;
 
 		std::map<std::string, WorldspaceInfo> worldspaceWhitelist = {
 			{ "Tamriel", { -14500.f } },
@@ -315,6 +318,7 @@ struct PhysicalSky final : public Feature
 		uint dirLightDiskIndex;              // body whose disc phase the clouds show
 		float4 dirLightDisc;                 // world direction to that body, and its glow weight fading out and back in across a swap
 		float4 diskBillboardScale;
+		float4 diskBrightness;  // Sun (unused, 1), Masser, Secunda linear gains on the visible disc; w unused
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
 
