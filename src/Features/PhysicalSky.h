@@ -716,7 +716,10 @@ struct PhysicalSky final : public Feature
 	void RestoreSamplers();
 	void ModifyGrass();
 	void RestoreGrassSampler();
+	/** @brief Render thread, start of a water batch: binds the sky sampler to s13 once for every draw in it. */
 	void ModifyWater();
+	/** @brief Render thread, each water draw: keeps the renderer from re-binding s13. */
+	void HoldWaterSampler();
 	void RestoreWaterSampler();
 	struct Hooks
 	{
@@ -762,9 +765,15 @@ struct PhysicalSky final : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSWaterShader_RestoreGeometry
+		struct BSWaterShader_SetupTechnique
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
+			static bool thunk(RE::BSShader* This, uint32_t Technique);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSWaterShader_RestoreTechnique
+		{
+			static void thunk(RE::BSShader* This, uint32_t Technique);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -778,7 +787,8 @@ struct PhysicalSky final : public Feature
 			stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 			stl::write_vfunc<0x7, BSGrassShader_RestoreGeometry>(RE::VTABLE_BSGrassShader[0]);
 			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
-			stl::write_vfunc<0x7, BSWaterShader_RestoreGeometry>(RE::VTABLE_BSWaterShader[0]);
+			stl::write_vfunc<0x2, BSWaterShader_SetupTechnique>(RE::VTABLE_BSWaterShader[0]);
+			stl::write_vfunc<0x3, BSWaterShader_RestoreTechnique>(RE::VTABLE_BSWaterShader[0]);
 		}
 	};
 };
