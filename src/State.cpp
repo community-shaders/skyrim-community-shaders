@@ -1274,6 +1274,10 @@ void State::CheckTypedUAVLoadSupport()
 		HRESULT hr = device->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2, &support2, sizeof(support2));
 		if (FAILED(hr)) {
 			logger::warn("[TypedUAVLoad] {} ({}): CheckFeatureSupport failed (hr=0x{:08x})", entry.name, entry.usage, static_cast<uint32_t>(hr));
+			if (entry.format == DXGI_FORMAT_R11G11B10_FLOAT) {
+				logger::warn("[TypedUAVLoad] Falling back to non-UAV path.");
+				State::supportsR11G11B10TypedUAVLoad = false;
+			}
 			anyUnsupported = true;
 			continue;
 		}
@@ -1282,6 +1286,10 @@ void State::CheckTypedUAVLoadSupport()
 			logger::info("[TypedUAVLoad] {} — supported ({})", entry.name, entry.usage);
 		} else {
 			logger::warn("[TypedUAVLoad] {} — UNSUPPORTED ({})", entry.name, entry.usage);
+			if (entry.format == DXGI_FORMAT_R11G11B10_FLOAT) {
+				logger::warn("[TypedUAVLoad] Falling back to non-UAV path.");
+				State::supportsR11G11B10TypedUAVLoad = false;
+			}
 			anyUnsupported = true;
 		}
 	}

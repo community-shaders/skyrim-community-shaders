@@ -340,6 +340,9 @@ public:
 	 * warn line per unsupported format with the feature that needs it.
 	 */
 	void CheckTypedUAVLoadSupport();
+
+	static inline bool supportsR11G11B10TypedUAVLoad = true;
+
 	/**
 	 * @brief Strips and rewrites shader descriptor bits for Community Shaders' pipeline.
 	 * @param a_shader The shader being compiled.

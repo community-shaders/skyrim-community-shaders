@@ -151,12 +151,14 @@ void Deferred::SetupResources()
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, "Deferred::Water1");
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, "Deferred::Water2");
 
-		D3D11_TEXTURE2D_DESC mainCopyDesc = texDesc;
-		mainCopyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		mainCopyDesc.MiscFlags = 0;
+		if (!State::supportsR11G11B10TypedUAVLoad) {
+			D3D11_TEXTURE2D_DESC mainCopyDesc = texDesc;
+			mainCopyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+			mainCopyDesc.MiscFlags = 0;
 
-		mainCopy = eastl::make_unique<Texture2D>(mainCopyDesc);
-		mainCopy->CreateSRV(srvDesc);
+			Deferred::MainCopy = eastl::make_unique<Texture2D>(mainCopyDesc);
+			Deferred::MainCopy->CreateSRV(srvDesc);
+		}
 	}
 
 	{
@@ -378,6 +380,7 @@ void Deferred::DeferredPasses()
 
 	// Matches SKYLIGHTING_COVERAGE_REGISTER in DeferredCompositeCS.hlsl; t16-t20 are physical sky
 	constexpr UINT SKYLIGHTING_COVERAGE_SLOT = 21;
+	constexpr UINT MAIN_COPY_SLOT = 23;
 
 	// Deferred Composite
 	{
@@ -419,17 +422,21 @@ void Deferred::DeferredPasses()
 		};
 		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
-		if (mainCopy) {
-			context->CopyResource(mainCopy->resource.get(), main.texture);
+		if (!State::supportsR11G11B10TypedUAVLoad) {
+			if (Deferred::MainCopy && Deferred::MainCopy->resource) {
+				context->CopyResource(Deferred::MainCopy->resource.get(), main.texture);
+			} else {
+				logger::critical("Deferred::MainCopy texture is null!");
+			}
 		}
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, ARRAYSIZE(skylightingCoverageSrvs), skylightingCoverageSrvs);
 		globals::features::viewAtmosphere.Bind(true);
 
-		if (mainCopy) {
-			ID3D11ShaderResourceView* mainCopySrv = mainCopy->srv.get();
-			context->CSSetShaderResources(23, 1, &mainCopySrv);
+		if (!State::supportsR11G11B10TypedUAVLoad) {
+			ID3D11ShaderResourceView* mainCopySrv = Deferred::MainCopy->srv.get();
+			context->CSSetShaderResources(MAIN_COPY_SLOT, 1, &mainCopySrv);
 		}
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
@@ -451,7 +458,9 @@ void Deferred::DeferredPasses()
 		ID3D11ShaderResourceView* views[21]{};
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 		context->CSSetShaderResources(SKYLIGHTING_COVERAGE_SLOT, 2, views);
-		context->CSSetShaderResources(23, 1, views);
+		if (!State::supportsR11G11B10TypedUAVLoad) {
+			context->CSSetShaderResources(MAIN_COPY_SLOT, 1, views);
+		}
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -748,6 +757,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::terrainBlending.loaded)
 			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
+		if (!State::supportsR11G11B10TypedUAVLoad)
+			defines.push_back({ "NO_TYPED_UAV_LOAD", nullptr });
+
 		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeCS;
@@ -774,6 +786,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
 		if (globals::features::terrainBlending.loaded)
 			defines.push_back({ "TERRAIN_BLENDING", nullptr });
+
+		if (!State::supportsR11G11B10TypedUAVLoad)
+			defines.push_back({ "NO_TYPED_UAV_LOAD", nullptr });
 
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
