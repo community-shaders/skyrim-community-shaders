@@ -10,6 +10,8 @@ public:
 		int32_t Width = 320;
 		int32_t Height = 192;
 		int32_t Depth = 90;
+
+		bool operator==(const TextureSize&) const = default;
 	};
 
 	struct Settings
@@ -20,6 +22,8 @@ public:
 		bool InteriorEnabled = true;
 		int32_t InteriorQuality = 2;
 		TextureSize InteriorCustomSize;
+
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
@@ -122,6 +126,8 @@ private:
 	void DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, bool isInterior, bool inLocationType);
 	TextureSize& FetchCurrentSizeInUnits(bool interior);
 	void SetupVL();
+	/** @brief Pushes the settings to the game if they differ from \p previous, so presets and resets apply without a manual toggle. */
+	void ApplyIfChanged(const Settings& previous);
 
 	enum class Quality : uint8_t
 	{

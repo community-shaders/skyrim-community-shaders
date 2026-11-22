@@ -132,8 +132,16 @@ VolumetricLighting::TextureSize& VolumetricLighting::FetchCurrentSizeInUnits(con
 	return size;
 }
 
+void VolumetricLighting::ApplyIfChanged(const Settings& previous)
+{
+	// Before the first EarlyPrepass the game addresses aren't ready; that pass applies the settings itself
+	if (initialised && settings != previous)
+		SetupVL();
+}
+
 void VolumetricLighting::LoadSettings(json& o_json)
 {
+	const Settings previous = settings;
 	settings = o_json;
 	settings.ExteriorQuality = std::clamp(settings.ExteriorQuality, 0, static_cast<int32_t>(Quality::Count) - 1);
 	settings.InteriorQuality = std::clamp(settings.InteriorQuality, 0, static_cast<int32_t>(Quality::Count) - 1);
@@ -143,6 +151,7 @@ void VolumetricLighting::LoadSettings(json& o_json)
 		size->Height = std::clamp(size->Height, 32, 640);
 		size->Depth = std::clamp(size->Depth, 10, 640);
 	}
+	ApplyIfChanged(previous);
 }
 
 void VolumetricLighting::SaveSettings(json& o_json)
@@ -152,7 +161,9 @@ void VolumetricLighting::SaveSettings(json& o_json)
 
 void VolumetricLighting::RestoreDefaultSettings()
 {
+	const Settings previous = settings;
 	settings = {};
+	ApplyIfChanged(previous);
 }
 
 void VolumetricLighting::DataLoaded()
