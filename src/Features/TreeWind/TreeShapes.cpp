@@ -19,6 +19,8 @@ namespace TreeShapes
 		constexpr float kCellSize = 128.0f;
 		// Bend data of a shape not drawn for this many game seconds is freed
 		constexpr float kEvictSeconds = 60.0f;
+		// A build whose buffer could not be created is retried after this many game seconds
+		constexpr float kRetrySeconds = 5.0f;
 
 		bool IsTreeShapeName(const RE::BSGeometry* a_geometry)
 		{
@@ -302,8 +304,12 @@ namespace TreeShapes
 				const auto generation = blockGenerations.find(entry.blockKey);
 				const bool stale = entry.crown && (a_treeModSupport || entry.waitsForCards) &&
 				                   (generation == blockGenerations.end() ? 0u : generation->second) != entry.generation;
-				if (stale && !entry.pendingJob)
+				// A build whose buffer could not be created is tried again a little later
+				const bool retry = entry.retryAt > 0.0f && now >= entry.retryAt;
+				if ((stale || retry) && !entry.pendingJob) {
+					entry.retryAt = 0.0f;
 					entry.pendingJob = Queue(a_geometry, vertices.vertexBuffer, CopyPositions(vertices), a_kind, a_treeModSupport);
+				}
 				// The old data stays bound until its rebuild lands
 				return entry.srv.get();
 			}
@@ -623,16 +629,20 @@ namespace TreeShapes
 		const D3D11_SUBRESOURCE_DATA initData{ data.data(), 0, 0 };
 		// The device is free-threaded, so the build thread creates the buffer too
 		winrt::com_ptr<ID3D11Buffer> buffer;
-		if (FAILED(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, buffer.put())))
+		if (FAILED(globals::d3d::device->CreateBuffer(&bufferDesc, &initData, buffer.put()))) {
+			result.gpuFailed = true;
 			return finish(false);
+		}
 		Util::SetResourceName(buffer.get(), "TreeWind::BendWeights");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.NumElements = vertices.count;
-		if (FAILED(globals::d3d::device->CreateShaderResourceView(buffer.get(), &srvDesc, result.srv.put())))
+		if (FAILED(globals::d3d::device->CreateShaderResourceView(buffer.get(), &srvDesc, result.srv.put()))) {
+			result.gpuFailed = true;
 			return finish(false);
+		}
 		Util::SetResourceName(result.srv.get(), "TreeWind::BendWeights SRV");
 		return finish(false);
 	}
@@ -654,6 +664,12 @@ namespace TreeShapes
 			if (it == entries.end() || it->second.pendingJob != result.id)
 				continue;
 			auto& entry = it->second;
+			if (result.gpuFailed) {
+				// Keeps any data already bound and retries later, unlike a shape left still on purpose
+				entry.pendingJob = 0;
+				entry.retryAt = globals::state->timer + kRetrySeconds;
+				continue;
+			}
 			entry.srv = std::move(result.srv);
 			entry.generation = result.generation;
 			entry.waitsForCards = result.waitsForCards;

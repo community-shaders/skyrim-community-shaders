@@ -49,7 +49,11 @@ namespace TreeShapes
 		/** @brief Frees all bend data, so it is rebuilt with new settings. */
 		void Clear();
 
-		size_t Count() const { return entries.size(); }
+		size_t Count() const
+		{
+			// Shapes still waiting for their first build have no data yet
+			return static_cast<size_t>(std::ranges::count_if(entries, [](const auto& a_entry) { return static_cast<bool>(a_entry.second.srv); }));
+		}
 
 		struct TrunkCard
 		{
@@ -91,6 +95,7 @@ namespace TreeShapes
 			uint64_t blockKey = 0;
 			uint32_t generation = 0;  // the block's generation after this build
 			bool waitsForCards = false;
+			bool gpuFailed = false;  // the buffer or its view could not be created
 			winrt::com_ptr<ID3D11ShaderResourceView> srv;
 		};
 
@@ -102,6 +107,7 @@ namespace TreeShapes
 			float lastSeen = 0.0f;  // game seconds
 			uint64_t blockKey = 0;
 			uint64_t pendingJob = 0;  // the build in flight, 0 for none
+			float retryAt = 0.0f;     // game seconds; after a failed buffer creation, 0 for none
 			uint32_t generation = 0;
 			bool crown = false;
 			bool waitsForCards = false;  // a crown built before its block had trunk cards
