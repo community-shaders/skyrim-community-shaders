@@ -304,9 +304,10 @@ namespace TreeShapes
 				const auto generation = blockGenerations.find(entry.blockKey);
 				const bool stale = entry.crown && (a_treeModSupport || entry.waitsForCards) &&
 				                   (generation == blockGenerations.end() ? 0u : generation->second) != entry.generation;
-				// A build whose buffer could not be created is tried again a little later
-				const bool retry = entry.retryAt > 0.0f && now >= entry.retryAt;
-				if ((stale || retry) && !entry.pendingJob) {
+				// A build whose buffer could not be created is tried again a little later, stale or not
+				const bool failed = entry.retryAt > 0.0f;
+				const bool waitingToRetry = failed && now < entry.retryAt;
+				if ((stale || failed) && !waitingToRetry && !entry.pendingJob) {
 					entry.retryAt = 0.0f;
 					entry.pendingJob = Queue(a_geometry, vertices.vertexBuffer, CopyPositions(vertices), a_kind, a_treeModSupport);
 				}
