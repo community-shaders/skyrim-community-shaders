@@ -16,7 +16,7 @@
 #define ICON_TI_ARROW_LEFT "\xee\xa8\x99"	// U+ea19
 #define ICON_TI_BORDER_ALL "\xee\xa8\xbb"	// U+ea3b
 #define ICON_TI_BULB "\xee\xa9\x91"	// U+ea51
-#define ICON_TI_POWER "î¬"	// U+eb0d
+#define ICON_TI_POWER "\xee\xac\x8d"	// U+eb0d
 #define ICON_TI_CHART_BAR "\xee\xa9\x99"	// U+ea59
 #define ICON_TI_CHECK "\xee\xa9\x9e"	// U+ea5e
 #define ICON_TI_CHEVRON_DOWN "\xee\xa9\x9f"	// U+ea5f

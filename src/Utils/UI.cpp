@@ -1633,7 +1633,7 @@ namespace Util
 			const float edge = m.titleHeight;
 			const ImVec2 cornerMin(inner.z - edge, inner.y);
 			ImGui::SetCursorScreenPos(cornerMin);
-			if (ImGui::InvisibleButton("##Corner", ImVec2(edge, edge)))
+			if (ImGui::InvisibleButton("##Corner", ImVec2(edge, edge), ImGuiButtonFlags_EnableNav))
 				result = OptionCardClick::Action;
 			const bool cornerHovered = ImGui::IsItemHovered();
 			if (content.cornerTooltip)
@@ -1666,7 +1666,10 @@ namespace Util
 					Icons::TI(content.icon), faded(style.Colors[ImGuiCol_Text]));
 				x += m.titleHeight + style.ItemInnerSpacing.x;
 			}
-			drawList->AddText(ImGui::GetFont(), titleSize, ImVec2(x, y), faded(style.Colors[ImGuiCol_Text]), content.title);
+			// Keep a long title clear of the corner button, which sits in the title row
+			const ImVec4 titleClip(inner.x, inner.y, content.cornerIcon ? inner.z - m.titleHeight - style.ItemInnerSpacing.x : inner.z, inner.y + m.titleHeight);
+			drawList->AddText(ImGui::GetFont(), titleSize, ImVec2(x, y), faded(style.Colors[ImGuiCol_Text]), content.title, nullptr, 0.0f,
+				content.cornerIcon ? &titleClip : nullptr);
 			y += m.titleHeight;
 		}
 		if (content.status) {

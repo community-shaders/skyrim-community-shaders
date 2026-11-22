@@ -494,6 +494,9 @@ rather than an authoring panel.
   this fork's `Feature`.
 - Upstream's `InvertedCheckbox`, `RadioButton`, `ActiveControlStorageGuard` and
   `GetActiveControlStorageAddress` UI helpers, used only by the excluded UI.
+- `PerformanceOverlay` `ShowInOverlay` as a scene-controllable checkbox. The Profiling page's Display card no longer
+  draws it, so scene overrides for it are no longer bound and `PerformanceOverlay` drops from 12 to 11 in the floors
+  file. The overlay is still toggled from the Profiling page's power button and the overlay hotkey.
 
 ### Existing UI
 
