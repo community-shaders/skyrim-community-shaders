@@ -405,18 +405,6 @@ void DoF::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "DoF::Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateUAV(uavDesc);
-
-		texPostSmooth = eastl::make_unique<Texture2D>(texDesc, "DoF::PostSmooth");
-		texPostSmooth->CreateSRV(srvDesc);
-		texPostSmooth->CreateUAV(uavDesc);
-
-		texPostSmooth2 = eastl::make_unique<Texture2D>(texDesc, "DoF::PostSmooth2");
-		texPostSmooth2->CreateSRV(srvDesc);
-		texPostSmooth2->CreateUAV(uavDesc);
-
 		D3D11_TEXTURE2D_DESC texDescHalf = texDesc;
 		texDescHalf.Width = std::max(1u, texDescHalf.Width / 2u);
 		texDescHalf.Height = std::max(1u, texDescHalf.Height / 2u);
@@ -604,8 +592,42 @@ void DoF::CompileComputeShaders()
 // TDM lookup) lives in CinematicCamera::FocusResolver, shared with the
 // Cinematic Camera focus modes. See CinematicCamera.cpp.
 
+bool DoF::EnsurePostSmoothingTargets(const D3D11_TEXTURE2D_DESC& colorDesc)
+{
+	if (texPostSmooth && texPostSmooth2)
+		return true;
+
+	const auto now = std::chrono::steady_clock::now();
+	if (now < nextPostSmoothingAttempt)
+		return false;
+
+	auto desc = colorDesc;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	const auto makeTarget = [&desc](const char* debugName) {
+		auto target = eastl::make_unique<Texture2D>(desc, debugName);
+		target->CreateSRV({ .Format = desc.Format, .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D, .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
+		target->CreateUAV({ .Format = desc.Format, .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D, .Texture2D = { .MipSlice = 0 } });
+		return target;
+	};
+
+	try {
+		auto smooth = makeTarget("DoF::PostSmooth");
+		auto smoothed = makeTarget("DoF::PostSmooth2");
+		texPostSmooth = std::move(smooth);
+		texPostSmooth2 = std::move(smoothed);
+		return true;
+	} catch (const std::exception& e) {
+		logger::error("[PostProcessing] Could not create DoF smoothing targets: {}", e.what());
+		nextPostSmoothingAttempt = now + std::chrono::seconds(5);
+		return false;
+	}
+}
+
 void DoF::Draw(TextureInfo& inout_tex)
 {
+	if (!owner)
+		return;
+
 	Settings renderSettings = settings;
 	auto state = globals::state;
 	auto context = globals::d3d::context;
@@ -615,7 +637,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		return;
 	}
 
-	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
+	float2 res = { (float)texCoC->desc.Width, (float)texCoC->desc.Height };
 	float focusLen = renderSettings.FocalLength;
 	float fNumber = renderSettings.FNumber;
 	float sensorWidthMM = renderSettings.SensorWidthMM;
@@ -703,12 +725,18 @@ void DoF::Draw(TextureInfo& inout_tex)
 
 	// No-op the whole frame until the core kernels are ready -- a partial
 	// sequential pipeline would write garbage into the scene target.
-	const bool needPostSmoothing = renderSettings.PostBlurSmoothing >= 0.01f;
+	bool needPostSmoothing = renderSettings.PostBlurSmoothing >= 0.01f;
 	const bool coreReady = AllShadersReady({ &UpdateFocusCS, &CalculateCoCCS, &CoCTileFlattenCS,
 		&CoCTileDilateHCS, &CoCTileDilateVCS, &DownsampleLegacyCS, &FarBlurCS, &NearBlurCS,
 		&GatherPostfilterCS, &CombinerCS });
 	if (!coreReady || (needPostSmoothing && !AllShadersReady({ &PostSmoothing1CS, &PostSmoothing2AndFocusingCS })))
 		return;
+
+	auto* texOutput = owner->GetColorTarget(inout_tex.tex);
+	if (!texOutput)
+		return;
+	needPostSmoothing = needPostSmoothing && EnsurePostSmoothingTargets(texOutput->desc);
+
 	state->BeginPerfEvent("Depth of Field");
 
 	const uint halfResX = std::max(1u, (uint)res.x / 2);

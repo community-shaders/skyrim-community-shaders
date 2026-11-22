@@ -149,6 +149,7 @@ cbuffer VolumetricCloudConstants : register(b1)
 	float4 MiddleCloudBandShape;  // thickness contrast, displacement (game units), wavelength (game units), enabled
 	uint CloudTraceScale;
 	uint CloudAmbientSHOnly;
+	uint CloudCascadeShadows;
 };
 Texture2D<float4> TexTransmittance : register(t1);
 Texture3D<float4> TexAerialPerspective : register(t2);

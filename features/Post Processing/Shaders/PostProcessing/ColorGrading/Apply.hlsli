@@ -99,10 +99,8 @@ float3 ApplyGameCinematic(float3 linearColor)
 	return color;
 }
 
-float4 ApplyGradeOutput(float3 color)
+float3 ApplyGameTintFade(float3 color)
 {
-	color = pow(abs(color), inOutGamma.w);
-
 	// Game tint/fade colors are Rec.709, while HDR grading output is Rec.2020.
 	float luma = dot(color, enableHDR ? Rec2020_2_XYZ_MAT[1] : sRGB_2_XYZ_MAT[1]);
 	float3 outputTint = enableHDR ? Color::BT709ToBT2020(tint.xyz) : tint.xyz;
@@ -110,9 +108,12 @@ float4 ApplyGradeOutput(float3 color)
 
 	// Game fade
 	float3 outputFade = enableHDR ? Color::BT709ToBT2020(fade.xyz) : fade.xyz;
-	color = lerp(color, outputFade, fade.w);
+	return lerp(color, outputFade, fade.w);
+}
 
-	return float4(color, 1);
+float4 ApplyGradeOutput(float3 color)
+{
+	return float4(ApplyGameTintFade(pow(abs(color), inOutGamma.w)), 1);
 }
 
 #endif

@@ -83,6 +83,17 @@ namespace ExponentialHeightFog
 		return max(SharedData::viewAtmosphereSettings.depthDistribution, GetVolumetricGridSizeZ() / 120.0f);
 	}
 
+	/** @brief Exponential slice distribution over [nearPlane, farPlane]; mirrors computeGridZParams in ExponentialHeightFog.cpp. */
+	float3 ComputeGridZParams(float nearPlane, float farPlane, float gridSizeZ, float depthDistributionScale)
+	{
+		// The offset must stay inside the slab: a fog start at or past Near Grid End leaves a 1-unit near slab.
+		const float nearWithOffset = nearPlane + min(0.095f * 100.0f, 0.5f * (farPlane - nearPlane));
+		const float farExp = exp2(min(gridSizeZ / depthDistributionScale, 120.0f));
+		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
+		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
+		return float3(gridZScale, gridZOffset, depthDistributionScale);
+	}
+
 	float3 GetVolumetricGridZParams(float gridSizeZ)
 	{
 #if defined(EXP_HEIGHT_FOG_GRID_Z_PARAMS)
@@ -91,11 +102,7 @@ namespace ExponentialHeightFog
 		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
 		const float nearPlane = GetVolumetricNearPlane();
 		const float farPlane = max(GetVolumetricNearGridEndDistance(), nearPlane + 1.0f);
-		const float nearWithOffset = nearPlane + 0.095f * 100.0f;
-		const float farExp = exp2(min(gridSizeZ / GetVolumetricDepthDistributionScale(), 120.0f));
-		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
-		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
-		return float3(gridZScale, gridZOffset, GetVolumetricDepthDistributionScale());
+		return ComputeGridZParams(nearPlane, farPlane, gridSizeZ, GetVolumetricDepthDistributionScale());
 #endif
 	}
 
@@ -110,12 +117,7 @@ namespace ExponentialHeightFog
 		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
 		const float nearPlane = max(GetVolumetricNearGridEndDistance(), GetVolumetricNearPlane() + 1.0f);
 		const float farPlane = max(nearPlane + 1.0f, GetVolumetricTotalFarPlane());
-		const float nearWithOffset = nearPlane + 0.095f * 100.0f;
-		const float depthDistributionScale = max(SharedData::viewAtmosphereSettings.depthDistribution, gridSizeZ / 120.0f);
-		const float farExp = exp2(min(gridSizeZ / depthDistributionScale, 120.0f));
-		const float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
-		const float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
-		return float3(gridZScale, gridZOffset, depthDistributionScale);
+		return ComputeGridZParams(nearPlane, farPlane, gridSizeZ, max(SharedData::viewAtmosphereSettings.depthDistribution, gridSizeZ / 120.0f));
 	}
 
 	float ComputeVolumetricSliceDepth(float slice)

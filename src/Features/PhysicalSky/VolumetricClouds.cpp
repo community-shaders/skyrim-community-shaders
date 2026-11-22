@@ -1272,6 +1272,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		.middleBandShape = { bandThickness, bandLift, bandWavelength, bandCoverage + bandThickness + bandLift > 0.f ? 1.f : 0.f },
 		.cloudTraceScale = traceScale,
 		.cloudAmbientSHOnly = settings.cloudAmbientSHOnly ? 1u : 0u,
+		.cloudCascadeShadows = settings.cloudCascadeShadows ? 1u : 0u,
 	};
 	const bool useAmbientGrid = a_pass == VolumetricCloudPass::kMainViewAndCubemap &&
 	                            !settings.cloudAmbientSHOnly && cloudData.ambientStrength > 0.f &&

@@ -1286,13 +1286,6 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 		}
 
 		if (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::CharacterLight)) {
-			static const REL::Relocation<RE::ImageSpaceTexture*> characterLightTexture{ RELOCATION_ID(513464, 391302) };
-
-			if (characterLightTexture->renderTarget >= RE::RENDER_TARGET::kFRAMEBUFFER) {
-				shadowState->SetPSTexture(11, renderer->GetRuntimeData().renderTargets[characterLightTexture->renderTarget]);
-				shadowState->SetPSTextureAddressMode(11, RE::BSGraphics::TextureAddressMode::kClampSClampT);
-			}
-
 			std::array<float, 4> characterLightParams{};  // in C++, arrays will be zero-initialized
 			if (smState->characterLightEnabled) {
 				std::copy_n(smState->characterLightParams, 4, characterLightParams.data());

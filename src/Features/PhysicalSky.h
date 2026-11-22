@@ -123,10 +123,11 @@ struct PhysicalSky final : public Feature
 		bool cloudAmbientSHOnly;
 		bool cloudHalfResTrace;
 		bool cloudFastReconstruction;
+		bool cloudCascadeShadows;
 	};
-	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true };
-	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true };
-	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false };
+	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true, false };
+	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true, true };
+	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false, true };
 
 	struct Settings
 	{
@@ -153,6 +154,9 @@ struct PhysicalSky final : public Feature
 		float sunDiskRad = DirectX::XMConvertToRadians(0.53f);
 		float masserDiskRad = DirectX::XMConvertToRadians(8.f);
 		float secundaDiskRad = DirectX::XMConvertToRadians(4.f);
+		// Visible moon billboard gain in stops; does not change the moon's light.
+		float masserDiscBrightnessEV = 0.f;
+		float secundaDiscBrightnessEV = 0.f;
 
 		std::map<std::string, WorldspaceInfo> worldspaceWhitelist = {
 			{ "Tamriel", { -14500.f } },
@@ -220,6 +224,7 @@ struct PhysicalSky final : public Feature
 		bool cloudAmbientSHOnly = kCloudQualityMedium.cloudAmbientSHOnly;
 		bool cloudHalfResTrace = kCloudQualityMedium.cloudHalfResTrace;
 		bool cloudFastReconstruction = kCloudQualityMedium.cloudFastReconstruction;
+		bool cloudCascadeShadows = kCloudQualityMedium.cloudCascadeShadows;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
@@ -313,6 +318,7 @@ struct PhysicalSky final : public Feature
 		uint dirLightDiskIndex;              // body whose disc phase the clouds show
 		float4 dirLightDisc;                 // world direction to that body, and its glow weight fading out and back in across a swap
 		float4 diskBillboardScale;
+		float4 diskBrightness;  // Sun (unused, 1), Masser, Secunda linear gains on the visible disc; w unused
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
 
@@ -517,7 +523,8 @@ struct PhysicalSky final : public Feature
 		float4 middleBandShape;
 		uint32_t cloudTraceScale;
 		uint32_t cloudAmbientSHOnly;
-		uint32_t qualityPadding[2] = {};
+		uint32_t cloudCascadeShadows;
+		uint32_t qualityPadding = 0;
 	};
 	static_assert(sizeof(VolumetricCloudCB) == 1344);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);

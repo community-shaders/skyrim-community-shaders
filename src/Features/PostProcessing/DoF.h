@@ -4,6 +4,7 @@
 #include "PostProcessFeature.h"
 
 #include <array>
+#include <chrono>
 
 struct DoF : public PostProcessFeature
 {
@@ -88,7 +89,6 @@ struct DoF : public PostProcessFeature
 	float proceduralBokehMaxRadius = 1.0f;
 	float proceduralBokehAreaScale = 1.0f;
 
-	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 	eastl::unique_ptr<Texture2D> texPreBlurred = nullptr;
 	eastl::unique_ptr<Texture2D> texFarBlurred = nullptr;
 	eastl::unique_ptr<Texture2D> texNearBlurred = nullptr;
@@ -149,4 +149,8 @@ struct DoF : public PostProcessFeature
 	float debugDistance = 0.0f;
 	float debugFocusPlane = 0.0f;
 	uint currentRef = 0;
+
+private:
+	bool EnsurePostSmoothingTargets(const D3D11_TEXTURE2D_DESC& colorDesc);
+	std::chrono::steady_clock::time_point nextPostSmoothingAttempt{};
 };

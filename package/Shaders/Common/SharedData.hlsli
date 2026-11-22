@@ -9,6 +9,7 @@ namespace SharedData
 	static const uint TonemapOwnerVanilla = 0;
 	static const uint TonemapOwnerPostProcessing = 1;
 	static const uint TonemapOwnerEffects11 = 2;
+	static const uint TonemapOwnerPostProcessingFallback = 3;
 
 	cbuffer SharedData : register(b5)
 	{
@@ -589,6 +590,7 @@ namespace SharedData
 		uint dirLightDiskIndex;
 		float4 dirLightDisc;
 		float4 diskBillboardScale;
+		float4 diskBrightness;
 	};
 
 	struct RainRefractionSettings

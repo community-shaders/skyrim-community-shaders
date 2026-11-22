@@ -41,15 +41,18 @@ float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 	return col;
 }
 
+bool OklchControlsActive()
+{
+	bool active = any(oklchSaturation.xyz != float3(1.0, 1.0, 0.0));
+	[unroll] for (uint hue = 0; hue < 7; ++hue)
+		active = active || any(oklchColorMixer[hue].xyz != float3(0.0, 1.0, 0.0));
+	return active;
+}
+
 // Combined Oklch adjustments: global saturation/vibrance/hue + per-hue colour mixer
 // Single Oklab round-trip for efficiency
-float3 OklchAdjustments(float3 val)
+float3 ApplyOklchControls(float3 oklab)
 {
-	// RgbToOklab/OklabToRgb use linear Rec.709, not the selected working gamut.
-	const float3x3 toXYZ = float3x3(workingToXYZ[0].xyz, workingToXYZ[1].xyz, workingToXYZ[2].xyz);
-	const float3x3 fromXYZ = float3x3(xyzToWorking[0].xyz, xyzToWorking[1].xyz, xyzToWorking[2].xyz);
-	float3 oklab = RgbToOklab(mul(XYZ_2_sRGB_MAT, mul(toXYZ, val)));
-
 	float l = oklab.x;
 	float c = length(oklab.yz);
 	float h = c > 0.0 ? atan2(oklab.z, oklab.y) : 0.0;
@@ -93,6 +96,17 @@ float3 OklchAdjustments(float3 val)
 	sincos(h, oklab.z, oklab.y);
 	oklab.yz *= c;
 
+	return oklab;
+}
+
+float3 OklchAdjustments(float3 val, bool controlsActive)
+{
+	// RgbToOklab/OklabToRgb use linear Rec.709, not the selected working gamut.
+	const float3x3 toXYZ = float3x3(workingToXYZ[0].xyz, workingToXYZ[1].xyz, workingToXYZ[2].xyz);
+	const float3x3 fromXYZ = float3x3(xyzToWorking[0].xyz, xyzToWorking[1].xyz, xyzToWorking[2].xyz);
+	float3 oklab = RgbToOklab(mul(XYZ_2_sRGB_MAT, mul(toXYZ, val)));
+	[branch] if (controlsActive)
+		oklab = ApplyOklchControls(oklab);
 	return mul(fromXYZ, mul(sRGB_2_XYZ_MAT, OklabToRgb(oklab)));
 }
 
@@ -147,7 +161,7 @@ float2 PlanckianIsothermal(float temp, float tint)
 	return float2(x, y);
 }
 
-float3 WhiteBalance(float3 linearColor)
+float3x3 GetWhiteBalanceMatrix(out bool useWhiteBalance)
 {
 	float temp = exposureTemperatureTint.y * 100;
 	float tint = exposureTemperatureTint.z;
@@ -164,15 +178,14 @@ float3 WhiteBalance(float3 linearColor)
 	float2 dstWhite = workingWhitePoint.xy;
 
 	// Skip if source and destination are approximately equal
-	if (all(abs(srcWhite - dstWhite) < 0.001))
-		return linearColor;
+	useWhiteBalance = !all(abs(srcWhite - dstWhite) < 0.001);
+	if (!useWhiteBalance)
+		return (float3x3)0;
 
 	float3x3 whiteBalance = ChromaticAdaptation(srcWhite, dstWhite);
 	const float3x3 xyzToWorkingMat = float3x3(xyzToWorking[0].xyz, xyzToWorking[1].xyz, xyzToWorking[2].xyz);
 	const float3x3 workingToXYZMat = float3x3(workingToXYZ[0].xyz, workingToXYZ[1].xyz, workingToXYZ[2].xyz);
-	whiteBalance = mul(xyzToWorkingMat, mul(whiteBalance, workingToXYZMat));
-
-	return mul(whiteBalance, linearColor);
+	return mul(xyzToWorkingMat, mul(whiteBalance, workingToXYZMat));
 }
 
 float HDRPaperWhiteNits()
@@ -705,7 +718,16 @@ float3 LogToLinearSpace(float3 val, uint logType)
 
 ////////////////////////////////////////////////////////////////////////
 
-float3 ColorGrading(float3 color)
+namespace NeutralGrading
+{
+	static const uint Input = 1u << 0;
+	static const uint Output = 1u << 1;
+	static const uint CDL = 1u << 2;
+	static const uint Contrast = 1u << 3;
+	static const uint TintFade = 1u << 4;
+}
+
+float3 ColorGrading(float3 color, float3x3 whiteBalance, bool useWhiteBalance, bool oklchControlsActive, uint neutralControls)
 {
 	// Stage 1: Scene RGB (sRGB or ACEScg) → Working color space
 	if (enableColorSpaceTransform) {
@@ -716,17 +738,19 @@ float3 ColorGrading(float3 color)
 	// HDR color grading (in working space, linear)
 	// Exposure/White Balance
 	color *= exposureTemperatureTint.x;
-	color = WhiteBalance(color);
+	if (useWhiteBalance)
+		color = mul(whiteBalance, color);
 
 	// Oklch adjustments (perceptual, HDR-safe: saturation, vibrance, hue shift, per-hue mixer)
-	color = OklchAdjustments(color);
+	color = OklchAdjustments(color, oklchControlsActive);
 
 	// Log
 	if (logType)
 		color = LinearToLogSpace(color, logType);  // Preferably ACEScct
 
 	// ASC CDL
-	color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
+	[branch] if (!(neutralControls & NeutralGrading::CDL))
+		color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
 
 	// Shadows Midtones Highlights (gain + offset per zone)
 	color = ShadowsMidtonesHighlights(color, shadows.xyz, midtones.xyz, highlights.xyz,
@@ -734,7 +758,8 @@ float3 ColorGrading(float3 color)
 		shadowsHighlightsRange.x, shadowsHighlightsRange.y, shadowsHighlightsRange.z, shadowsHighlightsRange.w);
 
 	// Contrast
-	color = logType ? LogContrast(color, contrast.xyz, pivot.xyz) : LinearContrast(color, contrast.xyz, pivot.xyz);
+	[branch] if (!(neutralControls & NeutralGrading::Contrast))
+		color = logType ? LogContrast(color, contrast.xyz, pivot.xyz) : LinearContrast(color, contrast.xyz, pivot.xyz);
 
 	if (logType & LogType::Invert) {
 		color = LogToLinearSpace(color, logType);
@@ -770,17 +795,61 @@ float3 ColorGrading(float3 color)
 	return color;
 }
 
-float4 PSColorGrading(FullscreenTriangleVSOutput input) : SV_Target
+struct ColorGradingVSOutput
+{
+	float4 Position: SV_POSITION;
+	nointerpolation float4 WhiteBalance0: TEXCOORD0;
+	nointerpolation float3 WhiteBalance1: TEXCOORD1;
+	nointerpolation float3 WhiteBalance2: TEXCOORD2;
+	nointerpolation uint OklchControlsActive: TEXCOORD3;
+	nointerpolation uint NeutralControls: TEXCOORD4;
+};
+
+ColorGradingVSOutput VSColorGrading(uint vertexID : SV_VertexID)
+{
+	bool useWhiteBalance;
+	const float3x3 whiteBalance = GetWhiteBalanceMatrix(useWhiteBalance);
+	ColorGradingVSOutput output;
+	output.Position = FullscreenTriangleVS(vertexID).Position;
+	output.WhiteBalance0 = float4(whiteBalance[0], useWhiteBalance);
+	output.WhiteBalance1 = whiteBalance[1];
+	output.WhiteBalance2 = whiteBalance[2];
+	output.OklchControlsActive = OklchControlsActive();
+	output.NeutralControls = 0;
+	// Input, Output and TintFade also run around the LUT, so the flags apply with or without skipLUT.
+	if (inOutGamma.z == 1.0 && all(cinematic.xyz == 1.0))
+		output.NeutralControls |= NeutralGrading::Input;
+	if (inOutGamma.w == 1.0)
+		output.NeutralControls |= NeutralGrading::Output;
+	if (all(asccdl[0].xyz == 1.0) && all(asccdl[1].xyz == 1.0) && all(asccdl[2].xyz == 0.0))
+		output.NeutralControls |= NeutralGrading::CDL;
+	if (!logType && all(contrast.xyz == 1.0) && all(pivot.xyz != 0.0) && all(isfinite(pivot.xyz)))
+		output.NeutralControls |= NeutralGrading::Contrast;
+	if (tint.w == 0.0 && fade.w == 0.0 && all(isfinite(tint.xyz)) && all(isfinite(fade.xyz)))
+		output.NeutralControls |= NeutralGrading::TintFade;
+	return output;
+}
+
+float4 PSColorGrading(ColorGradingVSOutput input) : SV_Target
 {
 	uint2 DTid = uint2(input.Position.xy);
-	float3 color = ApplyGameCinematic(TexColor[DTid].xyz);
+	float3 color = TexColor[DTid].xyz;
+	[branch] if (!(input.NeutralControls & NeutralGrading::Input))
+		color = ApplyGameCinematic(color);
+	else color = abs(color);
 
 	if (skipLUT)
-		color = ColorGrading(color);
+		color = ColorGrading(color, float3x3(input.WhiteBalance0.xyz, input.WhiteBalance1, input.WhiteBalance2), input.WhiteBalance0.w != 0.0,
+			input.OklchControlsActive != 0, input.NeutralControls);
 	else
 		color = ApplyLUT(color);
 
-	return ApplyGradeOutput(color);
+	color = abs(color);
+	[branch] if (!(input.NeutralControls & NeutralGrading::Output))
+		color = pow(color, inOutGamma.w);
+	[branch] if (!(input.NeutralControls & NeutralGrading::TintFade))
+		color = ApplyGameTintFade(color);
+	return float4(color, 1);
 }
 
 RWTexture3D<float4> RWLUT : register(u0);
@@ -789,6 +858,8 @@ RWTexture3D<float4> RWLUT : register(u0);
 	float3 uvw = float3(DTid) / float3((LUT_SIZE - 1).xxx);
 	float4 neutralColor = float4(uvw, 1);
 	float3 linearColor = LogToLinear(neutralColor.xyz) - LogToLinear(0);
-	linearColor = ColorGrading(linearColor);
+	bool useWhiteBalance;
+	const float3x3 whiteBalance = GetWhiteBalanceMatrix(useWhiteBalance);
+	linearColor = ColorGrading(linearColor, whiteBalance, useWhiteBalance, OklchControlsActive(), 0);
 	RWLUT[DTid] = float4(linearColor, 1);
 }

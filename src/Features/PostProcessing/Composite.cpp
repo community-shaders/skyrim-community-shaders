@@ -33,38 +33,6 @@ void Composite::UpdateAutoEnabled()
 
 void Composite::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
-	{
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-		// Exposure is resolved here. Preserve overexposed HDR values until the
-		// following tone mapper instead of clipping them back to scene FP16.
-		texDesc.Format = globals::features::linearLighting.IsLinearLightingActive() ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "Composite Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateRTV(rtvDesc);
-	}
-
 	compositeCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CompositeCB>(), "Composite Parameters");
 	CompileRasterShaders();
 }
@@ -172,27 +140,34 @@ Composite::Output Composite::Draw(TextureInfo& inout_tex, ColorGrading* grading,
 		emptyWaveCB->Update(PhysicalLensImaging::DiffractionParameters{});
 	}
 
+	// When the transforms run separately, preserve exposed HDR values in FP32.
+	const bool linear = globals::features::linearLighting.IsLinearLightingActive();
 	Output output = Output::Composite;
-	auto* target = texOutput.get();
+	Texture2D* target = nullptr;
 	const char* passName = "PostProcessing::Composite";
-	if (texOutput->desc.Format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
-		if (grading && !grading->settings.skipLUT) {
-			CompileRasterShaders(flags, flags + 1, Output::Graded);
-			if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Graded)] }) && grading->PrepareDraw()) {
+	if (linear && grading && !grading->settings.skipLUT) {
+		CompileRasterShaders(flags, flags + 1, Output::Graded);
+		if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Graded)] }) && grading->PrepareDraw()) {
+			target = owner->GetColorTarget(inout_tex.tex, DXGI_FORMAT_R16G16B16A16_FLOAT);
+			if (target) {
 				output = Output::Graded;
-				target = grading->texColor.get();
 				passName = "PostProcessing::CompositeAndColorGrading";
 			}
-		} else if (conversion.texture && conversion.texture->rtv && conversion.constants &&
-				   conversion.texture->desc.Width == texOutput->desc.Width &&
-				   conversion.texture->desc.Height == texOutput->desc.Height) {
-			CompileRasterShaders(flags, flags + 1, Output::Converted);
-			if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Converted)] })) {
+		}
+	} else if (linear && conversion.format != DXGI_FORMAT_UNKNOWN && conversion.constants) {
+		CompileRasterShaders(flags, flags + 1, Output::Converted);
+		if (AllShadersReady({ &compositeShaders[ShaderIndex(flags, Output::Converted)] })) {
+			target = owner->GetColorTarget(inout_tex.tex, conversion.format);
+			if (target) {
 				output = Output::Converted;
-				target = conversion.texture;
 				passName = "PostProcessing::CompositeAndConvertToTarget";
 			}
 		}
+	}
+	if (!target) {
+		target = owner->GetColorTarget(inout_tex.tex, linear ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R16G16B16A16_FLOAT);
+		if (!target)
+			return Output::Composite;
 	}
 
 	const bool applyLUT = output == Output::Graded;
@@ -263,8 +238,8 @@ Composite::Output Composite::Draw(TextureInfo& inout_tex, ColorGrading* grading,
 		srvs[7] = localExposure->GetBlurredLuminanceSRV();
 	}
 
-	uint width = texOutput->desc.Width;
-	uint height = texOutput->desc.Height;
+	uint width = target->desc.Width;
+	uint height = target->desc.Height;
 
 	CompositeCB cbData = {};
 	cbData.OutputSize[0] = (float)width;
@@ -327,6 +302,6 @@ Composite::Output Composite::Draw(TextureInfo& inout_tex, ColorGrading* grading,
 	state->EndPerfEvent();
 	globals::profiler->EndPass();
 	if (applyLUT)
-		grading->FinishDraw();
+		grading->FinishDraw(*target);
 	return output;
 }
