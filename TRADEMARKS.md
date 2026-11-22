@@ -33,9 +33,6 @@ For example:
 - Writing about, reviewing, linking to or discussing Community Shaders.
 - Building the software from source for your own use, including the logo
   that ships in the source tree, unmodified and for personal use only.
-- Redistributing the **unmodified** official release in line with the GPL
-  (including its licence text and source offer), under its own name and with
-  its branding left as shipped, with a link to the official source.
 
 In all of these, use the name only as much as needed to identify the
 software, and do not suggest that your project is official or endorsed.
@@ -49,6 +46,12 @@ Ask first before you:
   "Community Shaders Plus" or `communityshaders-downloads.com`).
 - Use the logo anywhere other than as allowed above, or modify it, or fold it
   into your own logo or branding.
+- Redistribute, mirror or host Community Shaders builds (modified or not)
+  under the Community Shaders name or logo, or with the logo and other brand
+  artwork included. The GPL lets anyone redistribute the code, but not the
+  branding. Without permission, remove the logo and brand artwork, do not
+  present the copy as the official release, and identify it plainly as an
+  unofficial copy.
 - Distribute a **modified** build or fork under the Community Shaders name or
   logo. Forks are welcome under the GPL, but must be released under a
   different name and logo unless the team has agreed otherwise.
@@ -60,11 +63,13 @@ Ask first before you:
 
 ## Mod hosting sites, aggregators and mirrors
 
-If you host or list Community Shaders on a site you run:
+If you host or list Community Shaders on a site you run, you need permission
+to use the name or logo for the listing (see above). Without it:
 
 - Do not present the listing as official, or as uploaded or approved by the
   team, unless it was.
-- Do not use the logo or other brand artwork without permission.
+- Do not use the logo or other brand artwork, and do not distribute builds
+  that include them.
 - Keep the GPL licence text and credits with the files, and make the source
   available as the licence requires.
 - Link to the official download pages so users can find the maintained
