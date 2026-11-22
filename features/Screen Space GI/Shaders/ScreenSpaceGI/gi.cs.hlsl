@@ -95,6 +95,11 @@ float ACosClamped(float x)
 	return FastMath::ACos(clamp(x, -1, 1));
 }
 
+float HorizonCosBack(float dd, float dv, float thickness)
+{
+	return (dv - thickness) * rsqrt(max(dd - 2 * thickness * dv + thickness * thickness, EPSILON_LENGTH_SQ));
+}
+
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
 	out float o_ao, out sh2 o_currY, out float2 o_currCoCg, out float4 o_currGIAOSpecular)
@@ -140,10 +145,15 @@ void CalculateGI(
 	float visibilitySpecular = 0;
 	float4 radianceY = 0;
 	float2 radianceCoCg = 0;
+	// SH, YCoCg and the rotation are linear: sum hits raw, convert once.
+	float3 radianceSum = 0;
+	float3 radianceDirY = 0;
 	float3 radianceSpecular = 0;
 
 #ifdef GI_SPECULAR
 	const float roughness = max(0.2, saturate(1 - FULLRES_LOAD(srcNormalRoughness, dtid, uv * frameScale, samplerLinearClamp).z));  // can't handle low roughness
+	const float coneHalfAngles = max(5e-2, specularLobeHalfAngle(roughness));                                                       // not too small
+	const float rcpTwoConeHalfAngles = 0.5 / coneHalfAngles;
 #endif
 
 	for (uint slice = 0; slice < NumSlices; slice++) {
@@ -219,13 +229,13 @@ void CalculateGI(
 				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ);
 				// Reject if the depth differs too much from the center pixel.
 				float3 sampleDelta = samplePos - pixCenterPos;
-				float3 sampleHorizonVec = normalize(sampleDelta);
 
-				// Back-side horizon vector for the surface-thickness offset.
-				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness);
-
-				float angleFront = ACosClamped(dot(sampleHorizonVec, viewVec));
-				float angleBack = ACosClamped(dot(sampleBackHorizonVec, viewVec));
+				// |v| = 1: |d - v*T|^2 = dd - 2*T*dv + T^2, dot(d - v*T, v) = dv - T.
+				float dd = dot(sampleDelta, sampleDelta);
+				float dv = dot(sampleDelta, viewVec);
+				float rcpDist = rsqrt(max(dd, EPSILON_LENGTH_SQ));
+				float angleFront = ACosClamped(dv * rcpDist);
+				float angleBack = ACosClamped(HorizonCosBack(dd, dv, Thickness));
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
@@ -234,14 +244,12 @@ void CalculateGI(
 				uint maskedBits = s < AORadius ? HorizonBitmask(angleRange) : 0;
 
 #ifdef GI
-				// Back-side horizon vector for GI-radius sampling depth (~300 units).
-				float3 sampleBackHorizonVecGI = normalize(sampleDelta - viewVec * 300);
-				float angleBackGI = ACosClamped(dot(sampleBackHorizonVecGI, viewVec));
+				// Back-side horizon for GI-radius sampling depth (~300 units).
+				float angleBackGI = ACosClamped(HorizonCosBack(dd, dv, 300));
 				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
 
 #	ifdef GI_SPECULAR
-				float coneHalfAngles = max(5e-2, specularLobeHalfAngle(roughness));  // not too small
-				float2 angleRangeSpecular = clamp((angleRangeGI + nDom) * 0.5 / coneHalfAngles, -1, 1) * 0.5 + 0.5;
+				float2 angleRangeSpecular = clamp((angleRangeGI + nDom) * rcpTwoConeHalfAngles, -1, 1) * 0.5 + 0.5;
 
 				uint maskedBitsGISpecular = s < GIRadius ? HorizonBitmask(angleRangeSpecular) : 0;
 #	endif
@@ -261,31 +269,30 @@ void CalculateGI(
 #	endif
 
 				if (checkGI) {
-					float giBoost = 4.0 * Math::PI * (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
+					// 4 * PI / 32 is folded out of the loop; this factor can be negative.
+					float giBoost = 1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius);
 
 					// IL
 					float3 normalSample = GBuffer::DecodeNormal(srcNormal.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance));
 					if (dot(samplePos, normalSample) > 0)
 						normalSample = -normalSample;
+					float3 sampleHorizonVec = sampleDelta * rcpDist;
 					float frontBackMult = -dot(normalSample, sampleHorizonVec);
 					frontBackMult = frontBackMult < 0 ? 0.0 : frontBackMult;  // backface
 
 					if (frontBackMult > 0.f) {
-						float3 sampleHorizonVecWS = normalize(mul(FrameBuffer::CameraViewInverse, half4(sampleHorizonVec, 0)).xyz);
-
-						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
+						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * giBoost * countbits(validBits);
 						sampleRadiance = max(sampleRadiance, 0);
-						float3 sampleRadianceYCoCg = Color::RGBToYCoCg(sampleRadiance);
 
-						radianceY += sampleRadianceYCoCg.r * SphericalHarmonics::Evaluate(sampleHorizonVecWS);
-						radianceCoCg += sampleRadianceYCoCg.gb;
+						radianceSum += sampleRadiance;
+						radianceDirY += Color::RGBToYCoCg(sampleRadiance).r * sampleHorizonVec;
 
 #	ifdef GI_SPECULAR
 						// thank u Olivier!
 						float NoH = clamp(dot(viewspaceNormal, normalize(viewVec + sampleHorizonVec)), 1e-2, 1);
 						float NoL = clamp(dot(viewspaceNormal, sampleHorizonVec), 1e-2, 1);
 
-						float3 specularRadiance = sampleRadiance * countbits(overlappedBitsSpecular) * 0.03125;
+						float3 specularRadiance = sampleRadiance * countbits(overlappedBitsSpecular);
 						specularRadiance *= GetNormalDistributionFunctionGGX(roughness, NoH) * GetVisibilityFunctionSmithJointApprox(roughness, NoV, NoL);
 						specularRadiance = max(0, specularRadiance);
 
@@ -316,13 +323,19 @@ void CalculateGI(
 	visibility = 1 - pow(abs(1 - visibility), AOPower);
 
 #ifdef GI
-	radianceY *= rcpNumSlices;
+	// Specular adds one more 1 / 32 for its own bit count.
+	const float radianceScale = 4.0 * Math::PI * 0.03125 * rcpNumSlices;
+
+	float3 radianceDirWS = ViewToWorldVector(radianceDirY, FrameBuffer::CameraViewInverse);
+	radianceY = SphericalHarmonics::Evaluate(radianceDirWS);
+	radianceY.x *= Color::RGBToYCoCg(radianceSum).r;  // band 0 does not depend on direction
+	radianceY *= radianceScale;
 	radianceY = lerp(radianceY, 0, depthFade);
 
-	radianceCoCg *= rcpNumSlices * GISaturation;
+	radianceCoCg = Color::RGBToYCoCg(radianceSum).gb * (radianceScale * GISaturation);
 
 #	ifdef GI_SPECULAR
-	radianceSpecular *= rcpNumSlices;
+	radianceSpecular *= radianceScale * 0.03125;
 	radianceSpecular = lerp(radianceSpecular, 0, depthFade);
 
 	visibilitySpecular *= rcpNumSlices;
