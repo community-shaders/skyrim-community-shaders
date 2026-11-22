@@ -7,7 +7,7 @@
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-#	define MAIN_COPY_SLOT t23
+#define MAIN_COPY_SLOT t23
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
@@ -47,9 +47,9 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
-#if defined(NO_TYPED_UAV_LOAD)
+#	if defined(NO_TYPED_UAV_LOAD)
 Texture2D<float3> MainTexture : register(MAIN_COPY_SLOT);
-#endif
+#	endif
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
@@ -111,11 +111,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	#if defined(NO_TYPED_UAV_LOAD)
-		float3 diffuseColor = PreExposure::Decode(MainTexture[dispatchID.xy]);
-	#else
-		float3 diffuseColor = PreExposure::Decode(MainRW[dispatchID.xy].xyz);
-	#endif
+#if defined(NO_TYPED_UAV_LOAD)
+	float3 diffuseColor = PreExposure::Decode(MainTexture[dispatchID.xy]);
+#else
+	float3 diffuseColor = PreExposure::Decode(MainRW[dispatchID.xy].xyz);
+#endif
 	float3 specularColor = PreExposure::Decode(SpecularTexture[dispatchID.xy]);
 	float3 albedo = AlbedoTexture[dispatchID.xy];
 
