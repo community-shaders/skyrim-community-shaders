@@ -1,8 +1,8 @@
 # Community Shaders Trademark Policy
 
 This policy explains how the "Community Shaders" name and logo may be used.
-It is modelled on the approach taken by the
-[WordPress Foundation trademark policy](https://wordpressfoundation.org/trademark-policy/).
+
+
 
 The code in this repository is free software under the GPL-3.0 with the
 exceptions listed in [EXCEPTIONS.md](EXCEPTIONS.md). **Nothing in this policy
