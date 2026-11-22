@@ -30,7 +30,7 @@ namespace
 		std::string featureName;
 		std::string packId;
 		std::string filePath;
-		/// Newline-joined keys the feature does not have; while any exist the file is not applied.
+		/// Newline-joined keys the feature does not have; these are skipped, the rest of the file applies.
 		std::string unknownKeys;
 		size_t settingCount = 0;
 	};
@@ -80,7 +80,7 @@ namespace
 		notAppliedOnly &= count != 0;
 		if (count == 0)
 			return;
-		const auto label = std::vformat(T(TKEY("not_applied_count"), "{} not applied"), std::make_format_args(count));
+		const auto label = std::vformat(T(TKEY("partial_count"), "{} partly applied"), std::make_format_args(count));
 		const ImVec4 warning = Util::Colors::GetWarning();
 		BrowserUI::RightAlign(BrowserUI::MeasureChip(label.c_str(), true));
 		if (BrowserUI::Chip("##notApplied", label.c_str(), Icons::TI(ICON_TI_X), &warning, notAppliedOnly ? &warning : nullptr))
@@ -98,9 +98,9 @@ namespace
 	void DrawStatus(const OverwriteRow& row)
 	{
 		if (!row.unknownKeys.empty()) {
-			ImGui::TextColored(Util::Colors::GetWarning(), "%s", T(TKEY("status_not_applied"), "Not applied"));
+			ImGui::TextColored(Util::Colors::GetWarning(), "%s", T(TKEY("status_partial"), "Partly applied"));
 			const auto tooltip = std::format("{}\n{}",
-				T(TKEY("status_not_applied_tooltip"), "Names settings this feature does not have, so none of it is applied:"), row.unknownKeys);
+				T(TKEY("status_partial_tooltip"), "Names settings this feature does not have, so these are skipped:"), row.unknownKeys);
 			Util::AddTooltip(tooltip.c_str());
 		} else {
 			ImGui::TextColored(Util::Colors::GetSuccess(), "%s", T(TKEY("status_applied"), "Applied"));
