@@ -2102,15 +2102,18 @@ void EditorWindow::UnlockWeather()
 
 void EditorWindow::PauseTime()
 {
+	auto calendar = Util::Climate::GetCalendar();
+	if (!calendar || !calendar->timeScale)
+		return;
+	// A nonzero timescale set elsewhere (a save load, the console) means our pause flag is stale
+	if (timePaused && calendar->timeScale->value > 0.0f)
+		timePaused = false;
 	if (timePaused)
 		return;
-	auto calendar = Util::Climate::GetCalendar();
-	if (calendar && calendar->timeScale) {
-		savedTimeScale = calendar->timeScale->value;
-		calendar->timeScale->value = 0.0f;
-		timePaused = true;
-		logger::info("Time paused (saved timescale: {})", savedTimeScale);
-	}
+	savedTimeScale = calendar->timeScale->value;
+	calendar->timeScale->value = 0.0f;
+	timePaused = true;
+	logger::info("Time paused (saved timescale: {})", savedTimeScale);
 }
 
 void EditorWindow::ResumeTime()
