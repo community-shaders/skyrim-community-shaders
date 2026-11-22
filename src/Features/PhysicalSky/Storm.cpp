@@ -9,6 +9,7 @@
 
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
+#include "Util.h"
 #include "Utils/Form.h"
 
 #define I18N_KEY_PREFIX "feature.physical_sky."
@@ -56,8 +57,8 @@ void CloudStormManager::LoadInstances()
 			std::ifstream stream(path);
 			instances.emplace(it->path().filename().string(), nlohmann::json::parse(stream).get<CloudStormSettings>());
 		} catch (const std::exception& exception) {
-			error = path.filename().string() + ": " + exception.what();
-			logger::error("PhysicalSky storm instance {}: {}", path.string(), exception.what());
+			error = Util::PathHelpers::ToUtf8(path.filename()) + ": " + exception.what();
+			logger::error("PhysicalSky storm instance {}: {}", Util::PathHelpers::ToUtf8(path), exception.what());
 		}
 	}
 	if (!instances.contains(selected))
