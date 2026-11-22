@@ -169,6 +169,9 @@ bool Load()
 
 	auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener("SKSE", MessageHandler);
+	messaging->RegisterListener(nullptr, [](SKSE::MessagingInterface::Message* a_message) {
+		globals::features::upscaling.HandleExternalMessage(a_message);
+	});
 
 	globals::OnInit();
 	globals::ReInit();

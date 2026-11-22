@@ -1332,6 +1332,8 @@ bool Upscaling::IsFrameGenerationActive() const
 
 bool Upscaling::ShouldPrepareFrameGeneration() const
 {
+	if (frameGenerationSuspended.load(std::memory_order_relaxed))
+		return false;
 	auto* state = globals::state;
 	const bool menuOpen = state && state->IsPausedOrMenuOpen(globals::game::ui);
 	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
@@ -1340,6 +1342,22 @@ bool Upscaling::ShouldPrepareFrameGeneration() const
 bool Upscaling::ShouldUseFrameGenerationThisFrame() const
 {
 	return frameGenerationPrepared;
+}
+
+void Upscaling::HandleExternalMessage(SKSE::MessagingInterface::Message* a_message)
+{
+	if (!a_message || a_message->type != kMessageSuspendFrameGeneration)
+		return;
+	if (!a_message->sender || !a_message->data || a_message->dataLen != sizeof(uint32_t)) {
+		logger::warn("[Upscaling] Ignored a malformed frame generation suspend message");
+		return;
+	}
+	const bool suspend = *static_cast<const uint32_t*>(a_message->data) != 0;
+	std::lock_guard lock(frameGenerationSuspendersMutex);
+	const std::string sender = a_message->sender;
+	if (suspend ? frameGenerationSuspenders.insert(sender).second : frameGenerationSuspenders.erase(sender) > 0)
+		logger::info("[Upscaling] {} {} frame generation", sender, suspend ? "suspended" : "released");
+	frameGenerationSuspended.store(!frameGenerationSuspenders.empty(), std::memory_order_relaxed);
 }
 
 bool Upscaling::IsUpscalingActive() const

@@ -5,8 +5,11 @@
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/RCAS/RCAS.h"
 #include "Upscaling/Streamline.h"
+#include <atomic>
 #include <d3d11_4.h>
 #include <d3d12.h>
+#include <mutex>
+#include <unordered_set>
 #include <winrt/base.h>
 
 /**
@@ -107,6 +110,17 @@ public:
 	bool ShouldPrepareFrameGeneration() const;
 	/** @brief Returns the frame-generation decision made in post-processing, held until the frame is presented. */
 	bool ShouldUseFrameGenerationThisFrame() const;
+
+	/**
+	 * @brief SKSE message another plugin dispatches to "CommunityShaders" to hold frame
+	 * generation off while it draws over the game (a map, a full-screen interface).
+	 *
+	 * The data is a uint32_t: 1 suspends frame generation for the sending plugin, 0 releases
+	 * it. Frame generation stays suspended while any sender holds it, the same way it stands
+	 * down for the game's own menus.
+	 */
+	static constexpr uint32_t kMessageSuspendFrameGeneration = 0x43534647;  // 'CSFG'
+	void HandleExternalMessage(SKSE::MessagingInterface::Message* a_message);
 	bool IsUpscalingActive() const;
 
 	// Feature interface overrides
@@ -235,6 +249,10 @@ public:
 	BlurResources GetBlurResources() const;
 
 private:
+	std::mutex frameGenerationSuspendersMutex;
+	std::unordered_set<std::string> frameGenerationSuspenders;
+	std::atomic<bool> frameGenerationSuspended = false;
+
 	struct Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state);
