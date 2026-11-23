@@ -287,6 +287,10 @@ namespace
 	constexpr float kMoonIlluminanceSpeed = 0.001f;
 	/** @brief Floor on a moon texture channel's mean, relative to its luminance, so a channel the texture lacks cannot blow up its gain. */
 	constexpr float kMinDiscChannelShare = 0.01f;
+	/** @brief moonDiscRadiance.w modes, matching Sky.hlsl: radiance per texture colour, weather-glare tinted, or the vanilla disc. */
+	constexpr float kDiscModeLight = 0.f;
+	constexpr float kDiscModeGlare = 1.f;
+	constexpr float kDiscModeVanilla = -1.f;
 
 	/** @brief Zeroes negative or non-finite channels of a light color, since light cannot be negative. */
 	void ClampLightColor(float3& color)
@@ -2148,12 +2152,20 @@ void PhysicalSky::Reset()
 	const auto discRadiance = [&](const float3& lightColor, float diskRadius, const MoonPhotometry& photometry, bool matchLight) {
 		const float fullLuminance = GetWorkingLuminance(photometry.fullMean);
 		if (fullLuminance <= 0.f)
-			return float4(1.f);  // unreadable texture: vanilla brightness, tinted by the weather glare
-		// Matching divides out the texture's mean colour, as the light colour already carries the moon's
-		const float3 gain = matchLight ? sRGBToWorkingGamut(lightColor) / float3::Max(sRGBToWorkingGamut(photometry.fullMean), float3(fullLuminance * kMinDiscChannelShare)) :
-		                                 float3(GetWorkingLuminance(lightColor) / fullLuminance);
-		const float3 radiance = gain / GetBillboardSolidAngle(diskRadius);
-		return float4(radiance.x, radiance.y, radiance.z, matchLight ? 0.f : 1.f);
+			return float4(0.f, 0.f, 0.f, kDiscModeVanilla);
+		const float solidAngle = GetBillboardSolidAngle(diskRadius);
+		const float3 meanWorking = sRGBToWorkingGamut(photometry.fullMean);
+		if (matchLight) {
+			// Divides out the texture's mean colour, as the light colour already carries the moon's
+			const float3 radiance = sRGBToWorkingGamut(lightColor) / (float3::Max(meanWorking, float3(fullLuminance * kMinDiscChannelShare)) * solidAngle);
+			return float4(radiance.x, radiance.y, radiance.z, kDiscModeLight);
+		}
+		// The glare is only known per vertex, so the shader divides by Y(glare * this) to normalise the tinted texture
+		const float lightLuminance = GetWorkingLuminance(lightColor);
+		if (lightLuminance <= 0.f)
+			return float4(0.f, 0.f, 0.f, kDiscModeLight);
+		const float3 meanPerLight = meanWorking * (solidAngle / lightLuminance);
+		return float4(meanPerLight.x, meanPerLight.y, meanPerLight.z, kDiscModeGlare);
 	};
 	cbData.moonDiscRadiance[0] = discRadiance(settings.masserColor, cbData.diskAngularRadius.y, moonPhotometry[0], settings.masserDiscMatchLight);
 	cbData.moonDiscRadiance[1] = discRadiance(settings.secundaColor, cbData.diskAngularRadius.z, moonPhotometry[1], settings.secundaDiscMatchLight);

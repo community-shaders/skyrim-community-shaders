@@ -319,7 +319,7 @@ struct PhysicalSky final : public Feature
 		uint dirLightDiskIndex;              // body whose disc phase the clouds show
 		float4 dirLightDisc;                 // world direction to that body, and its glow weight fading out and back in across a swap
 		float4 diskBillboardScale;
-		float4 moonDiscRadiance[2];  // Masser, Secunda: radiance per unit texture colour; w = 1 tints by the luminance-normalised weather glare
+		float4 moonDiscRadiance[2];  // Masser, Secunda; w = 0: rgb is radiance per texture colour, 1: rgb is mean * solid angle / light Y for the glare tint, -1: vanilla
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
 

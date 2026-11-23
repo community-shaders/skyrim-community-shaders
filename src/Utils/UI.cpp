@@ -1037,12 +1037,15 @@ namespace Util
 		auto* storage = ImGui::GetStateStorage();
 		const ImGuiID hueId = ImGui::GetID("##SavedHue");
 		const ImGuiID saturationId = ImGui::GetID("##SavedSaturation");
-		std::array<float, 3> hsv{};
-		ImGui::ColorConvertRGBtoHSV(col[0], col[1], col[2], hsv[0], hsv[1], hsv[2]);
-		if (const float savedHue = storage->GetFloat(hueId, hsv[0]); hsv[1] == 0.f || (hsv[0] == 0.f && savedHue == 1.f))
-			hsv[0] = savedHue;
-		if (hsv[2] == 0.f)
-			hsv[1] = storage->GetFloat(saturationId, hsv[1]);
+		const bool hsvStorage = (flags & ImGuiColorEditFlags_InputHSV) != 0;
+		std::array<float, 3> hsv{ col[0], col[1], col[2] };
+		if (!hsvStorage) {
+			ImGui::ColorConvertRGBtoHSV(col[0], col[1], col[2], hsv[0], hsv[1], hsv[2]);
+			if (const float savedHue = storage->GetFloat(hueId, hsv[0]); hsv[1] == 0.f || (hsv[0] == 0.f && savedHue == 1.f))
+				hsv[0] = savedHue;
+			if (hsv[2] == 0.f)
+				hsv[1] = storage->GetFloat(saturationId, hsv[1]);
+		}
 
 		const auto& style = ImGui::GetStyle();
 		const float componentCount = static_cast<float>(hsv.size());
@@ -1058,7 +1061,9 @@ namespace Util
 			ImGui::SetNextItemWidth(componentWidth);
 			changed |= ImGui::DragFloat(ids[component], &hsv[component], kColorDragSpeed, 0.f, maxima[component], formats[component], ImGuiSliderFlags_AlwaysClamp);
 		}
-		if (changed) {
+		if (changed && hsvStorage) {
+			std::ranges::copy(hsv, col);
+		} else if (changed) {
 			storage->SetFloat(hueId, hsv[0]);
 			storage->SetFloat(saturationId, hsv[1]);
 			ImGui::ColorConvertHSVtoRGB(hsv[0], hsv[1], hsv[2], col[0], col[1], col[2]);
