@@ -590,7 +590,7 @@ namespace SharedData
 		uint dirLightDiskIndex;
 		float4 dirLightDisc;
 		float4 diskBillboardScale;
-		float4 diskBrightness;
+		float4 moonDiscRadiance[2];  // Masser, Secunda: rgb radiance per unit texture colour, w = 1 tints by normalised weather glare
 	};
 
 	struct RainRefractionSettings

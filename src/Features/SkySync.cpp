@@ -481,7 +481,7 @@ void SkySync::ApplyLightColor(const RE::Sky* sky) const
 	const auto [source, target] = GetLightBodies();
 	auto bodyLight = [&](Caster body) {
 		const int idx = static_cast<int>(body);
-		// Only a moon's phase: its horizon dim already comes through currentDim
+		// Only a moon's fade alpha: Physical Sky bakes in its phase, and its horizon dim comes through currentDim
 		return (*workingLightColors)[idx] * (body == Caster::Sun ? 1.0f : colors[idx].w);
 	};
 	const float sourceShare = shadowFader.sourceShare;

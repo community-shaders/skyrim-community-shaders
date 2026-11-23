@@ -950,6 +950,12 @@ namespace Util
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%", ImGuiSliderFlags flags = 0);
 
 	/**
+	 * @brief Drop-in for ImGui::ColorEdit3 that keeps HDR HSV inputs bounded: H and S in [0, 1], V from 0 up.
+	 * ImGui leaves all three unbounded under ImGuiColorEditFlags_HDR, and its HSV conversion breaks outside [0, 1].
+	 */
+	bool ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags = 0);
+
+	/**
 	 * Draws a 2-4 component float slider. Holding Shift edits all components from the first component.
 	 */
 	template <int Num = 3>
