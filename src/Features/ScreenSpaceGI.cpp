@@ -346,6 +346,7 @@ void ScreenSpaceGI::DrawDebugSection()
 	}
 	BUFFER_VIEWER_NODE(texAo[0], debugRescale)
 	BUFFER_VIEWER_NODE(texAo[1], debugRescale)
+	BUFFER_VIEWER_NODE(texAoOutput, debugRescale)
 	BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
 	BUFFER_VIEWER_NODE(texIlY[1], debugRescale)
 	BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
@@ -553,6 +554,10 @@ void ScreenSpaceGI::SetupResources()
 			texAo[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[1]");
 			texAo[1]->CreateSRV(srvDesc);
 			texAo[1]->CreateUAV(uavDesc);
+
+			texAoOutput = eastl::make_unique<Texture2D>(texDesc, "SSGI::AOOutput");
+			texAoOutput->CreateSRV(srvDesc);
+			texAoOutput->CreateUAV(uavDesc);
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8_UNORM;
@@ -756,7 +761,7 @@ void ScreenSpaceGI::DrawSSGI()
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
-		context->ClearUnorderedAccessViewFloat(texAo[outputAoIdx]->uav.get(), clr);
+		context->ClearUnorderedAccessViewFloat(texAoOutput->uav.get(), clr);
 		context->ClearUnorderedAccessViewFloat(texIlY[outputIlIdx]->uav.get(), clr);
 		context->ClearUnorderedAccessViewFloat(texIlCoCg[outputIlIdx]->uav.get(), clr);
 		return;
@@ -935,6 +940,7 @@ void ScreenSpaceGI::DrawSSGI()
 		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
 		uavs.at(3) = texGiSpecular[!inputAoTexIdx]->uav.get();
 		uavs.at(4) = texPrevGeo->uav.get();
+		uavs.at(5) = texAoOutput->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -985,7 +991,7 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(3) = texIlCoCg[inputGITexIdx]->srv.get();
 		srvs.at(4) = texGiSpecular[inputAoTexIdx]->srv.get();
 
-		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
+		uavs.at(0) = texAoOutput->uav.get();
 		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
 		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
 		uavs.at(3) = texGiSpecular[!inputAoTexIdx]->uav.get();

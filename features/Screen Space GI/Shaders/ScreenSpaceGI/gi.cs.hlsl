@@ -49,6 +49,7 @@ RWTexture2D<float4> outY : register(u1);
 RWTexture2D<float2> outCoCg : register(u2);
 RWTexture2D<float4> outGISpecular : register(u3);
 RWTexture2D<half3> outPrevGeo : register(u4);
+RWTexture2D<unorm float> outAoResolved : register(u5);
 
 float GetDepthFade(float depth)
 {
@@ -320,7 +321,6 @@ void CalculateGI(
 
 	visibility *= rcpNumSlices;
 	visibility = lerp(saturate(visibility), 0, depthFade);
-	visibility = 1 - pow(abs(1 - visibility), AOPower);
 
 #ifdef GI
 	// Specular adds one more 1 / 32 for its own bit count.
@@ -430,6 +430,9 @@ void CalculateGI(
 	currGIAOSpecular = filterNaN(currGIAOSpecular);
 
 	outAo[pxCoord] = currAo;
+#if !defined(HALF_RES) && !defined(QUARTER_RES)
+	outAoResolved[pxCoord] = ResolveAO(currAo);
+#endif
 	outY[pxCoord] = currY;
 	outCoCg[pxCoord] = currCoCg;
 #ifdef GI_SPECULAR
