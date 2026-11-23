@@ -323,11 +323,12 @@ struct PhysicalSky final : public Feature
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
 
-	/** @brief A moon's drawn texture luminance relative to its full-moon texture, and that texture's mean linear colour (zero when unreadable). */
+	/** @brief A moon's drawn texture luminance relative to its full-moon texture, and both textures' mean linear colours (zero when unreadable). */
 	struct MoonPhotometry
 	{
 		float phase = 1.f;
 		float3 fullMean{};
+		float3 currentMean{};
 		std::string texturePath;  // bound texture the values were measured for
 	};
 	std::array<MoonPhotometry, 2> moonPhotometry;  // Masser, Secunda

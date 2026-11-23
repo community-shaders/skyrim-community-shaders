@@ -326,6 +326,7 @@ namespace
 		if (current && fullLuminance > 0.f) {
 			photometry.phase = GetWorkingLuminance(*current) / fullLuminance;
 			photometry.fullMean = *full;
+			photometry.currentMean = *current;
 		}
 	}
 
@@ -2148,22 +2149,24 @@ void PhysicalSky::Reset()
 		0.f  // the directional light's, blended below
 	};
 	cbData.diskBillboardScale = float4(1.f);
-	// The full-moon disc integrates to the unphased light, so each drawn phase integrates to its phased light
+	// The drawn phase texture integrates to the phased light, so the disc and the moonlight always match
 	const auto discRadiance = [&](const float3& lightColor, float diskRadius, const MoonPhotometry& photometry, bool matchLight) {
-		const float fullLuminance = GetWorkingLuminance(photometry.fullMean);
-		if (fullLuminance <= 0.f)
+		if (GetWorkingLuminance(photometry.fullMean) <= 0.f)
 			return float4(0.f, 0.f, 0.f, kDiscModeVanilla);
+		const float3 phasedLight = lightColor * photometry.phase;
+		const float currentLuminance = GetWorkingLuminance(photometry.currentMean);
+		const float lightLuminance = GetWorkingLuminance(phasedLight);
+		// A blank phase texture draws nothing to scale, and a dark light leaves nothing to draw
+		if (currentLuminance <= 0.f || lightLuminance <= 0.f)
+			return float4(0.f, 0.f, 0.f, kDiscModeLight);
 		const float solidAngle = GetBillboardSolidAngle(diskRadius);
-		const float3 meanWorking = sRGBToWorkingGamut(photometry.fullMean);
+		const float3 meanWorking = sRGBToWorkingGamut(photometry.currentMean);
 		if (matchLight) {
 			// Divides out the texture's mean colour, as the light colour already carries the moon's
-			const float3 radiance = sRGBToWorkingGamut(lightColor) / (float3::Max(meanWorking, float3(fullLuminance * kMinDiscChannelShare)) * solidAngle);
+			const float3 radiance = sRGBToWorkingGamut(phasedLight) / (float3::Max(meanWorking, float3(currentLuminance * kMinDiscChannelShare)) * solidAngle);
 			return float4(radiance.x, radiance.y, radiance.z, kDiscModeLight);
 		}
 		// The glare is only known per vertex, so the shader divides by Y(glare * this) to normalise the tinted texture
-		const float lightLuminance = GetWorkingLuminance(lightColor);
-		if (lightLuminance <= 0.f)
-			return float4(0.f, 0.f, 0.f, kDiscModeLight);
 		const float3 meanPerLight = meanWorking * (solidAngle / lightLuminance);
 		return float4(meanPerLight.x, meanPerLight.y, meanPerLight.z, kDiscModeGlare);
 	};
