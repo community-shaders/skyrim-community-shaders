@@ -139,20 +139,26 @@ void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceVie
 	activeWorldspace = worldspace;
 	if (worldChanged)
 		activation.clear();
+	bool discontinuous = worldChanged && !active.empty();
 	NdfKey nextKey{ textures.revision, noiseRevision, {} };
 	for (const auto& [id, instance] : instances) {
 		if (instance.worldspace.empty() || instance.worldspace != worldspace)
 			continue;
 		auto& weight = activation[id];
+		const float previous = weight;
 		if (instance.mode == "Volcanic") {
 			weight = instance.enabled ? 1.f : 0.f;
 		} else {
 			const float target = GetStormActivation(selection, id, instance.enabled);
 			weight = std::clamp(target, weight - step, weight + step);
 		}
+		if ((worldChanged && weight > 0.f) || (step >= 1.f && std::abs(weight - previous) > 0.25f))
+			discontinuous = true;
 		if (weight > 0.f)
 			nextKey.instances.push_back(id);
 	}
+	if (discontinuous)
+		++revision;
 	if (!worldChanged && key == nextKey) {
 		for (size_t index = 0; index < active.size(); ++index)
 			active[index].lifecycle.x = activation.at(activeIds[index]);

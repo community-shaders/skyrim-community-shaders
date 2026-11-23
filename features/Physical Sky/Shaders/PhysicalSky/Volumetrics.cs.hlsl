@@ -689,6 +689,14 @@ struct NDFInfo
 	float plumeCoordinate;
 	float plumeDensity;
 	float2 plumeEnvelope;
+#	ifndef VOLCANIC_STORMS_ONLY
+	float stormDensity;
+	float stormAlbedo;
+	float2 stormAmbientPhase;
+	float3 stormEmission;
+	uint stormSecondaryIndex;
+	float stormSecondaryBlend;
+#	endif
 #endif
 };
 
@@ -895,8 +903,10 @@ float sampleCloudDensityFromContext(
 	}
 #ifdef NO_CLOUD_STORMS
 	const float densityScale = info.lowDensityScale;
-#else
+#elif defined(VOLCANIC_STORMS_ONLY)
 	const float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z * ndf.plumeDensity, ndf.stormBlend) : info.lowDensityScale;
+#else
+	const float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, ndf.stormDensity * ndf.plumeDensity, ndf.stormBlend) : info.lowDensityScale;
 #endif
 	float lightDensity;
 	const float density = ShapeCloudBaseDensity(eroded, ndf.height_fraction, info.bottomDensityWidth, info.bottomDensityPower, ndf.shaping_start, ndf.rawStorm, lightDensity, risingBillows) * densityScale;
@@ -1447,9 +1457,13 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 #endif
 				result.lum += transmittance * source;
 				if (densityContext.ndf.stormVolume) {
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+					result.lum += transmittance * opacity * densityContext.ndf.stormEmission * saturate(densityContext.ndf.coverage) * densityContext.ndf.stormBlend;
+#else
 					const float height = StormHeight(pos.z * GAME_UNIT_TO_M, CloudStorms[densityContext.ndf.stormIndex]);
 					const float glow = exp(-height / CloudStorms[densityContext.ndf.stormIndex].emission.w) * saturate(densityContext.ndf.coverage);
 					result.lum += transmittance * opacity * CloudStorms[densityContext.ndf.stormIndex].emission.rgb * glow * densityContext.ndf.stormBlend;
+#endif
 				}
 			}
 			[branch] if (ambientEnabled)
