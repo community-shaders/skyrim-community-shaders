@@ -229,6 +229,7 @@ struct PhysicalSky final : public Feature
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
 		SceneBlend voxelClouds;
+		SceneBlend supercellStorms;
 
 		Aerosol::Optics GetAerosolOptics() const;
 		void ApplyAerosolOptics();
