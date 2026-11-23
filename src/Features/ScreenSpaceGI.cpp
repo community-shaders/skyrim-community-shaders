@@ -341,7 +341,9 @@ void ScreenSpaceGI::DrawDebugSection()
 	BUFFER_VIEWER_NODE(texNoise, debugRescale)
 	BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
 	BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
-	BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+	if (settings.EnableGI) {
+		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+	}
 	BUFFER_VIEWER_NODE(texAo[0], debugRescale)
 	BUFFER_VIEWER_NODE(texAo[1], debugRescale)
 	BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
@@ -867,7 +869,8 @@ void ScreenSpaceGI::DrawSSGI()
 		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling.
 		// radianceDisocc wrote mip 0 directly to texRadianceTemp above, so we can bind it
 		// as SRV input here without an intermediate CopySubresourceRegion.
-		{
+		// Only gi.cs's GI path reads it.
+		if (settings.EnableGI) {
 			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
 
 			resetViews();
