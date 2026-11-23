@@ -1,6 +1,8 @@
 ﻿#include "Flowmap.h"
 
+#include "LoadWatchdog.h"
 #include "Utils/D3D.h"
+#include "WaterCache.h"
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 #include <charconv>
@@ -40,6 +42,8 @@ bool Flowmap::LoadOrGenerateFlowmap(bool useMips)
 bool Flowmap::RegenerateAndLoadFlowmap(bool useMips)
 {
 	Reset();
+
+	LoadWatchdog::SetStep("clearing old flowmaps", "file access to Data\\textures\\water\\flowmaps is blocked (mod manager virtual file system or antivirus)");
 
 	namespace fs = std::filesystem;
 	const fs::path dir = Util::PathHelpers::GetDataPath() / "textures" / "water" / "flowmaps";
@@ -122,6 +126,7 @@ bool Flowmap::LoadFlowmap()
 	}
 
 	auto path = std::format(R"(textures\water\flowmaps\{})", file.path().filename().string().c_str());
+	LoadWatchdog::SetStep("loading the flowmap texture", "the game's texture loader is blocked or the flowmap file is unreadable");
 	RE::NiPointer<RE::NiTexture> tex;
 	RE::BSShaderManager::GetTexture(path.c_str(), true, tex, false);
 
@@ -178,6 +183,7 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 		return false;
 	}
 
+	LoadWatchdog::SetStep("acquiring the D3D11 device lock", "another plugin holds the D3D11 device lock (frame generation, overlays or capture tools)");
 	Util::MultithreadScope guard(ctx);
 	if (!guard) {
 		logger::error("[Unified Water] [Flowmap] ID3D11Multithread not available");
@@ -196,6 +202,17 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	worldMaxX -= 1;
 	worldMaxY -= 1;
 
+	// Every cell in the bounds is probed for a flow file, so absurd bounds would never finish
+	constexpr auto kMaxCellRadius = WaterCache::kMaxWorldspaceCells / 2;
+	if (worldMinX < -kMaxCellRadius || worldMinY < -kMaxCellRadius || worldMaxX > kMaxCellRadius || worldMaxY > kMaxCellRadius) {
+		logger::warn("[Unified Water] [Flowmap] Tamriel bounds ({},{} to {},{} cells) are implausible, a plugin edits them; clamping to +-{}",
+			worldMinX, worldMinY, worldMaxX, worldMaxY, kMaxCellRadius);
+		worldMinX = std::max(worldMinX, -kMaxCellRadius);
+		worldMinY = std::max(worldMinY, -kMaxCellRadius);
+		worldMaxX = std::min(worldMaxX, kMaxCellRadius);
+		worldMaxY = std::min(worldMaxY, kMaxCellRadius);
+	}
+
 	struct FlowCell
 	{
 		int32_t x;
@@ -210,6 +227,8 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 
 	auto cells = std::vector<FlowCell>();
 	cells.reserve(1024);
+
+	LoadWatchdog::SetStep("reading flow textures", "a plugin widens Tamriel's bounds (see the clamping warning), or a Textures\\Water\\skyrim.esm flow texture can't be read");
 
 	{
 		for (auto y = worldMinY; y < worldMaxY; ++y) {
@@ -338,6 +357,7 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	}
 
 	{
+		LoadWatchdog::SetStep("saving the flowmap", "GPU readback is not completing (driver or frame generation), or the file write is blocked");
 		ctx->ExecuteCommandList(commandList.get(), TRUE);
 
 		const auto filename = std::format(L"Tamriel-Flowmap.{}.{}.{}.{}.dds", width, height, offsetX, offsetY);

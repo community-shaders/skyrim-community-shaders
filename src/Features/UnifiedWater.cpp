@@ -3,6 +3,7 @@
 #include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "UnifiedWater/LoadWatchdog.h"
 #include "Util.h"
 #include "Utils/VersionedRelocation.h"
 
@@ -245,6 +246,8 @@ void UnifiedWater::DataLoaded()
 	flowmap = new Flowmap();
 	waterCache = new WaterCache();
 
+	const LoadWatchdog watchdog;
+
 	if (LoadOrderChanged()) {
 		logger::info("[Unified Water] Load order or plugin version changed, regenerating flowmap and caches");
 
@@ -259,6 +262,8 @@ void UnifiedWater::DataLoaded()
 		waterCache->LoadOrGenerateCaches();
 	}
 
+	if (waterCache->IsBuildRunning())
+		LoadWatchdog::SetStep("building worldspace caches", "the worldspace with a 'Building disk cache' line but no 'Cache generated' line is stuck; check the plugins that edit it");
 	while (waterCache->IsBuildRunning()) {
 		std::this_thread::sleep_for(100ms);
 	}

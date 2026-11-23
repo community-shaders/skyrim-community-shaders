@@ -3,6 +3,7 @@
 #include <BS_thread_pool.hpp>
 #include <cmath>
 
+#include "LoadWatchdog.h"
 #include "Utils/WinApi.h"
 
 namespace
@@ -158,7 +159,7 @@ bool WaterCache::LoadOrGenerateCaches()
 
 bool WaterCache::RegenerateCaches()
 {
-	logger::info("[Unified Water] [Cache] Clearing and regenerating caches...");
+	LoadWatchdog::SetStep("clearing old worldspace caches", "file access to the water cache folder is blocked (mod manager virtual file system or antivirus)");
 
 	namespace fs = std::filesystem;
 	const fs::path dir = Util::PathHelpers::GetUnifiedWaterCachePath();
@@ -188,6 +189,8 @@ bool WaterCache::RegenerateCaches()
 bool WaterCache::LoadCaches()
 {
 	const auto t0 = std::chrono::steady_clock::now();
+
+	LoadWatchdog::SetStep("loading worldspace caches", "a cache file in the water cache folder can't be read");
 
 	auto worldSpaces = GetValidWorldSpaces();
 
@@ -395,7 +398,7 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	}
 
 	bool invalidWS = wsMin.x == FLT_MIN || wsMin.y == FLT_MIN || wsMax.x == FLT_MAX || wsMax.y == FLT_MAX || wsMin.x == FLT_MAX || wsMin.y == FLT_MAX || wsMax.x == FLT_MIN || wsMax.y == FLT_MIN;
-	invalidWS = invalidWS || hdr.width <= 0 || hdr.height <= 0 || hdr.width > 512 || hdr.height > 512;
+	invalidWS = invalidWS || hdr.width <= 0 || hdr.height <= 0 || hdr.width > kMaxWorldspaceCells || hdr.height > kMaxWorldspaceCells;
 
 	if (invalidWS) {
 		logger::warn("[Unified Water] [Cache] {}: Invalid WorldSpace - skipping", editorID.c_str());
@@ -403,7 +406,7 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 		return true;
 	}
 
-	logger::debug("[Unified Water] [Cache] {}: Building disk cache...", editorID.c_str());
+	logger::info("[Unified Water] [Cache] {}: Building disk cache...", editorID.c_str());
 
 	const auto files = worldSpace->sourceFiles.array;
 
