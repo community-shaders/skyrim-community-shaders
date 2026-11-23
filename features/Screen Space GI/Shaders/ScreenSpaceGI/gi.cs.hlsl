@@ -306,6 +306,9 @@ void CalculateGI(
 				bitmask |= maskedBits;
 #ifdef GI
 				bitmaskGI |= maskedBitsGI;
+#	ifdef GI_SPECULAR
+				bitmaskGISpecular |= maskedBitsGISpecular;
+#	endif
 #endif
 			}
 		}
