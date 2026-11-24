@@ -221,6 +221,7 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::SameLine();
 		if (Util::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
 			RestoreDefaultSettings();
+			this->settings.ShowInOverlay = true;  // resets how the overlay looks, not whether it is shown
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("restore_defaults_tooltip"), "Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals."));
