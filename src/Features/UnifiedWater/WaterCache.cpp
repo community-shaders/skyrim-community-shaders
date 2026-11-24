@@ -288,6 +288,8 @@ bool WaterCache::GenerateCaches()
 	async.failed.store(false);
 	buildProgress.Start(static_cast<uint32_t>(worldSpaces.size()));
 	async.running.store(true);
+	// Published before the monitor starts so it cannot overwrite the monitor's own loading step
+	LoadWatchdog::SetStep("building worldspace caches", "the worldspace with a 'Building disk cache' line but no 'Cache generated' line is stuck; check the plugins that edit it");
 
 	logger::info("[Unified Water] [Cache] Starting async disk cache build for {} WorldSpaces on {} threads", buildProgress.total.load(), threads);
 

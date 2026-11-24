@@ -262,8 +262,6 @@ void UnifiedWater::DataLoaded()
 		waterCache->LoadOrGenerateCaches();
 	}
 
-	if (waterCache->IsBuildRunning())
-		LoadWatchdog::SetStep("building worldspace caches", "the worldspace with a 'Building disk cache' line but no 'Cache generated' line is stuck; check the plugins that edit it");
 	while (waterCache->IsBuildRunning()) {
 		std::this_thread::sleep_for(100ms);
 	}
