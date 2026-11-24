@@ -96,9 +96,11 @@ float ACosClamped(float x)
 	return FastMath::ACos(clamp(x, -1, 1));
 }
 
-float HorizonCosBack(float dd, float dv, float thickness)
+// Back-side horizon for the thickness offset; expanding |d - v*T|^2 cancels.
+float HorizonCosBack(float3 sampleDelta, float3 viewVec, float thickness)
 {
-	return (dv - thickness) * rsqrt(max(dd - 2 * thickness * dv + thickness * thickness, EPSILON_LENGTH_SQ));
+	float3 back = sampleDelta - viewVec * thickness;
+	return dot(back, viewVec) * rsqrt(max(dot(back, back), EPSILON_LENGTH_SQ));
 }
 
 void CalculateGI(
@@ -231,12 +233,11 @@ void CalculateGI(
 				// Reject if the depth differs too much from the center pixel.
 				float3 sampleDelta = samplePos - pixCenterPos;
 
-				// |v| = 1: |d - v*T|^2 = dd - 2*T*dv + T^2, dot(d - v*T, v) = dv - T.
 				float dd = dot(sampleDelta, sampleDelta);
 				float dv = dot(sampleDelta, viewVec);
 				float rcpDist = rsqrt(max(dd, EPSILON_LENGTH_SQ));
 				float angleFront = ACosClamped(dv * rcpDist);
-				float angleBack = ACosClamped(HorizonCosBack(dd, dv, Thickness));
+				float angleBack = ACosClamped(HorizonCosBack(sampleDelta, viewVec, Thickness));
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
@@ -246,7 +247,7 @@ void CalculateGI(
 
 #ifdef GI
 				// Back-side horizon for GI-radius sampling depth (~300 units).
-				float angleBackGI = ACosClamped(HorizonCosBack(dd, dv, 300));
+				float angleBackGI = ACosClamped(HorizonCosBack(sampleDelta, viewVec, 300));
 				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
 
 #	ifdef GI_SPECULAR

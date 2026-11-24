@@ -158,7 +158,7 @@ void readHistory(
 
 	// Lag ~ speed x history: cap it at ~16 px of motion at 2160 lines.
 	float2 motionVec = (prev_screen_pos - screen_pos) * float2(FrameDim.x * RcpFrameDim.y, 1);
-	float motionMaxAccum = clamp((16.0 / 2160.0) / max(length(motionVec), 1e-6), 2.0, MaxAccumFrames);
+	float motionMaxAccum = min(max((16.0 / 2160.0) / max(length(motionVec), 1e-6), 2.0), MaxAccumFrames);
 
 	accum_frames = max(1, min(prevAccum + 1, motionMaxAccum));
 	outAccumFrames[pixCoord] = accum_frames / 255.0;
