@@ -1109,9 +1109,8 @@ void SceneSettingsManager::ReloadOverwrites()
 
 void SceneSettingsManager::OnDataLoaded()
 {
+	// The render thread's next Update loads location data; loading it here as well races that thread.
 	gameDataReady = true;
-	if (dataLoaded)
-		TryEnsureLocationDataLoaded();
 }
 
 bool SceneSettingsManager::TryEnsureLocationDataLoaded()

@@ -1028,7 +1028,7 @@ private:
 	static const LocationSceneConfig kEmptyLocationConfig;
 	json unresolvedLocationUserSettings = json::object();
 	bool locationDataLoaded = false;
-	bool gameDataReady = false;
+	std::atomic<bool> gameDataReady = false;  // Set on the SKSE thread, read by the render thread
 
 	using SettingAddress = SettingIdentity;
 	/** @brief One value pushed into a feature through its catalog-backed settings document. */
