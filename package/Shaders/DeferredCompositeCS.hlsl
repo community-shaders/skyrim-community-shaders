@@ -49,10 +49,10 @@ Texture2D<float4> SsgiSpecularTexture : register(t13);
 #	if defined(NO_TYPED_UAV_LOAD)
 Texture2D<float3> MainTexture : register(MAIN_COPY_SLOT);
 #	endif
-#if defined(NO_TYPED_UAV_LOAD)
-#	define MAIN_COPY_REGISTER t23
+#	if defined(NO_TYPED_UAV_LOAD)
+#		define MAIN_COPY_REGISTER t23
 Texture2D<float3> MainTexture : register(MAIN_COPY_REGISTER);
-#endif
+#	endif
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
