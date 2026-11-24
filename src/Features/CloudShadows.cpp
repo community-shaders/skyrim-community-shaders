@@ -194,6 +194,9 @@ void CloudShadows::SkyShaderHacks()
 		context->PSSetShaderResources(17, 1, &cubemapDepth.depthSRV);
 
 		renderedLayersMask[side] |= (1u << layer);
+		// After a gap the faces not yet redrawn still hold the previous sky
+		if (globals::state->frameCount - lastCaptureFrame > kCaptureFramesPerCube)
+			captureResumeFrame = globals::state->frameCount;
 		lastCaptureFrame = globals::state->frameCount;
 		occlusionChanged = true;
 	}
@@ -287,9 +290,12 @@ void CloudShadows::EarlyPrepass()
 	}
 	globalRenderedMask = 0;
 
-	// Draws outside the reflections pass read t25 too; an occlusion older than one cube of captures belongs to another sky
+	// Draws outside the reflections pass read t25 too; an occlusion older than one cube of captures belongs to another sky,
+	// and so do the faces not yet redrawn in the first cube after a gap
 	auto context = globals::d3d::context;
-	const bool current = lastCaptureFrame != kNeverCaptured && globals::state->frameCount - lastCaptureFrame <= kCaptureFramesPerCube;
+	const uint frame = globals::state->frameCount;
+	const bool current = lastCaptureFrame != kNeverCaptured && frame - lastCaptureFrame <= kCaptureFramesPerCube &&
+	                     frame - captureResumeFrame >= kCaptureFramesPerCube;
 	if (current && std::exchange(occlusionChanged, false)) {
 		globals::profiler->BeginPass("CloudShadows::OcclusionCopy");
 		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
