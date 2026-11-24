@@ -36,9 +36,14 @@ namespace SceneSettingsLocationTargets
 	/** @brief Target for a cell, whose own editor ID is its coc code. */
 	SceneSettingsManager::LocationTarget MakeCellTarget(const RE::TESObjectCELL* cell);
 
+	/** @brief Fills a target's name, editor ID and coc code; cocCode is the editor ID of the cell that resolved it. */
+	void DescribeLocationTarget(SceneSettingsManager::LocationTarget& target, const RE::TESForm* form,
+		const std::string& cocCode);
+
 	/// Build the broadest-to-narrowest target chain for a location and the cell that resolved it.
+	/// Without describe, targets carry only type, form key and FormID, which is all config matching needs.
 	std::vector<SceneSettingsManager::LocationTarget> BuildLocationTargetChain(
-		RE::BGSLocation* location, RE::TESObjectCELL* cell);
+		RE::BGSLocation* location, RE::TESObjectCELL* cell, bool describe = true);
 
 	/** @brief Every target the game defines, sorted by type then name, for the editor's picker. */
 	std::vector<SceneSettingsManager::LocationTarget> BuildLocationCatalog();

@@ -1025,6 +1025,66 @@ namespace Util
 		return retval;
 	}
 
+	/** @brief ImGui's colour drag step, one 8-bit level per pixel. */
+	constexpr float kColorDragSpeed = 1.f / 255.f;
+
+	/** @brief Bounded H, S and V drags followed by ImGui's swatch and label, laid out like ColorEdit3. */
+	static bool DrawBoundedHsvColorEdit(const char* label, float* col, ImGuiColorEditFlags flags)
+	{
+		ImGui::BeginGroup();
+		ImGui::PushID(label);
+		// Hue is undefined at zero saturation, saturation at zero value, and hue 1 reads back as 0; keep the last to restore them
+		auto* storage = ImGui::GetStateStorage();
+		const ImGuiID hueId = ImGui::GetID("##SavedHue");
+		const ImGuiID saturationId = ImGui::GetID("##SavedSaturation");
+		const bool hsvStorage = (flags & ImGuiColorEditFlags_InputHSV) != 0;
+		std::array<float, 3> hsv{ col[0], col[1], col[2] };
+		if (!hsvStorage) {
+			ImGui::ColorConvertRGBtoHSV(col[0], col[1], col[2], hsv[0], hsv[1], hsv[2]);
+			if (const float savedHue = storage->GetFloat(hueId, hsv[0]); hsv[1] == 0.f || (hsv[0] == 0.f && savedHue == 1.f))
+				hsv[0] = savedHue;
+			if (hsv[2] == 0.f)
+				hsv[1] = storage->GetFloat(saturationId, hsv[1]);
+		}
+
+		const auto& style = ImGui::GetStyle();
+		const float componentCount = static_cast<float>(hsv.size());
+		const float inputsWidth = std::max(ImGui::CalcItemWidth() - ImGui::GetFrameHeight() - style.ItemInnerSpacing.x, 1.f);
+		const float componentWidth = std::max((inputsWidth - style.ItemInnerSpacing.x * (componentCount - 1.f)) / componentCount, 1.f);
+		const std::array ids{ "##H", "##S", "##V" };
+		const std::array formats{ T("ui.color_edit.hue", "H:%0.3f"), T("ui.color_edit.saturation", "S:%0.3f"), T("ui.color_edit.value", "V:%0.3f") };
+		const std::array maxima{ 1.f, 1.f, FLT_MAX };
+		bool changed = false;
+		for (size_t component = 0; component < hsv.size(); ++component) {
+			if (component > 0)
+				ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+			ImGui::SetNextItemWidth(componentWidth);
+			changed |= ImGui::DragFloat(ids[component], &hsv[component], kColorDragSpeed, 0.f, maxima[component], formats[component], ImGuiSliderFlags_AlwaysClamp);
+		}
+		if (changed && hsvStorage) {
+			std::ranges::copy(hsv, col);
+		} else if (changed) {
+			storage->SetFloat(hueId, hsv[0]);
+			storage->SetFloat(saturationId, hsv[1]);
+			ImGui::ColorConvertHSVtoRGB(hsv[0], hsv[1], hsv[2], col[0], col[1], col[2]);
+		}
+
+		// Swatch and label only: the picker popup would bring back ImGui's unbounded HSV inputs
+		ImGui::SameLine(0.f, style.ItemInnerSpacing.x);
+		changed |= ImGui::ColorEdit3(label, col, flags | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker);
+		ImGui::PopID();
+		ImGui::EndGroup();
+		return changed;
+	}
+
+	bool ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags)
+	{
+		constexpr ImGuiColorEditFlags kUnboundedHsv = ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_DisplayHSV;
+		if ((flags & kUnboundedHsv) != kUnboundedHsv)
+			return ImGui::ColorEdit3(label, col, flags);
+		return SceneWidgetInterceptor::InterceptColor3(label, col, [&](float* bound) { return DrawBoundedHsvColorEdit(label, bound, flags); });
+	}
+
 	ImVec2 GetNativeViewportSizeScaled(float scale)
 	{
 		const auto Size = ImGui::GetMainViewport()->Size;
@@ -1628,6 +1688,25 @@ namespace Util
 
 		// The action button comes before the card button so it wins the hover where they overlap
 		OptionCardClick result = OptionCardClick::None;
+		if (content.cornerIcon) {
+			// Small filled square on the top right so it reads as a button, not as card text
+			const float edge = m.titleHeight;
+			const ImVec2 cornerMin(inner.z - edge, inner.y);
+			ImGui::SetCursorScreenPos(cornerMin);
+			if (ImGui::InvisibleButton("##Corner", ImVec2(edge, edge), ImGuiButtonFlags_EnableNav))
+				result = OptionCardClick::Action;
+			const bool cornerHovered = ImGui::IsItemHovered();
+			if (content.cornerTooltip)
+				HoverTip(content.cornerTooltip);
+			ImVec4 fill = style.Colors[ImGuiCol_Button];
+			if (cornerHovered)
+				fill = style.Colors[ImGuiCol_ButtonHovered];
+			ImVec4 glyph = content.cornerActive ? Colors::GetAccent() : style.Colors[ImGuiCol_TextDisabled];
+			drawList->AddRectFilled(cornerMin, ImVec2(cornerMin.x + edge, cornerMin.y + edge), faded(fill), style.FrameRounding);
+			Icons::DrawCenteredGlyph(drawList, cornerMin, ImVec2(edge, edge), edge * 0.7f, Icons::TI(content.cornerIcon), faded(glyph));
+			if (cornerHovered)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+		}
 		if (content.action) {
 			ImGui::SetCursorScreenPos(ImVec2(inner.x, inner.w - m.actionHeight));
 			if (Button(content.action))
@@ -1647,12 +1726,22 @@ namespace Util
 					Icons::TI(content.icon), faded(style.Colors[ImGuiCol_Text]));
 				x += m.titleHeight + style.ItemInnerSpacing.x;
 			}
-			drawList->AddText(ImGui::GetFont(), titleSize, ImVec2(x, y), faded(style.Colors[ImGuiCol_Text]), content.title);
+			// Keep a long title clear of the corner button, which sits in the title row
+			const ImVec4 titleClip(inner.x, inner.y, content.cornerIcon ? inner.z - m.titleHeight - style.ItemInnerSpacing.x : inner.z, inner.y + m.titleHeight);
+			drawList->AddText(ImGui::GetFont(), titleSize, ImVec2(x, y), faded(style.Colors[ImGuiCol_Text]), content.title, nullptr, 0.0f,
+				content.cornerIcon ? &titleClip : nullptr);
 			y += m.titleHeight;
 		}
 		if (content.status) {
 			y += m.gap;
 			drawList->AddText(ImVec2(inner.x, y), faded(content.statusColor), content.status);
+			if (content.status2) {
+				const char* divider = " | ";
+				float x = inner.x + ImGui::CalcTextSize(content.status).x;
+				drawList->AddText(ImVec2(x, y), faded(style.Colors[ImGuiCol_TextDisabled]), divider);
+				x += ImGui::CalcTextSize(divider).x;
+				drawList->AddText(ImVec2(x, y), faded(content.status2Color), content.status2);
+			}
 			y += m.statusHeight;
 		}
 		if (content.description) {

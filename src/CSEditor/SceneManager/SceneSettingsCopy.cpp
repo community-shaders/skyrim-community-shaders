@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <map>
+#include <ranges>
 #include <set>
 #include <tuple>
 
@@ -136,6 +138,7 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 		ResolveLocationTargetChain(destination.locationType, destination.locationFormKey).empty())
 		return {};
 	const auto destinationRules = GetSceneContextRules(destination);
+	// A group key leads with its feature, so whole groups count under one feature.
 	const auto countCompatible = [&](const EffectiveContextEntries& effectiveEntries) {
 		struct GroupCount
 		{
@@ -154,20 +157,23 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopySourc
 				IsSceneSettingValueAllowed(entry->value, *metadata, entry->value, destinationRules.requireNumeric))
 				++group.compatible;
 		}
-		size_t count = 0;
+		std::map<std::string, size_t> featureCounts;
 		for (const auto& [groupKey, group] : groups)
 			if (group.members == group.compatible)
-				count += group.members;
-		return count;
+				featureCounts[std::get<0>(groupKey)] += group.members;
+		return featureCounts;
 	};
 
 	std::vector<CopySource> sources;
 	const auto addSource = [&](const SceneContextId& context, const EffectiveContextEntries& effectiveEntries) {
 		if (IsSameSceneContext(context, destination))
 			return;
-		if (const auto settingCount = countCompatible(effectiveEntries); settingCount != 0)
-			sources.push_back({ context, GetSceneContextDisplayName(context), settingCount, true,
-				IsCurrentSceneContext(context) });
+		auto featureCounts = countCompatible(effectiveEntries);
+		if (featureCounts.empty())
+			return;
+		const auto settingCount = std::ranges::fold_left(featureCounts | std::views::values, size_t{ 0 }, std::plus{});
+		sources.push_back({ context, GetSceneContextDisplayName(context), settingCount, true,
+			IsCurrentSceneContext(context), std::move(featureCounts) });
 	};
 	// The last slot holds the flat set, whose entries carry the Count period.
 	const auto addActiveSetSources = [&](const SceneContextId& context, const std::vector<SettingEntry>& sourceEntries,
@@ -218,12 +224,16 @@ std::vector<SceneSettingsManager::CopySource> SceneSettingsManager::GetCopyDesti
 	const auto addDestination = [&](const SceneContextId& context, std::string displayName) {
 		if (IsSameSceneContext(context, source))
 			return;
-		const auto candidates = BuildCopyCandidates(source, context);
-		const auto compatibleCount = static_cast<size_t>(
-			std::count_if(candidates.begin(), candidates.end(), [](const auto& candidate) { return candidate.compatible; }));
+		std::map<std::string, size_t> featureCounts;
+		size_t compatibleCount = 0;
+		for (const auto& candidate : BuildCopyCandidates(source, context))
+			if (candidate.compatible) {
+				++featureCounts[candidate.setting.featureShortName];
+				++compatibleCount;
+			}
 		if (compatibleCount != 0)
 			destinations.push_back({ context, std::move(displayName), compatibleCount,
-				IsSceneContextAuthored(context), IsCurrentSceneContext(context) });
+				IsSceneContextAuthored(context), IsCurrentSceneContext(context), std::move(featureCounts) });
 	};
 
 	const SceneContextId interiorContext{ .type = SceneContextType::Interior, .period = TimeOfDayPeriod::Count };
@@ -296,7 +306,7 @@ std::string SceneSettingsManager::GetSceneContextDisplayName(const SceneContextI
 }
 
 SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(const SceneContextId& source,
-	const SceneContextId& destination, CopyConflictPolicy conflictPolicy, bool deferCommit)
+	const SceneContextId& destination, CopyConflictPolicy conflictPolicy, bool deferCommit, const CopyFeatureFilter& features)
 {
 	CopyResult result;
 	if (!IsValidSceneContext(source) || !IsValidSceneContext(destination) ||
@@ -309,7 +319,8 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 		!TryEnsureLocationDataLoaded())
 		return result;
 
-	const auto candidates = BuildCopyCandidates(source, destination);
+	auto candidates = BuildCopyCandidates(source, destination);
+	std::erase_if(candidates, [&](const auto& candidate) { return !features.Allows(candidate.setting.featureShortName); });
 	if (candidates.empty())
 		return result;
 	std::map<CopyGroupKey, std::vector<CopyCandidate>> groups;
@@ -546,11 +557,11 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 }
 
 SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsBatch(const SceneContextId& source,
-	std::span<const SceneContextId> destinations, CopyConflictPolicy conflictPolicy)
+	std::span<const SceneContextId> destinations, CopyConflictPolicy conflictPolicy, const CopyFeatureFilter& features)
 {
 	CopyResult total;
 	for (const auto& destination : destinations) {
-		const auto result = CopySettingsToContext(source, destination, conflictPolicy, true);
+		const auto result = CopySettingsToContext(source, destination, conflictPolicy, true, features);
 		total.copied += result.copied;
 		total.skipped += result.skipped;
 		total.overwritten += result.overwritten;
@@ -592,7 +603,7 @@ bool SceneSettingsManager::IsCurrentSceneContext(const SceneContextId& context) 
 			return sky && sky->currentWeather && sky->currentWeather->GetFormID() == context.weatherId;
 		}
 	case SceneContextType::Location:
-		return std::ranges::any_of(GetCurrentLocationTargets(), [&](const auto& target) {
+		return std::ranges::any_of(GetCurrentLocationTargetKeys(), [&](const auto& target) {
 			return IsSameSceneContext(context, { .type = SceneContextType::Location,
 												   .period = context.period,
 												   .locationType = target.type,

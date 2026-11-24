@@ -194,9 +194,9 @@ public:
 		static constexpr ImU32 HEADER_COLOR_ICON_IDLE = IM_COL32(220, 220, 220, 220);  // Docked colour icon tint while not hovered
 		static constexpr ImU32 WATERMARK_COLOR = IM_COL32(255, 255, 255, 45);          // Full-colour watermark logo tint
 		static constexpr float HEADER_ICON_IDLE_ALPHA = 0.85f;                         // Header icon opacity while neither hovered nor current (docked monochrome icons, Home button)
-		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 1.8f;                // Settings / Profiling button edge in the status bar, in font sizes
+		static constexpr float STATUS_BAR_NAV_BUTTON_FONT_RATIO = 2.2f;                // Settings / Profiling button edge in the status bar, in font sizes
 		static constexpr float STATUS_BAR_DIVIDER_FONT_RATIO = 1.0f;                   // Height of the thin dividers between status bar groups, in font sizes
-		static constexpr float GLYPH_BUTTON_CAPTION_FONT_RATIO = 0.5f;                 // Caption under a glyph button's icon (the Profiling button's overlay hotkey), in font sizes
+		static constexpr float GLYPH_BUTTON_CAPTION_FONT_RATIO = 0.7f;                 // Caption under a glyph button's icon (the Profiling button's overlay hotkey), in font sizes
 		static constexpr float HOME_CARD_PADDING = 12.0f;                              // Inner padding on every side of a Home card (1080p baseline)
 		static constexpr float HOME_CARD_SPACING = 8.0f;                               // Vertical gap below each Home card (1080p baseline)
 		static constexpr float ATTENTION_FOCUS_SECONDS = 2.5f;                         // How long the Needs Attention card stays outlined after a click-through

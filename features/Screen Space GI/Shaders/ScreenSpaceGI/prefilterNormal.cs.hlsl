@@ -15,6 +15,16 @@ float2 NormalMIPFilter(float2 enc0, float2 enc1, float2 enc2, float2 enc3)
 	return GBuffer::EncodeNormal(normalize(avg));
 }
 
+#if defined(HALF_RES) || defined(QUARTER_RES)
+float2 GatherNormalMIP(uint2 workingPixel, float2 frameScale)
+{
+	float2 uv = (workingPixel + .5) * RCP_OUT_FRAME_DIM * frameScale;
+	float4 nr0 = srcNormalRoughness.GatherRed(samplerPointClamp, uv);
+	float4 nr1 = srcNormalRoughness.GatherGreen(samplerPointClamp, uv);
+	return NormalMIPFilter(float2(nr0.x, nr1.x), float2(nr0.y, nr1.y), float2(nr0.z, nr1.z), float2(nr0.w, nr1.w));
+}
+#endif
+
 groupshared float2 g_scratchNormal[8][8];
 [numthreads(8, 8, 1)] void main(uint2 dispatchThreadID : SV_DispatchThreadID, uint2 groupThreadID : SV_GroupThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
@@ -22,6 +32,13 @@ groupshared float2 g_scratchNormal[8][8];
 	// MIP 0
 	const uint2 baseCoord = dispatchThreadID;
 	const uint2 pixCoord = baseCoord * 2;
+#if defined(HALF_RES) || defined(QUARTER_RES)
+	// Each working pixel gathers its own full-res footprint.
+	float2 normal0 = GatherNormalMIP(pixCoord + uint2(0, 0), frameScale);
+	float2 normal1 = GatherNormalMIP(pixCoord + uint2(1, 0), frameScale);
+	float2 normal2 = GatherNormalMIP(pixCoord + uint2(0, 1), frameScale);
+	float2 normal3 = GatherNormalMIP(pixCoord + uint2(1, 1), frameScale);
+#else
 	const float2 uv = (pixCoord + .5) * RCP_OUT_FRAME_DIM;
 
 	float4 nr0 = srcNormalRoughness.GatherRed(samplerPointClamp, uv * frameScale);
@@ -31,6 +48,7 @@ groupshared float2 g_scratchNormal[8][8];
 	float2 normal1 = float2(nr0.z, nr1.z);
 	float2 normal2 = float2(nr0.x, nr1.x);
 	float2 normal3 = float2(nr0.y, nr1.y);
+#endif
 
 	outNormal0[pixCoord + uint2(0, 0)] = normal0;
 	outNormal0[pixCoord + uint2(1, 0)] = normal1;

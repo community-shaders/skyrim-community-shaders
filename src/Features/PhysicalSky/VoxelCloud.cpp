@@ -130,7 +130,7 @@ void VoxelCloudManager::LoadInstances()
 				throw std::runtime_error("Volume size and noise scales must be positive");
 			assets.emplace(it->path().filename().string(), std::move(asset));
 		} catch (const std::exception& exception) {
-			error = file.string() + ": " + exception.what();
+			error = Util::PathHelpers::ToUtf8(file) + ": " + exception.what();
 			logger::error("PhysicalSky voxel cloud: {}", error);
 		}
 	}

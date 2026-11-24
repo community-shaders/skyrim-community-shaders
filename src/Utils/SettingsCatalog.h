@@ -49,13 +49,17 @@ namespace Util::Settings
 	bool IsCompatibleSettingValue(const nlohmann::json& known, const nlohmann::json& value);
 
 	/**
-	 * @brief Collects keys of incoming that known has no counterpart for, or holds with another type, as dotted
-	 * paths, recursing into groups. Either one would make the feature's LoadSettings throw or drop it.
-	 * @param incoming Partial settings object to check; `_`-prefixed metadata keys are ignored.
+	 * @brief Erases the keys of incoming that known has no counterpart for, or holds with another type,
+	 * recursing into groups. Either one would make the feature's LoadSettings throw or drop it.
+	 * @param incoming Partial settings object to prune; `_`-prefixed metadata keys are kept.
 	 * @param known Canonical settings blob, as written by the feature's SaveSettings.
 	 * @param prefix Dotted path of incoming within the whole blob.
-	 * @param unknownKeys Receives the rejected paths; a type mismatch is marked as such.
+	 * @param unknownKeys Receives the erased paths; a type mismatch is marked as such.
 	 */
+	void PruneUnknownSettingKeys(nlohmann::json& incoming, const nlohmann::json& known,
+		const std::string& prefix, std::vector<std::string>& unknownKeys);
+
+	/** @brief PruneUnknownSettingKeys on a copy: collects what would be erased, leaving incoming untouched. */
 	void CollectUnknownSettingKeys(const nlohmann::json& incoming, const nlohmann::json& known,
 		const std::string& prefix, std::vector<std::string>& unknownKeys);
 

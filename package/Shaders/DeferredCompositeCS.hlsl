@@ -261,7 +261,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 				skySpecular = 0;
 			}
 
-			finalIrradiance = envSpecular + skySpecular;
+			float3 reflectionsSpecular = ColorManagement::SceneToLinear(fullSample) * SharedData::iblSettings.SkyIBLScale;
+#		if defined(SKYLIGHTING)
+			reflectionsSpecular *= skylightingSpecular;
+#		endif
+			finalIrradiance = ImageBasedLighting::ApplyAmbientReflectionFallback(envSpecular, skySpecular, reflectionsSpecular, positionWS.xyz);
 		} else
 #	endif
 		{

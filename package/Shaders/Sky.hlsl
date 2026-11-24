@@ -622,8 +622,20 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 
+	float3 vertexColor = input.Color.xyz;
+#			if defined(PHYSICAL_SKY) && defined(TEX) && !defined(DITHER) && !defined(CLOUDS) && !defined(MOONMASK)
+	if (SharedData::physSkyData.enabled && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsMoon)) {
+		const float4 discRadiance = SharedData::physSkyData.moonDiscRadiance[(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSecunda) ? 1 : 0];
+		// Glare mode scales the glare-tinted texture so its mean integrates to the light's illuminance; a negative mode keeps the vanilla disc
+		if (discRadiance.w == 0.0)
+			vertexColor = discRadiance.rgb;
+		else if (discRadiance.w > 0.0)
+			vertexColor /= max(Color::RGBToLuminance(discRadiance.rgb * vertexColor), 1e-6);
+	}
+#			endif
+
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + skyScale;
+	psout.Color.xyz = vertexColor * baseColor.xyz + skyScale;
 
 #			if defined(EFFECTS11_PROCEDURAL_SUN)
 	[branch] if (proceduralSunActive)

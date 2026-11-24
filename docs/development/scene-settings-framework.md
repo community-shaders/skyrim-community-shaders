@@ -494,6 +494,11 @@ rather than an authoring panel.
   this fork's `Feature`.
 - Upstream's `InvertedCheckbox`, `RadioButton`, `ActiveControlStorageGuard` and
   `GetActiveControlStorageAddress` UI helpers, used only by the excluded UI.
+- `PerformanceOverlay` `ShowInOverlay` as a scene-controllable checkbox. The Profiling page's Display card no longer
+  draws it, so the setting has no catalog binding and `PerformanceOverlay` drops from 12 to 11 in the floors file.
+  Existing override entries for it in `SceneManager.json` or the overwrite folders stop resolving: the loader keeps
+  them as unresolved entries and writes them back on save, but never applies them, so they are inert. The overlay
+  is still toggled from the Profiling page's power button and the overlay hotkey.
 
 ### Existing UI
 

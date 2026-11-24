@@ -1106,10 +1106,10 @@ void CSEditor::DrawOverlay()
 	if (!player || !player->parentCell)
 		return;
 
-	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
+	const bool overlayVisible = IsOverlayVisible();
 	static bool s_prevOverlayVisible = false;
-	// Driven by the Performance Overlay's weather picker toggle; auto-enable the window when the overlay appears
-	if (IsOverlayVisible() && overlayVisible) {
+	// Driven by the weather picker toggle; auto-enable the window when it appears
+	if (overlayVisible) {
 		if (!s_prevOverlayVisible && !WeatherDetailsWindow.Enabled) {
 			WeatherDetailsWindow.Enabled = true;
 		}

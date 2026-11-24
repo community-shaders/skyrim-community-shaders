@@ -43,7 +43,7 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 	float maxd = max4(d);
 	float diffd = maxd - mind;
 	float avg = dot(d, 0.25.xxxx);
-	bool d_edge = (diffd / avg) < 0.1;
+	bool d_edge = (diffd / avg) >= 0.1;
 
 	float ao;
 	float4 y;

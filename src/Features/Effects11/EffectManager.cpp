@@ -28,7 +28,7 @@ namespace
 	constexpr float kNeutralLuminance[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	/** @brief The target ImageSpaceEffectHDR::Render last wrote adapted luminance to, replaying its downsample walk. */
-	RE::RENDER_TARGET GetEngineAdaptedLuminanceTarget()
+	std::optional<RE::RENDER_TARGET> GetEngineAdaptedLuminanceTarget()
 	{
 		// CommonLib's GetSingleton() wrongly dereferences this global: the manager is stored inline, not behind a pointer
 		static REL::Relocation<RE::BSGraphics::RenderTargetManager*> renderTargetManager{ REL::RelocationID(524970, 411451) };
@@ -48,9 +48,12 @@ namespace
 		}
 
 		// The final level ping-pongs with the target two slots up; the swap selects the one written last
-		assert(*luminanceSwap == 0 || *luminanceSwap == 1);
-		target += 2 * *luminanceSwap;
-		assert(target <= RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13);
+		const int32_t swap = *luminanceSwap;
+		if (swap != 0 && swap != 1)
+			return std::nullopt;
+		target += 2 * swap;
+		if (target > RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13)
+			return std::nullopt;
 		return static_cast<RE::RENDER_TARGET>(target);
 	}
 }
@@ -1006,7 +1009,10 @@ void EffectManager::PublishAdaptedLuminance(ID3D11ShaderResourceView* a_adaptati
 {
 	static REL::Relocation<RE::ImageSpaceTexture*> luminanceHistory{ RELOCATION_ID(513464, 391302) };
 
-	const auto target = GetEngineAdaptedLuminanceTarget();
+	const auto adapted = GetEngineAdaptedLuminanceTarget();
+	if (!adapted)
+		return;
+	const auto target = *adapted;
 	const auto& luminance = globals::game::renderer->GetRuntimeData().renderTargets[target];
 	if (!luminance.RTV)
 		return;

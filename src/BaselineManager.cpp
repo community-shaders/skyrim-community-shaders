@@ -197,18 +197,19 @@ size_t BaselineManager::ApplyBaselines(const std::string& featureName, json& fea
 
 	size_t appliedCount = 0;
 
+	// Each file is pruned against the shape the feature started with, not one earlier files have merged into.
+	const json canonicalShape = featureJson;
 	auto it = featureFileMap.find(featureName);
 	if (it != featureFileMap.end()) {
 		for (size_t index : it->second) {
 			auto& file = files[index];
-			if (!RejectsUnknownKeys(file, featureJson)) {
-				try {
-					Util::Settings::MergeSettings(featureJson, file.values);
-					appliedCount++;
-				} catch (const std::exception& e) {
-					logger::info("Failed to apply Baseline file from {} to {}: {}", file.packId, featureName, e.what());
-					ReportFailure(file.packId, featureName, "Failed to apply: " + std::string(e.what()), Util::PathHelpers::FromUtf8(file.filePath));
-				}
+			PruneUnknownKeys(file, canonicalShape);
+			try {
+				Util::Settings::MergeSettings(featureJson, file.values);
+				appliedCount++;
+			} catch (const std::exception& e) {
+				logger::info("Failed to apply Baseline file from {} to {}: {}", file.packId, featureName, e.what());
+				ReportFailure(file.packId, featureName, "Failed to apply: " + std::string(e.what()), Util::PathHelpers::FromUtf8(file.filePath));
 			}
 		}
 	}
@@ -511,26 +512,25 @@ json BaselineManager::SanitizeJsonData(const json& jsonData)
 	}
 }
 
-bool BaselineManager::RejectsUnknownKeys(BaselineFile& file, const json& featureJson)
+void BaselineManager::PruneUnknownKeys(BaselineFile& file, const json& featureJson)
 {
-	// The merge would carry unknown keys through silently; an empty target has no shape, so keep the last verdict.
-	if (featureJson.is_object() && !featureJson.empty()) {
-		const bool alreadyReported = !file.unknownKeys.empty();
-		file.unknownKeys.clear();
-		Util::Settings::CollectUnknownSettingKeys(file.values, featureJson, "", file.unknownKeys);
-		if (!file.unknownKeys.empty() && !alreadyReported) {
-			std::string keys;
-			for (const auto& key : file.unknownKeys)
-				keys += (keys.empty() ? "" : ", ") + key;
-			logger::warn("Skipped Baseline file from {} to {}: unrecognized keys {}", file.packId, file.featureName, keys);
-			ReportFailure(file.packId, file.featureName, "Unrecognized settings keys: " + keys, Util::PathHelpers::FromUtf8(file.filePath));
-		}
-	}
-	return !file.unknownKeys.empty();
+	// The merge would carry unknown keys through silently; an empty target has no shape to prune against.
+	if (!featureJson.is_object() || featureJson.empty())
+		return;
+	std::vector<std::string> pruned;
+	Util::Settings::PruneUnknownSettingKeys(file.values, featureJson, "", pruned);
+	if (pruned.empty())
+		return;
+	std::string keys;
+	for (const auto& key : pruned)
+		keys += (keys.empty() ? "" : ", ") + key;
+	logger::warn("Ignored unrecognized keys in Baseline file from {} to {}: {}", file.packId, file.featureName, keys);
+	ReportFailure(file.packId, file.featureName, "Unrecognized settings keys: " + keys, Util::PathHelpers::FromUtf8(file.filePath), kLoadedWithIgnoredKeys);
+	file.unknownKeys.insert(file.unknownKeys.end(), pruned.begin(), pruned.end());
 }
 
 void BaselineManager::ReportFailure(const std::string& packId, const std::string& featureName, const std::string& errorMessage,
-	const std::filesystem::path& filePath)
+	const std::filesystem::path& filePath, std::string_view outcome)
 {
 	FeatureIssues::FeatureFileInfo fileInfo;
 	fileInfo.featureName = featureName;
@@ -545,7 +545,7 @@ void BaselineManager::ReportFailure(const std::string& packId, const std::string
 		fileInfo.timestampDisplay = ec ? "Unknown" : FeatureIssues::FormatFileTimestamp(fileInfo.latestTimestamp);
 	}
 
-	const auto fullErrorMessage = "Baseline file for feature '" + featureName + "' from preset pack '" + packId + "' failed to load: " + errorMessage;
+	const auto fullErrorMessage = std::format("Baseline file for feature '{}' from preset pack '{}' {}: {}", featureName, packId, outcome, errorMessage);
 
 	FeatureIssues::AddFeatureIssue(
 		packId + "_" + featureName,  // Combined name as shortName
