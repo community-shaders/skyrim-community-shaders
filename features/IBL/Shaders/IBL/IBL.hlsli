@@ -85,10 +85,20 @@ namespace ImageBasedLighting
 	// Ratio / settings helpers
 	// ============================================================================
 
-	/// Compute ratio between DALC and IBL for brightness/color matching.
+	/// Flat DALC weight, relative to DALC, mixed into the capture so a dim capture fades to DALC instead of black. Caps the ratio at 1 / weight.
+	static const float EnvIBLPriorWeight = 0.05;
+	/// Only guards 0/0 when a DALC channel is black.
+	static const float MinRatioDenominator = 1e-6;
+
+	float3 GetDALCAmbient()
+	{
+		return Color::Ambient(SharedData::GetAmbient(0.f));
+	}
+
+	/** @brief Ratio between DALC and the env IBL (plus its flat DALC prior) for brightness/color matching. */
 	float3 GetIBLRatio()
 	{
-		float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
+		float3 dalc0 = GetDALCAmbient();
 
 		sh2 iblSHR = EnvIBLTexture.Load(int3(0, 0, 0));
 		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
@@ -97,27 +107,30 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI;
+		float3 ibl0 = float3(colorR, colorG, colorB) / Math::PI + dalc0 * EnvIBLPriorWeight;
 
-		if (SharedData::iblSettings.DALCMode == 1) {
-			float3 ratio = dalc0 / max(ibl0, 0.001);
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
-		} else {
-			float dalcLum = Color::RGBToLuminance(dalc0);
-			float iblLum = Color::RGBToLuminance(ibl0);
-			float ratio = (iblLum > 0.001) ? (dalcLum / iblLum) : 1.0;
-			return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
-		}
+		float3 ratio;
+		if (SharedData::iblSettings.DALCMode == 1)
+			ratio = dalc0 / max(ibl0, MinRatioDenominator);
+		else
+			ratio = Color::RGBToLuminance(dalc0) / max(Color::RGBToLuminance(ibl0), MinRatioDenominator);
+		return lerp(1.0, ratio, SharedData::iblSettings.DALCAmount);
 	}
 
 	// ============================================================================
 	// Mid-level: individual components with user settings applied
 	// ============================================================================
 
+	/** @brief Applies saturation, scale and the DALC ratio to a raw env IBL color, adding the flat DALC prior that GetIBLRatio() accounts for. */
+	float3 ApplyEnvIBLSettings(float3 envColor)
+	{
+		const float3 prior = GetDALCAmbient() * EnvIBLPriorWeight * SharedData::iblSettings.DALCAmount;
+		return (Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) + prior) * SharedData::iblSettings.EnvIBLScale * GetIBLRatio();
+	}
+
 	float3 GetEnvIBLColor(float3 rayDir)
 	{
-		float3 ratio = GetIBLRatio();
-		return Color::Saturation(GetEnvIBL(rayDir), SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * ratio;
+		return ApplyEnvIBLSettings(GetEnvIBL(rayDir));
 	}
 
 	float3 GetSkyIBLColor(float3 rayDir)
@@ -183,7 +196,7 @@ namespace ImageBasedLighting
 									   dot(EnvIBLTexture.Load(int3(0, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(1, 0, 0)), phase),
 									   dot(EnvIBLTexture.Load(int3(2, 0, 0)), phase)));
-		envColor = Color::Saturation(envColor, SharedData::iblSettings.EnvIBLSaturation) * SharedData::iblSettings.EnvIBLScale * GetIBLRatio();
+		envColor = ApplyEnvIBLSettings(envColor);
 		float3 skyColor = 0.0;
 		if (!SharedData::InInterior) {
 			skyColor = max(0.0, float3(
