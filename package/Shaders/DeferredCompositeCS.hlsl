@@ -7,7 +7,6 @@
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-#define MAIN_COPY_SLOT t23
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
@@ -50,6 +49,10 @@ Texture2D<float4> SsgiSpecularTexture : register(t13);
 #	if defined(NO_TYPED_UAV_LOAD)
 Texture2D<float3> MainTexture : register(MAIN_COPY_SLOT);
 #	endif
+#if defined(NO_TYPED_UAV_LOAD)
+#	define MAIN_COPY_REGISTER t23
+Texture2D<float3> MainTexture : register(MAIN_COPY_REGISTER);
+#endif
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {

@@ -1,6 +1,7 @@
 #include "State.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <codecvt>
 #include <unordered_set>
@@ -393,10 +394,6 @@ void State::Setup()
 	globals::features::truePBR.SetupResources();
 	SetupResources();
 	globals::hiZPyramid->SetupResources();
-
-	// Probe typed UAV load support before features set up their resources, so any
-	// gating logic that wants to read the log can run during feature SetupResources.
-	CheckTypedUAVLoadSupport();
 
 	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
@@ -1239,7 +1236,7 @@ void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::B
 	logger::debug("Adding UAV access to {}", magic_enum::enum_name(a_target));
 }
 
-void State::CheckTypedUAVLoadSupport()
+void State::CheckTypedUAVLoadSupport(DXGI_FORMAT mainFormat)
 {
 	auto device = globals::d3d::device;
 	if (!device) {
@@ -1276,11 +1273,8 @@ void State::CheckTypedUAVLoadSupport()
 		HRESULT hr = device->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2, &support2, sizeof(support2));
 		if (FAILED(hr)) {
 			logger::warn("[TypedUAVLoad] {} ({}): CheckFeatureSupport failed (hr=0x{:08x})", entry.name, entry.usage, static_cast<uint32_t>(hr));
-			if (entry.format == DXGI_FORMAT_R11G11B10_FLOAT) {
-				logger::warn("[TypedUAVLoad] Falling back to non-UAV path.");
-				State::supportsR11G11B10TypedUAVLoad = false;
-			}
 			anyUnsupported = true;
+			State::supportsTypedUAVLoad = false;
 			continue;
 		}
 		const bool supported = (support2.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0;
@@ -1288,11 +1282,11 @@ void State::CheckTypedUAVLoadSupport()
 			logger::info("[TypedUAVLoad] {} — supported ({})", entry.name, entry.usage);
 		} else {
 			logger::warn("[TypedUAVLoad] {} — UNSUPPORTED ({})", entry.name, entry.usage);
-			if (entry.format == DXGI_FORMAT_R11G11B10_FLOAT) {
-				logger::warn("[TypedUAVLoad] Falling back to non-UAV path.");
-				State::supportsR11G11B10TypedUAVLoad = false;
-			}
 			anyUnsupported = true;
+		}
+		if (entry.format == mainFormat && !supported) {
+			logger::warn("[TypedUAVLoad] Falling back to non-UAV path.");
+			State::supportsTypedUAVLoad = false;
 		}
 	}
 
@@ -1329,6 +1323,8 @@ void State::SetupResources()
 	// Grab main texture to get resolution
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
+
+	CheckTypedUAVLoadSupport(texDesc.Format);
 
 	pPerf = nullptr;
 	globals::d3d::context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), pPerf.put_void());

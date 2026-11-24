@@ -339,9 +339,9 @@ public:
 	 * Called once at startup; emits one info line per supported format and one
 	 * warn line per unsupported format with the feature that needs it.
 	 */
-	void CheckTypedUAVLoadSupport();
+	void CheckTypedUAVLoadSupport(DXGI_FORMAT mainFormat);
 
-	static inline bool supportsR11G11B10TypedUAVLoad = true;
+	static inline bool supportsTypedUAVLoad = true;
 
 	/**
 	 * @brief Strips and rewrites shader descriptor bits for Community Shaders' pipeline.
