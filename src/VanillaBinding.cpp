@@ -39,8 +39,9 @@ namespace VanillaBinding
 
 		auto* sharedBuffer = state->sharedDataCB->CB();
 		context->VSSetConstantBuffers(5, 1, &sharedBuffer);
-		// The sky draws with the z-prepass copy as its DSV, which would null an SRV of it; kMAIN holds the same depth
-		auto* depthSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
+		// The glare's DSV is kMAIN in third person and the z-prepass copy in first person; D3D nulls an SRV of the bound DSV, so read the other
+		const bool mainIsTarget = globals::game::shadowState->GetRuntimeData().depthStencil == RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN;
+		auto* depthSRV = globals::game::renderer->GetDepthStencilData().depthStencils[mainIsTarget ? RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY : RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 		context->VSSetShaderResources(17, 1, &depthSRV);
 	}
 
