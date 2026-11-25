@@ -198,42 +198,43 @@ namespace Skylighting
 
 		[unroll] for (int i = 0; i < 2; i++)
 			[unroll] for (int j = 0; j < 2; j++)
-				[unroll] for (int k = 0; k < 2; k++) {
-					int3 cellOffset = int3(i, j, k);
-					int3 cellID = cell000 + cellOffset;
+				[unroll] for (int k = 0; k < 2; k++)
+		{
+			int3 cellOffset = int3(i, j, k);
+			int3 cellID = cell000 + cellOffset;
 
-					// cellCentreMS - positionMSAdjusted == probeOffset * CELL_SIZE, and CELL_SIZE is the same on every axis.
-					float3 probeOffset = cellOffset - trilinearPos;
-					float3 trilinearWeights = 1 - abs(probeOffset);
-					bool inGrid = all(cellID >= 0) && all((uint3)cellID < ARRAY_DIM);
-					float triW = inGrid ? trilinearWeights.x * trilinearWeights.y * trilinearWeights.z : 0;
+			// cellCentreMS - positionMSAdjusted == probeOffset * CELL_SIZE, and CELL_SIZE is the same on every axis.
+			float3 probeOffset = cellOffset - trilinearPos;
+			float3 trilinearWeights = 1 - abs(probeOffset);
+			bool inGrid = all(cellID >= 0) && all((uint3)cellID < ARRAY_DIM);
+			float triW = inGrid ? trilinearWeights.x * trilinearWeights.y * trilinearWeights.z : 0;
 
-					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
+			uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
 
-					// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
-					// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
-					float tangentWeight = saturate(dot(probeOffset, normalWS) * rsqrt(max(dot(probeOffset, probeOffset), EPSILON_LENGTH_SQ))) + MIN_TANGENT_WEIGHT;
+			// https://handmade.network/p/75/monter/blog/p/7288-engine_work__global_illumination_with_irradiance_probes
+			// Hard tangent check: a wrapped weight lets probes across thin occluders (roofs) leak the probe grid in.
+			float tangentWeight = saturate(dot(probeOffset, normalWS) * rsqrt(max(dot(probeOffset, probeOffset), EPSILON_LENGTH_SQ))) + MIN_TANGENT_WEIGHT;
 #	if defined(SKYLIGHTING_COVERAGE)
-					// An open probe above the occluder covering the receiver sees sky through that roof; open probes below it are beside the receiver
-					[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN)
-					{
-						float3 cellCentreMS = (cellID + 0.5 - ARRAY_DIM / 2) * CELL_SIZE;
-						if (ZenithProject(cellCentreMS + SharedData::skylightingSettings.PosOffset.xyz).z < receiverOccluderDepth)
-							tangentWeight = MIN_TANGENT_WEIGHT;
-					}
+			// An open probe above the occluder covering the receiver sees sky through that roof; open probes below it are beside the receiver
+			[branch] if (receiverCovered && SkylightingProbeCoverage[cellTexID] == COVERAGE_OPEN)
+			{
+				float3 cellCentreMS = (cellID + 0.5 - ARRAY_DIM / 2) * CELL_SIZE;
+				if (ZenithProject(cellCentreMS + SharedData::skylightingSettings.PosOffset.xyz).z < receiverOccluderDepth)
+					tangentWeight = MIN_TANGENT_WEIGHT;
+			}
 #	endif
-					float shW = triW * tangentWeight;
-					shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));
-					shWsum += shW;
+			float shW = triW * tangentWeight;
+			shSum = SphericalHarmonics::Add(shSum, SphericalHarmonics::Scale(SkylightingProbeArray[cellTexID], shW));
+			shWsum += shW;
 
 #	if defined(SKYLIGHTING_SHADOW_VIS)
-					[branch] if (sampleShadowVisibility)
-					{
-						shadowSum += ShadowVisibilityProbeArray[cellTexID] * triW;
-						shadowWsum += triW;
-					}
+			[branch] if (sampleShadowVisibility)
+			{
+				shadowSum += ShadowVisibilityProbeArray[cellTexID] * triW;
+				shadowWsum += triW;
+			}
 #	endif
-				}
+		}
 
 #	if defined(SKYLIGHTING_SHADOW_VIS)
 		float fadeOut = GetFadeOutFactor(positionMS);
