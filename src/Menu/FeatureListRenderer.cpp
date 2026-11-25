@@ -1655,16 +1655,17 @@ void FeatureListRenderer::DrawFeatureBody(Feature* feat)
 		if (feat->UsesMainSettings()) {
 			auto* state = globals::state;
 			const bool edited = !editedBefore && context.ActiveIdHasBeenEditedThisFrame;
-			if (edited)
-				state->MarkSettingsChanged();
-			if (Util::InteractionEndedThisFrame()) {
+			const bool interactionEnded = Util::InteractionEndedThisFrame();
+			if (interactionEnded) {
 				// Those buttons also bypass the interceptor, so the scene layer's cached apply document must
 				// take their values before anything replays it.
 				globals::sceneSettingsManager->CaptureExternalFeatureChanges(feat, true);
-				if (!edited)
-					state->CheckFeatureSettingsChanged(feat);
-				state->InvalidateEditsUnderBaselines(feat);
 			}
+			// Diffed only once an edit settles (a release, or a middle-click reset that never activates), so an edit back to the saved value clears it.
+			if (interactionEnded || (edited && !context.ActiveId))
+				state->CheckFeatureSettingsChanged(feat);
+			else if (edited)
+				state->MarkSettingsChanged(feat);
 		}
 	}
 	const ImVec2 cursorPosAfter = ImGui::GetCursorPos();

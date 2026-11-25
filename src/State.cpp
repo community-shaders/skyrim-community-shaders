@@ -747,15 +747,20 @@ json State::CaptureCoreSettings()
 
 void State::MarkSettingsSaved()
 {
-	settingsChanged = false;
+	changedFeatures.clear();
 	coreSettingsChanged = false;
 	savedCore = CaptureCoreSettings();
+}
+
+void State::MarkSettingsChanged(Feature* feature)
+{
+	changedFeatures.insert(feature->GetName());
 }
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
 {
 	InvalidateEditsUnderBaselines(feature);
-	if (settingsChanged || !feature->loaded || !feature->UsesMainSettings())
+	if (!feature->loaded || !feature->UsesMainSettings())
 		return;
 	const auto name = feature->GetName();
 	const auto base = featureBases.find(name);
@@ -766,8 +771,10 @@ void State::CheckFeatureSettingsChanged(Feature* feature)
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 	json current;
 	feature->SaveSettings(current);
-	if (!DiffFromBase(current, saved).empty())
-		settingsChanged = true;
+	if (DiffFromBase(current, saved).empty())
+		changedFeatures.erase(name);
+	else
+		changedFeatures.insert(name);
 }
 
 void State::CheckCoreSettingsChanged()
@@ -1037,9 +1044,10 @@ void State::DropEditsUnder(Feature* feature, const json& packData)
 void State::ClearEditsUnderPack(const std::string& packId)
 {
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-	for (auto* feature : FindEditsUnderPack(packId))
+	for (auto* feature : FindEditsUnderPack(packId)) {
 		DropEditsUnder(feature, GetPackFeatureData(packId, feature->GetShortName()));
-	MarkSettingsChanged();
+		CheckFeatureSettingsChanged(feature);
+	}
 	InvalidateEditsUnderBaselines();
 }
 
@@ -1127,27 +1135,25 @@ void State::ClearFeatureEditsUnderBaselines(Feature* feature)
 		SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 		DropEditsUnder(feature, GetPackFeatureData({}, feature->GetShortName()));
 	}
-	MarkSettingsChanged();
-	InvalidateEditsUnderBaselines(feature);
+	CheckFeatureSettingsChanged(feature);
 }
 
 void State::RestoreFeatureLayers(Feature* feature)
 {
-	MarkSettingsChanged();
-	InvalidateEditsUnderBaselines(feature);
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 	// Defaults first, so settings a partial base leaves out still reset.
 	feature->RestoreDefaultSettings();
 	const auto base = featureBases.find(feature->GetName());
-	if (base == featureBases.end() || base->second.empty())
-		return;
-	json values = base->second;
-	try {
-		feature->LoadSettings(values);
-	} catch (const std::exception& e) {
-		logger::warn("Could not restore {} to its Baseline values, using defaults: {}", feature->GetName(), e.what());
-		feature->RestoreDefaultSettings();
+	if (base != featureBases.end() && !base->second.empty()) {
+		json values = base->second;
+		try {
+			feature->LoadSettings(values);
+		} catch (const std::exception& e) {
+			logger::warn("Could not restore {} to its Baseline values, using defaults: {}", feature->GetName(), e.what());
+			feature->RestoreDefaultSettings();
+		}
 	}
+	CheckFeatureSettingsChanged(feature);
 }
 
 bool State::ValidateCache(CSimpleIniA& a_ini)

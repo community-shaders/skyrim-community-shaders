@@ -22,6 +22,7 @@ using json = nlohmann::json;
 #include <Hooks.h>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 struct Feature;
 
@@ -213,13 +214,10 @@ public:
 	/** @brief Drops the user's edits to every setting an enabled Baseline pack sets on one feature. */
 	void ClearFeatureEditsUnderBaselines(Feature* feature);
 
-	/** @brief Notes that feature settings were edited, so the main menu's Save shows them as unsaved. */
-	void MarkSettingsChanged() { settingsChanged = true; }
+	/** @brief Notes that a feature's settings were edited, without diffing them; for edits still in progress. */
+	void MarkSettingsChanged(Feature* feature);
 
-	/**
-	 * @brief Marks the settings changed if a feature's settings now differ from what was last saved or
-	 *        loaded. For actions ImGui does not flag as edits, such as a button that resets or applies a preset.
-	 */
+	/** @brief Marks a feature unsaved when its settings differ from what was last saved or loaded, and clears it otherwise. */
 	void CheckFeatureSettingsChanged(Feature* feature);
 
 	/** @brief Re-checks the sections that are not feature settings (Menu, General, ...) against the last save or
@@ -263,7 +261,7 @@ public:
 	}
 
 	/** @brief True when the user config has changes not yet saved. */
-	bool HasUnsavedChanges() const { return settingsChanged || coreSettingsChanged; }
+	bool HasUnsavedChanges() const { return !changedFeatures.empty() || coreSettingsChanged; }
 
 	/** @brief Loads the active theme preset from the menu settings. */
 	void LoadTheme();
@@ -666,7 +664,8 @@ private:
 	 *  The caller holds a SceneLayerGuard. */
 	void DropEditsUnder(Feature* feature, const nlohmann::json& packData);
 
-	bool settingsChanged = false;
+	/// GetName() of each feature whose settings differ from the last save or load.
+	std::unordered_set<std::string> changedFeatures;
 	bool coreSettingsChanged = false;
 	/// The core sections as last saved or loaded; partial saves patch it.
 	nlohmann::json savedCore;
