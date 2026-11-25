@@ -114,4 +114,16 @@ namespace Permutation
 	};
 
 }
+
+// Scene encoding depends on the draw permutation, so it lives here.
+#include "Common/PreExposure.hlsli"
+
+namespace PreExposure
+{
+	// Reflection captures and menu models are lighting/UI data, not scene color.
+	float3 EncodeScene(float3 value)
+	{
+		return !Permutation::RenderToUI && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) ? Encode(value) : value;
+	}
+}
 #endif  // __PERMUTATION_DEPENDENCY_HLSL__
