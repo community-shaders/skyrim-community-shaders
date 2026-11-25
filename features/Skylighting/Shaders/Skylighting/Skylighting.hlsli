@@ -196,19 +196,17 @@ namespace Skylighting
 		float shadowWsum = 0;
 #	endif
 
-		for (int i = 0; i < 2; i++)
-			for (int j = 0; j < 2; j++)
-				for (int k = 0; k < 2; k++) {
+		[unroll] for (int i = 0; i < 2; i++)
+			[unroll] for (int j = 0; j < 2; j++)
+				[unroll] for (int k = 0; k < 2; k++) {
 					int3 cellOffset = int3(i, j, k);
 					int3 cellID = cell000 + cellOffset;
-
-					if (any(cellID < 0) || any((uint3)cellID >= ARRAY_DIM))
-						continue;
 
 					// cellCentreMS - positionMSAdjusted == probeOffset * CELL_SIZE, and CELL_SIZE is the same on every axis.
 					float3 probeOffset = cellOffset - trilinearPos;
 					float3 trilinearWeights = 1 - abs(probeOffset);
-					float triW = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
+					bool inGrid = all(cellID >= 0) && all((uint3)cellID < ARRAY_DIM);
+					float triW = inGrid ? trilinearWeights.x * trilinearWeights.y * trilinearWeights.z : 0;
 
 					uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
 
