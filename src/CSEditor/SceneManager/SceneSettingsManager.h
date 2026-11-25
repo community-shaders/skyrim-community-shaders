@@ -664,6 +664,8 @@ public:
 		CopyRejection rejection = CopyRejection::None;
 		bool compatible = false;
 		bool conflicts = false;
+		/// A source tombstone: lands as one, suppressing the destination's mod value.
+		bool deleted = false;
 	};
 
 	/// Aggregate result of one transactional copy.

@@ -696,6 +696,7 @@
     "cs_editor.scene_page_copy_reject_companion": "Another part of the same control cannot be copied.",
     "cs_editor.scene_page_copy_reject_layer": "This page cannot hold this setting.",
     "cs_editor.scene_page_copy_reject_value": "The value is not valid here.",
+    "cs_editor.scene_page_copy_removed": "Mod value removed",
     "cs_editor.scene_page_copy_result": "{} copied, {} overwritten, {} skipped",
     "cs_editor.scene_page_copy_title": "Copy settings",
     "cs_editor.scene_page_copy_tooltip": "Copies settings between this page and other times of day, interiors, weathers or locations, with a preview before anything changes.",
