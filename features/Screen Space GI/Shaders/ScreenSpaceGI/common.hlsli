@@ -64,6 +64,11 @@ cbuffer SSGICB : register(b1)
 	float2 pad;
 };
 
+float ResolveAO(float x)
+{
+	return 1 - pow(max(1 - x, 1e-6), AOPower);
+}
+
 SamplerState samplerPointClamp : register(s0);
 SamplerState samplerLinearClamp : register(s1);
 

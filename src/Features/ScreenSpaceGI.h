@@ -156,6 +156,7 @@ public:
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavNormal[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
+	eastl::unique_ptr<Texture2D> texAoOutput = nullptr;
 	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texIlCoCg[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texGiSpecular[2] = { nullptr };
@@ -165,7 +166,7 @@ public:
 	{
 		return (loaded && settings.Enabled) ?
 		           std::make_tuple(
-					   texAo[outputAoIdx]->srv.get(),
+					   texAoOutput->srv.get(),
 					   texIlY[outputIlIdx]->srv.get(),
 					   texIlCoCg[outputIlIdx]->srv.get(),
 					   texGiSpecular[outputAoIdx]->srv.get()) :

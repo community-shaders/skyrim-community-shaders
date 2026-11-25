@@ -79,7 +79,7 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 #endif
 	}
 
-	outAo[dtid] = ao;
+	outAo[dtid] = ResolveAO(ao);
 	outIlY[dtid] = y;
 	outIlCoCg[dtid] = coCg;
 #ifdef GI_SPECULAR
