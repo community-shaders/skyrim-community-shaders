@@ -720,6 +720,7 @@ void CloudStormManager::DrawSettings()
 				}
 			ImGui::EndCombo();
 		}
+		Util::HoverTip(T(TKEY("storm_mode_tooltip"), "Supercell builds a rotating thunderstorm with banded inflow and an anvil. Volcanic builds a rising, rotating eruption plume that bends with the wind."));
 		changed |= ImGui::Checkbox(T(TKEY("storm_enabled"), "Enable storm"), &storm.enabled);
 		changed |= ImGui::InputText(T(TKEY("storm_asset"), "Storm back folder (relative to instance)"), &storm.asset);
 		changed |= ImGui::InputText(T(TKEY("storm_core_asset"), "Core NDF folder (relative to instance, optional)"), &storm.coreAsset);
@@ -745,24 +746,38 @@ void CloudStormManager::DrawSettings()
 		changed |= editRules(T(TKEY("storm_replacement_textures"), "Replaced effect textures (one per line)"), storm.replacementTextures);
 		changed |= ImGui::InputText(T(TKEY("storm_worldspace"), "Storm worldspace Editor ID"), &storm.worldspace);
 		changed |= ImGui::DragFloat2(T(TKEY("storm_center"), "Storm center X / Y (m)"), &storm.center.x, 10.f);
+		Util::HoverTip(T(TKEY("storm_center_tooltip"), "World position of the storm's center in metres. The storm stays anchored there rather than drifting with the weather."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_radius"), "Vortex radius (m)"), &storm.radius, 10.f, 1.f, 16000.f);
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_half_size"), "Storm back half-size (m)"), &storm.backHalfSize, 10.f, 1.f, 16000.f);
+		Util::HoverTip(T(TKEY("storm_back_half_size_tooltip"), "Half the width of the area covered by the storm back template."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_rotation"), "Storm back rotation (degrees)"), &storm.backRotation, 1.f);
 		changed |= ImGui::Checkbox(T(TKEY("storm_back_mirror"), "Mirror storm back"), &storm.mirrorBack);
 		changed |= ImGui::SliderFloat(T(TKEY("storm_core_height"), "Core height within NDF span"), &storm.coreHeight, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("storm_core_height_tooltip"), "Normalized height of the analytic core and the back template within the storm's height span."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_altitude"), "NDF height zero (m)"), &storm.altitude, 10.f, -24000.f, 48000.f);
+		Util::HoverTip(T(TKEY("storm_altitude_tooltip"), "Altitude of the storm's height 0 above the worldspace ground level."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_height"), "NDF height span (m)"), &storm.height, 10.f, 1.f, 24000.f);
+		Util::HoverTip(T(TKEY("storm_height_tooltip"), "Vertical distance covered by the storm's normalized heights, from height 0 to 1."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_strength"), "Storm strength"), &storm.strength, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("storm_strength_tooltip"), "How strongly the storm replaces the surrounding weather clouds and how far its core reaches. 1 is the full authored storm."));
 		if (storm.mode == "Volcanic") {
 			changed |= ImGui::DragFloat2(T(TKEY("storm_top_offset"), "Plume top offset X / Y (m)"), &storm.topOffset.x, 10.f, -16000.f, 16000.f);
+			Util::HoverTip(T(TKEY("storm_top_offset_tooltip"), "Extra horizontal shift of the plume top relative to the vent, added to any wind bending."));
 			changed |= ImGui::SliderFloat(T(TKEY("storm_wind_influence"), "Wind bending strength"), &storm.windInfluence, 0.f, 2.f);
+			Util::HoverTip(T(TKEY("storm_wind_influence_tooltip"), "How strongly the wind bends the rising column and carries its outflow downwind. 0 keeps the plume upright."));
 		}
 		changed |= ImGui::SliderFloat(T(TKEY("storm_rotation"), "Storm rotation speed"), &storm.rotation, -4.f, 4.f);
+		Util::HoverTip(T(TKEY("storm_rotation_tooltip"), "Multiplies how fast the storm's noise bands rotate. Negative values reverse the direction."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_updraft"), "Storm updraft (m/s)"), &storm.updraft, -80.f, 80.f);
+		Util::HoverTip(T(TKEY("storm_updraft_tooltip"), "Supercell: how fast the anvil lifts. Volcanic: vent speed, which scales the rise and the crown outflow."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_density"), "Storm density"), &storm.density, 0.f, 4.f);
+		Util::HoverTip(T(TKEY("storm_density_tooltip"), "Extinction multiplier for the storm cloud, independent of the weather clouds' extinction scale."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_albedo"), "Storm single scattering albedo"), &storm.albedo, 0.f, 0.9999f, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+		Util::HoverTip(T(TKEY("storm_albedo_tooltip"), "Fraction of light the storm cloud scatters rather than absorbs. Lower values give darker storms, such as ash plumes."));
 		changed |= ImGui::ColorEdit3(T(TKEY("storm_emission"), "Storm emission"), &storm.emission.x, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+		Util::HoverTip(T(TKEY("storm_emission_tooltip"), "Light emitted by the storm cloud itself, strongest at its base, such as lava glow on an eruption plume. Black disables it."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_emission_height"), "Emitting height fraction"), &storm.emissionHeight, 0.001f, 1.f);
+		Util::HoverTip(T(TKEY("storm_emission_height_tooltip"), "How far up the storm the emission reaches, as a fraction of its height. The glow fades exponentially with height."));
 		if (changed) {
 			key.reset();
 			++revision;

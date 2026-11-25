@@ -192,6 +192,38 @@ const char* NdfManager::GetSettingsHint(const NdfSettings& settings)
 				   "Two coverage signals and a shared type signal drive the profiles. Height variation changes only the bottom bound. Noise slots can be generated locally or supplied as DDS textures.");
 }
 
+namespace
+{
+	/// Tooltips shared by the weather-noise layer controls of the low-cloud map, middle clouds and cirrus.
+	namespace NdfLayerTips
+	{
+		void NoiseSlot()
+		{
+			Util::HoverTip(T(TKEY("ndf_noise_slot_tooltip"), "Which of the four shared weather noise inputs drives this layer. Zero feeds the lowest value everywhere."));
+		}
+		void Frequency()
+		{
+			Util::HoverTip(T(TKEY("ndf_frequency_tooltip"), "How many times the noise repeats across one weather-map tile. Higher values give smaller features; whole numbers tile without seams."));
+		}
+		void Offset()
+		{
+			Util::HoverTip(T(TKEY("ndf_offset_tooltip"), "Shifts the noise across the weather map, in tile widths, to move its features without changing them."));
+		}
+		void Exponent()
+		{
+			Util::HoverTip(T(TKEY("ndf_exponent_tooltip"), "Power applied after the remap. Above 1 thins out low values for sparser, more broken features; below 1 fills them in."));
+		}
+		void InputInterval()
+		{
+			Util::HoverTip(T(TKEY("ndf_input_interval_tooltip"), "Part of the signed noise range (-1 to 1) stretched onto the output interval. Values outside are clamped, so a narrower interval gives harder edges."));
+		}
+		void OutputInterval()
+		{
+			Util::HoverTip(T(TKEY("ndf_output_interval_tooltip"), "Range of values this layer produces. Equal values make the layer a constant that ignores the noise."));
+		}
+	}
+}
+
 static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, bool power, const NdfNoiseLayer* defaults = nullptr)
 {
 	if (!ImGui::TreeNode(label))
@@ -205,14 +237,21 @@ static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, bool power, co
 		int slot = static_cast<int>(std::min(layer.noise, 4u));
 		if (ImGui::Combo(T(TKEY("ndf_noise_slot"), "Noise slot"), &slot, slotNames, IM_ARRAYSIZE(slotNames)))
 			layer.noise = static_cast<uint32_t>(slot);
+		NdfLayerTips::NoiseSlot();
 	}
 	ImGui::DragFloat(T(TKEY("ndf_frequency"), "Frequency"), &layer.frequency, 0.05f, 0.f, 64.f);
+	NdfLayerTips::Frequency();
 	ImGui::DragFloat2(T(TKEY("ndf_offset"), "Offset"), &layer.offset.x, 0.005f);
-	if (power)
+	NdfLayerTips::Offset();
+	if (power) {
 		ImGui::SliderFloat(T(TKEY("ndf_exponent"), "Exponent"), &layer.exponent, 0.01f, 8.f);
+		NdfLayerTips::Exponent();
+	}
 	ImGui::TextUnformatted(T(TKEY("ndf_remap"), "Remap"));
 	ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &layer.range.x, 0.01f, -16.f, 16.f);
+	NdfLayerTips::InputInterval();
 	ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &layer.range.z, 0.01f, -16.f, 16.f);
+	NdfLayerTips::OutputInterval();
 	ImGui::TreePop();
 }
 
@@ -225,24 +264,35 @@ static void DrawNdfParameters(NdfGenerationParameters& parameters)
 	DrawNdfLayer(T(TKEY("ndf_top_type_noise"), "Top type / shared type noise"), parameters.modeling, true, &defaultType);
 	if (ImGui::TreeNode(T(TKEY("ndf_bottom_type"), "Bottom type"))) {
 		ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &parameters.bottomTypeRange.x, 0.01f, -16.f, 16.f);
+		NdfLayerTips::InputInterval();
 		ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &parameters.bottomTypeRange.z, 0.01f, -16.f, 16.f);
+		NdfLayerTips::OutputInterval();
 		ImGui::SliderFloat(T(TKEY("ndf_exponent"), "Exponent"), &parameters.bottomTypeExponent, 0.01f, 8.f);
+		NdfLayerTips::Exponent();
 		ImGui::TreePop();
 	}
 	DrawNdfLayer(T(TKEY("ndf_type_gain"), "Type gain"), parameters.modelingGain, false);
 	ImGui::PushID("heightAuxiliaryRange");
 	ImGui::TextUnformatted(T(TKEY("ndf_height_auxiliary"), "Bottom shaping start from top type"));
+	const auto shapingStartTip = [] {
+		Util::HoverTip(T(TKEY("ndf_height_auxiliary_tooltip"), "Remaps top type to the fraction of cloud height where the soft base begins, so each cloud type can start its density ramp at a different height. An output of [0, 0] leaves the base unchanged."));
+	};
 	ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &parameters.heightAuxiliaryRange.x, 0.01f, -16.f, 16.f);
+	shapingStartTip();
 	ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &parameters.heightAuxiliaryRange.z, 0.01f, -16.f, 16.f);
+	shapingStartTip();
 	ImGui::PopID();
 	ImGui::SliderFloat2(T(TKEY("ndf_base_height_rg"), "Base height RG"), &parameters.baseHeight.x, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("ndf_base_height_rg_tooltip"), "Normalized cloud bottom and top before height variation, as fractions of NDF Height Span above NDF Base Altitude."));
 	if (!SceneWidgetInterceptor::IsArmed()) {
 		bool fromCoverage = parameters.heightFromCoverage != 0u;
 		if (ImGui::Checkbox(T(TKEY("ndf_height_from_coverage"), "Height variation from coverage"), &fromCoverage))
 			parameters.heightFromCoverage = fromCoverage ? 1u : 0u;
+		Util::HoverTip(T(TKEY("ndf_height_from_coverage_tooltip"), "Drives bottom height variation from the final coverage instead of its own noise, so base height follows cloud density rather than an independent pattern."));
 	}
 	DrawNdfLayer(T(TKEY("ndf_bottom_height_variation"), "Bottom height variation"), parameters.heightVariation, true);
 	ImGui::DragFloat2(T(TKEY("ndf_weather_offset"), "Weather offset (m)"), &parameters.windOffset.x, 1.f);
+	Util::HoverTip(T(TKEY("ndf_weather_offset_tooltip"), "Static shift of the whole generated weather map. Use it to slide a different part of the pattern overhead without changing its shape."));
 }
 
 namespace
@@ -307,8 +357,11 @@ void NdfManager::DrawNdfOverlay(NdfSettings& settings, TextureManager& textures)
 			settings.procedural.parameters.localBlendMode = static_cast<uint32_t>(mode);
 	}
 	ImGui::SliderFloat(T(TKEY("ndf_modeling_weight"), "Modeling weight"), &settings.procedural.parameters.localModelingWeight, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("ndf_modeling_weight_tooltip"), "How strongly the overlay's Modeling RGB (coverage and cloud types) replaces the generated values, scaled by the influence mask in Interpolate mode."));
 	ImGui::SliderFloat(T(TKEY("ndf_height_weight"), "Height weight"), &settings.procedural.parameters.localHeightWeight, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("ndf_height_weight_tooltip"), "How strongly the overlay's Height RG replaces the generated cloud bottom and top, scaled by the influence mask."));
 	ImGui::DragFloat(T(TKEY("ndf_local_offset_multiplier"), "Local offset multiplier"), &settings.procedural.parameters.localWindScale, 0.01f, -4.f, 4.f);
+	Util::HoverTip(T(TKEY("ndf_local_offset_multiplier_tooltip"), "How fast the overlay drifts with the weather offset relative to the generated field. 1 moves with it; 0 keeps the overlay fixed on the map."));
 }
 
 void NdfManager::DrawNdfNoise(NdfSettings& settings, TextureManager& textures)
@@ -332,17 +385,26 @@ void NdfManager::DrawNdfNoise(NdfSettings& settings, TextureManager& textures)
 			int type = static_cast<int>(std::min(noise.type, 2u));
 			if (ImGui::Combo(T(TKEY("ndf_noise_type"), "Noise type"), &type, noiseTypes, IM_ARRAYSIZE(noiseTypes)))
 				noise.type = static_cast<uint32_t>(type);
+			Util::HoverTip(T(TKEY("ndf_noise_type_tooltip"), "Alligator gives sharp-edged cellular blobs, Perlin fBm smooth rolling patterns, and Perlin-Worley rounded cells with soft detail."));
 			ImGui::InputScalar(T(TKEY("ndf_seed"), "Seed"), ImGuiDataType_U32, &noise.seed);
 			const uint32_t one = 1, maxOctaves = 8, maxLacunarity = 4, maxRepetitions = 8;
 			ImGui::SliderScalar(T(TKEY("ndf_tile_repetitions"), "Tile repetitions"), ImGuiDataType_U32, &noise.repetitions, &one, &maxRepetitions);
+			Util::HoverTip(T(TKEY("ndf_tile_repetitions_tooltip"), "How many times the generated pattern repeats inside the noise texture. Higher values make the repetition more visible."));
 			const uint32_t maxFrequency = std::min(128u, kNdfDim / (2u * std::clamp(noise.repetitions, 1u, maxRepetitions)));
 			ImGui::SliderScalar(T(TKEY("ndf_base_frequency"), "Base frequency"), ImGuiDataType_U32, &noise.frequency, &one, &maxFrequency);
+			Util::HoverTip(T(TKEY("ndf_base_frequency_tooltip"), "Number of noise cells across the texture for the first octave. Higher values give smaller features."));
 			ImGui::SliderScalar(T(TKEY("ndf_octaves"), "Octaves"), ImGuiDataType_U32, &noise.octaves, &one, &maxOctaves);
+			Util::HoverTip(T(TKEY("ndf_octaves_tooltip"), "Number of progressively finer noise layers summed together. Octaves finer than the texture can resolve are skipped."));
 			ImGui::SliderScalar(T(TKEY("ndf_lacunarity"), "Lacunarity"), ImGuiDataType_U32, &noise.lacunarity, &one, &maxLacunarity);
+			Util::HoverTip(T(TKEY("ndf_lacunarity_tooltip"), "Frequency multiplier between octaves. 2 doubles the detail with each octave."));
 			ImGui::SliderFloat(T(TKEY("ndf_persistence"), "Persistence"), &noise.persistence, 0.f, 1.f);
+			Util::HoverTip(T(TKEY("ndf_persistence_tooltip"), "Weight multiplier between octaves. Higher values keep more fine detail; lower values leave smoother, broader shapes."));
 			ImGui::SliderFloat(T(TKEY("ndf_contrast"), "Contrast"), &noise.contrast, 0.1f, 8.f);
+			Util::HoverTip(T(TKEY("ndf_contrast_tooltip"), "Stretches the noise around its midpoint before the response and bias. Higher values push more of it to full black or white."));
 			ImGui::SliderFloat(T(TKEY("ndf_response_exponent"), "Response exponent"), &noise.responseExponent, 0.1f, 8.f);
+			Util::HoverTip(T(TKEY("ndf_response_exponent_tooltip"), "Power applied after contrast. Above 1 darkens the low values for sparser peaks; below 1 brightens them."));
 			ImGui::SliderFloat(T(TKEY("ndf_bias"), "Bias"), &noise.bias, -1.f, 1.f);
+			Util::HoverTip(T(TKEY("ndf_bias_tooltip"), "Value added to the final noise before clamping. Shifts the whole input brighter or darker."));
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -894,15 +956,20 @@ static bool DrawWeatherNoise(const char* label, CirrusNoiseLayer& layer, bool no
 	if (!ImGui::TreeNode(label))
 		return false;
 	bool changed = ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &layer.range.x, 0.01f, -1.f, 1.f);
+	NdfLayerTips::InputInterval();
 	changed |= ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &layer.range.z, 0.01f, 0.f, normalizedOutput ? 1.f : 0.f);
+	NdfLayerTips::OutputInterval();
 	changed |= ImGui::DragFloat(T(TKEY("ndf_frequency"), "Frequency"), &layer.frequency, 0.05f, 0.f, 64.f);
+	NdfLayerTips::Frequency();
 	changed |= ImGui::DragFloat2(T(TKEY("ndf_offset"), "Offset"), &layer.offset.x, 0.005f);
+	NdfLayerTips::Offset();
 	const char* slots[] = { "0", "1", "2", "3", T(TKEY("ndf_noise_slot_zero"), "Zero") };
 	int slot = static_cast<int>(std::min(layer.noise, 4u));
 	if (ImGui::Combo(T(TKEY("ndf_noise_slot"), "Noise slot"), &slot, slots, IM_ARRAYSIZE(slots))) {
 		layer.noise = static_cast<uint32_t>(slot);
 		changed = true;
 	}
+	NdfLayerTips::NoiseSlot();
 	ImGui::TreePop();
 	return changed;
 }
@@ -972,14 +1039,18 @@ static void DrawLayerWeatherState(SceneBlend& weather, TextureManager& textures)
 	if constexpr (!middle)
 		ImGui::TextWrapped("%s", T(TKEY("cirrus_local_hint"), "Optional linear RGB DDS: R coverage, G type, B blend mask. Repeats every 16384 m multiplied by Cirrus UV Size. Leave the path empty to use no local map."));
 	changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_weight"), "Local map influence"), &state.localWeight, 0.f, 1.f);
-	if (!middle)
+	Util::HoverTip(T(TKEY("cirrus_local_weight_tooltip"), "How strongly the local map's coverage and type replace the generated ones. With Interpolate, the map's blue channel scales it further."));
+	if (!middle) {
 		changed |= ImGui::SliderFloat(T(TKEY("cirrus_local_wind"), "Local map wind scale"), &state.localWindScale, 0.f, 16.f);
+		Util::HoverTip(T(TKEY("cirrus_local_wind_tooltip"), "How fast the local map drifts with the wind relative to the generated weather. 0 keeps it fixed."));
+	}
 	const char* modes[] = { T(TKEY("local_ndf_interpolate"), "Interpolate"), T(TKEY("local_ndf_maximum"), "Maximum") };
 	int mode = static_cast<int>(std::min(state.localBlendMode, 1u));
 	if (ImGui::Combo(T(TKEY("cirrus_local_blend"), "Local map blend"), &mode, modes, 2)) {
 		state.localBlendMode = static_cast<uint32_t>(mode);
 		changed = true;
 	}
+	Util::HoverTip(T(TKEY("cirrus_local_blend_tooltip"), "Interpolate fades toward the local map, so it can also clear clouds. Maximum keeps the larger of the two values and never clears clouds."));
 	ImGui::EndDisabled();
 	textures.EnsureLoaded(state.localMap);
 	if (!state.localMap.empty() && !NdfManager::IsTextureNdf(textures.Query(state.localMap), 3))
@@ -1016,7 +1087,9 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 	if (ImGui::TreeNode(T(TKEY("cloud_cirrus_phase"), "Cirrus Phase and Scattering"))) {
 		ImGui::TextWrapped("%s", T(TKEY("cloud_cirrus_phase_desc"), "Cirrus uses an equally weighted, normalized dual-HG phase approximation. Positive G favors forward scattering; negative G favors backward scattering. These parameters affect only cirrus."));
 		ImGui::SliderFloat(T(TKEY("cloud_phase_forward"), "Cirrus Forward Phase G"), &lighting.phaseForwardG, 0.f, 0.95f, "%.3f");
+		Util::HoverTip(T(TKEY("cloud_phase_forward_tooltip"), "Forward lobe of the cirrus phase. Higher values concentrate a brighter glow around the sun or moon when looking toward it."));
 		ImGui::SliderFloat(T(TKEY("cloud_phase_backward"), "Cirrus Backward Phase G"), &lighting.phaseBackwardG, -0.95f, 0.f, "%.3f");
+		Util::HoverTip(T(TKEY("cloud_phase_backward_tooltip"), "Backward lobe of the cirrus phase. More negative values brighten cirrus when looking away from the sun or moon."));
 		ImGui::SliderFloat(T(TKEY("cloud_cirrus_light_thickness"), "Cirrus Lighting Thickness (m)"), &lighting.cirrusLightThickness, 1.f, 1000.f, "%.3f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextWrapped("%s", T(TKEY("cloud_cirrus_thickness_desc"), "Effective geometric thickness used to estimate the sunlight path through cirrus and its attenuation, especially at grazing angles."));
@@ -1024,6 +1097,7 @@ void CirrusMapManager::DrawSettings(CirrusSettings& cirrus, CloudLightingSetting
 	}
 	if (!SceneWidgetInterceptor::IsArmed() && ImGui::TreeNode(T(TKEY("cirrus_pattern_settings"), "Pattern Scale & Texture"))) {
 		ImGui::SliderFloat(T(TKEY("cirrus_uv_size"), "Cirrus UV Size"), &cirrus.uvSize, 0.1f, 32.f, "%.2f x", ImGuiSliderFlags_Logarithmic);
+		Util::HoverTip(T(TKEY("cirrus_uv_size_tooltip"), "Scales the cirrus weather and streak patterns together. Larger values give broader, less repetitive cirrus."));
 		Util::Text::WrappedSecondary("%s", T(TKEY("cirrus_uv_size_hint"), "Larger values enlarge both weather and detail patterns without changing wind speed. At 1x, weather repeats every 16.384 km and details every 4.29 km. This is a global setting; scenes cannot override it."));
 		ImGui::TextUnformatted("Data/Textures/PhysicalSky/cirrus.dds");  // i18n-ignore: file path
 		ImGui::TreePop();
@@ -1034,34 +1108,48 @@ void MidCloudMapManager::DrawSettings(MidCloudSettings& settings, TextureManager
 {
 	ImGui::Checkbox(T(TKEY("middle_enabled"), "Enable middle clouds"), &settings.enabled);
 	ImGui::SliderFloat(T(TKEY("middle_density"), "Middle cloud density"), &settings.densityScale, 0.f, 0.1f, "%.4f");
-	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::TextWrapped("%s", T(TKEY("cloud_layer_fade_hint"), "Set density to zero to hide this layer in a scene. Density blends smoothly between weathers; keep the layer enabled in the global settings."));
+	Util::HoverTip(T(TKEY("cloud_layer_fade_hint"), "Set density to zero to hide this layer in a scene. Density blends smoothly between weathers; keep the layer enabled in the global settings."));
 	ImGui::SliderFloat(T(TKEY("middle_altitude"), "Middle cloud base"), &settings.altitude, 100.f, 16000.f, "%.0f m");
+	Util::HoverTip(T(TKEY("middle_altitude_tooltip"), "Altitude of the bottom of the middle-cloud layer above the worldspace ground level."));
 	ImGui::SliderFloat(T(TKEY("middle_thickness"), "Middle cloud height range"), &settings.thickness, 100.f, 4000.f, "%.0f m");
+	Util::HoverTip(T(TKEY("middle_thickness_tooltip"), "Maximum thickness of the layer above its base. Coverage decides how much of this range each cloud fills."));
 	ImGui::SliderFloat(T(TKEY("middle_size"), "Weather Size"), &settings.uvSize, 0.1f, 8.f, "%.2f x");
+	Util::HoverTip(T(TKEY("middle_size_tooltip"), "Scales the middle-cloud weather pattern. At 1x it repeats every 16.384 km; larger values spread cloud masses over more of the sky."));
 	DrawLayerWeatherState<true>(settings.weather, textures);
 	if (ImGui::TreeNode(T(TKEY("middle_shape_detail"), "Shape & Detail"))) {
 		ImGui::SliderFloat(T(TKEY("middle_softness"), "Top and bottom softness"), &settings.edgeSoftness, 0.01f, 0.5f);
+		Util::HoverTip(T(TKEY("middle_softness_tooltip"), "Fraction of the cloud's thickness over which density fades in at the base and out at the top. Higher values give hazier edges."));
 		ImGui::SliderFloat(T(TKEY("middle_cell_frequency"), "Cloud cell frequency"), &settings.cellFrequency, 0.25f, 16.f);
+		Util::HoverTip(T(TKEY("middle_cell_frequency_tooltip"), "Size of the cloudlets that break up the layer. Higher values give more, smaller cells."));
 		ImGui::SliderFloat(T(TKEY("middle_ac_cells"), "Ac cloud cell strength"), &settings.cellStrength, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("middle_ac_cells_tooltip"), "How strongly altocumulus areas split into separate cloudlets. 0 keeps them as a continuous sheet."));
 		ImGui::SliderFloat(T(TKEY("middle_as_cells"), "As cloud cell strength"), &settings.stratusCellStrength, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("middle_as_cells_tooltip"), "How strongly altostratus areas are broken up by cells. Low values keep the smooth, sheet-like look of altostratus."));
 		ImGui::SliderFloat(T(TKEY("middle_warp"), "Cloud cell distortion"), &settings.warpStrength, 0.f, 0.5f);
+		Util::HoverTip(T(TKEY("middle_warp_tooltip"), "Shifts whole cells with broad noise so the cloudlets lose their regular grid look."));
 		const char* detailModes[] = { T(TKEY("middle_detail_2d"), "2D surface"), T(TKEY("middle_detail_3d"), "3D volume") };
 		int detailMode = static_cast<int>(std::min(settings.detailMode, 1u));
 		if (ImGui::Combo(T(TKEY("middle_detail_mode"), "Detail representation"), &detailMode, detailModes, IM_ARRAYSIZE(detailModes)))
 			settings.detailMode = static_cast<uint32_t>(detailMode);
+		Util::HoverTip(T(TKEY("middle_detail_mode_tooltip"), "3D volume shapes the whole cloud body with the shared detail noise. 2D surface uses one horizontal slice of the same noise, mainly for comparison."));
 		ImGui::SliderFloat(T(TKEY("middle_detail_scale"), "Detail texture size"), &settings.detailScale, 200.f, 4000.f, "%.0f m");
+		Util::HoverTip(T(TKEY("middle_detail_scale_tooltip"), "World size of one repeat of the detail noise on middle clouds. Larger values give bigger billows and wisps."));
 		Util::Text::WrappedSecondary("%s", T(TKEY("middle_detail_hint"), "Final density uses the shared Billow and Wisp noises: As selects Wisp, Ac selects Billow. 3D shapes the volume; 2D uses a horizontal noise slice. Detail size is independent of Weather Size. Both modes follow the upper-cloud wind."));
 		ImGui::SliderFloat(T(TKEY("middle_height_power"), "Coverage to thickness response"), &settings.heightPower, 0.25f, 4.f);
+		Util::HoverTip(T(TKEY("middle_height_power_tooltip"), "Power applied to coverage before it sets cloud thickness. Above 1 only dense areas grow thick; below 1 thin coverage already fills much of the height range."));
 		ImGui::TreePop();
 	}
 	if (ImGui::TreeNode("Bands", T(TKEY("middle_bands"), "Cloud bands"))) {  // i18n-ignore: ImGui ID
 		ImGui::SliderFloat(T(TKEY("middle_band_direction"), "Band direction"), &settings.bands.direction, 0.f, 180.f, "%.0f deg");
 		ImGui::SliderFloat(T(TKEY("middle_band_wavelength"), "Band spacing"), &settings.bands.wavelength, 500.f, 16000.f, "%.0f m");
 		ImGui::SliderFloat(T(TKEY("middle_band_warp"), "Band bend (wavelengths)"), &settings.bands.warp, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("middle_band_warp_tooltip"), "How far the bands wander sideways, in band spacings, so they curve instead of running straight."));
 		ImGui::SliderFloat(T(TKEY("middle_band_coverage"), "Band organization"), &settings.bands.coverage, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("middle_band_coverage_tooltip"), "How strongly the cloud gathers into bands with clear gaps between them. 0 leaves the layer unbanded."));
 		ImGui::SliderFloat(T(TKEY("middle_band_thickness"), "Thickness contrast"), &settings.bands.thickness, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("middle_band_thickness_tooltip"), "Varies cloud thickness along the waves by moving the top relative to the bottom, so crests are thicker than troughs."));
 		ImGui::SliderFloat(T(TKEY("middle_band_displacement"), "Layer undulation"), &settings.bands.displacement, 0.f, .5f);
+		Util::HoverTip(T(TKEY("middle_band_displacement_tooltip"), "Moves the whole layer up and down along the waves, as a fraction of its thickness."));
 		Util::Text::WrappedSecondary("%s", T(TKEY("middle_band_hint"), "Spacing is the nominal world distance between bands, independent of Weather Size. Local weather and cloud cells vary band width and allow breaks or merged regions. Bend smoothly shifts neighboring wavefronts in world space, measured in wavelengths. Billow and Wisp shape the final volume. Thickness contrast and layer undulation also work without coverage gaps; undulation is a fraction of layer thickness."));
 		ImGui::TreePop();
 	}

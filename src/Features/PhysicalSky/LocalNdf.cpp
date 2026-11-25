@@ -346,6 +346,7 @@ void LocalNdfManager::DrawSettings(NdfSettings& settings, const std::string& wor
 		}
 	} else {
 		ImGui::DragFloat(T(TKEY("local_ndf_texel"), "Requested texel size (m)"), &settings.localTexelSize, 1.f, 1.f, 512.f);
+		Util::HoverTip(T(TKEY("local_ndf_texel_tooltip"), "World size of one texel in the cached local-cloud atlas. Smaller values keep more detail; large clouds may still be coarser because the atlas is capped at 2048 texels."));
 	}
 	LocalNdfState state;
 	state.enabled = false;
@@ -396,25 +397,35 @@ void LocalNdfManager::DrawSettings(NdfSettings& settings, const std::string& wor
 	}
 	ImGui::TextWrapped("%s", T(TKEY("local_ndf_stationary_maximum_hint"), "Preset: world origin, 16384 m square, RGB maximum at full strength, no height influence or edge feather. Global cloud settings are unchanged."));
 	changed |= ImGui::DragFloat2(T(TKEY("local_ndf_center"), "World X / Y (m)"), &state.center.x, 10.f);
+	Util::HoverTip(T(TKEY("local_ndf_center_tooltip"), "World position of the map's center in metres. The cloud stays anchored there while the weather moves."));
 	changed |= ImGui::DragFloat2(T(TKEY("local_ndf_size"), "Width / length (m)"), &state.size.x, 10.f, 1.f, 128000.f);
 	changed |= ImGui::DragFloat(T(TKEY("local_ndf_rotation"), "Rotation (degrees)"), &state.rotation, 1.f);
+	Util::HoverTip(T(TKEY("local_ndf_rotation_tooltip"), "Turns the rectangle around its center. Positive values turn local +X toward world +Y."));
 	ImGui::BeginDisabled(state.heightWeight <= 0.f);
 	changed |= ImGui::DragFloat(T(TKEY("local_ndf_altitude"), "Height zero (m)"), &state.altitude, 10.f, -24000.f, 48000.f);
+	Util::HoverTip(T(TKEY("local_ndf_altitude_tooltip"), "Altitude of the map's height 0 above the worldspace ground level. Only used when Height influence is above zero."));
 	changed |= ImGui::DragFloat(T(TKEY("local_ndf_height_span"), "Height span (m)"), &state.heightSpan, 10.f, 1.f, 24000.f);
+	Util::HoverTip(T(TKEY("local_ndf_height_span_tooltip"), "Vertical distance covered by the map's heights from 0 to 1. Only used when Height influence is above zero."));
 	ImGui::EndDisabled();
 	changed |= ImGui::SliderFloat(T(TKEY("local_ndf_strength"), "Local cloud strength"), &state.strength, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("local_ndf_strength_tooltip"), "Overall strength of the local cloud, multiplying both the modeling and height influence."));
 	const char* blendNames[] = { T(TKEY("local_ndf_interpolate"), "Interpolate"), T(TKEY("local_ndf_maximum"), "Maximum") };
 	int blend = state.modelingBlend == LocalNdfBlendMode::Maximum ? 1 : 0;
 	if (ImGui::Combo(T(TKEY("local_ndf_blend"), "Modeling blend"), &blend, blendNames, 2)) {
 		state.modelingBlend = static_cast<LocalNdfBlendMode>(blend);
 		changed = true;
 	}
+	Util::HoverTip(T(TKEY("local_ndf_blend_tooltip"), "Interpolate fades the weather toward the map, so the map can also clear clouds. Maximum keeps the larger of each coverage and type value and never clears clouds."));
 	changed |= ImGui::SliderFloat(T(TKEY("local_ndf_model_weight"), "Modeling influence"), &state.modelingWeight, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("local_ndf_model_weight_tooltip"), "How strongly the map's coverage and cloud types replace the weather's."));
 	changed |= ImGui::SliderFloat(T(TKEY("local_ndf_height_weight"), "Height influence"), &state.heightWeight, 0.f, 1.f);
+	Util::HoverTip(T(TKEY("local_ndf_height_weight_tooltip"), "How strongly the map's cloud bottom and top replace the weather's. At 0 the weather's heights are kept and Height.dds is not needed."));
 	if (state.heightWeight <= 0.f)
 		ImGui::TextWrapped("%s", T(TKEY("local_ndf_no_height"), "Height influence is zero: Height.dds is not required and does not affect cloud bounds."));
 	changed |= ImGui::DragFloat(T(TKEY("local_ndf_feather"), "Edge feather (m)"), &state.feather, 1.f, 0.f, 64000.f);
+	Util::HoverTip(T(TKEY("local_ndf_feather_tooltip"), "Width of the fade at the rectangle's edges, so the map blends into the surrounding weather instead of ending abruptly."));
 	changed |= ImGui::Checkbox(T(TKEY("local_ndf_alpha"), "Use modeling alpha as mask"), &state.modelingAlpha);
+	Util::HoverTip(T(TKEY("local_ndf_alpha_tooltip"), "Uses Modeling.dds alpha as the influence mask. Disable it if the alpha channel holds unrelated data."));
 	if (state.modelingBlend == LocalNdfBlendMode::Interpolate)
 		ImGui::TextWrapped("%s", T(TKEY("local_ndf_interpolate_hint"), "Alpha zero preserves the background weather, including its height when height influence is enabled. Disable alpha to replace the field at full influence; zero source coverage then clears background clouds."));
 	if (state.modelingBlend == LocalNdfBlendMode::Maximum)

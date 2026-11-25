@@ -117,10 +117,15 @@ void ExponentialHeightFog::DrawSettings()
 
 	ImGui::Checkbox(T(TKEY("enable_exp_height_fog"), "Enable Exponential Height Fog"), (bool*)&settings.enabled);
 	ImGui::SliderFloat(T(TKEY("start_distance"), "Start Distance"), &settings.startDistance, 0.0f, 100000.0f, "%.1f");
+	Util::HoverTip(T(TKEY("start_distance_tooltip"), "Distance from the camera, in game units, before which no height fog accumulates. Keeps nearby objects clear."));
 	ImGui::SliderFloat(T(TKEY("fog_height"), "Fog Height"), &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
+	Util::HoverTip(T(TKEY("fog_height_tooltip"), "World height, in game units, where the fog has its full Fog Density. It thins out above this height and stays at full density below it."));
 	ImGui::SliderFloat(T(TKEY("fog_height_falloff"), "Fog Height Falloff"), &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
+	Util::HoverTip(T(TKEY("fog_height_falloff_tooltip"), "How quickly the fog thins with height: density halves every 1000 / falloff game units above Fog Height. Higher values give a shallower, ground-hugging layer."));
 	ImGui::ColorEdit4(T(TKEY("fog_inscattering_color"), "Fog Inscattering Color"), (float*)&settings.fogInscatteringColor);
+	Util::HoverTip(T(TKEY("fog_inscattering_color_tooltip"), "Base color of light scattered toward the camera by the fog. Alpha is its intensity."));
 	ImGui::SliderFloat(T(TKEY("original_fog_color_amount"), "Original Fog Color Amount"), &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
+	Util::HoverTip(T(TKEY("original_fog_color_amount_tooltip"), "How much of the weather's vanilla fog color is added to the fog color, so the fog follows weather and time of day."));
 	ImGui::ColorEdit4(T(TKEY("original_fog_color_override"), "Original Fog Color Override"), (float*)&settings.originalFogColorOverride);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("original_fog_color_override_tooltip"),
@@ -128,20 +133,26 @@ void ExponentialHeightFog::DrawSettings()
 							  "Alpha blends from the weather colour (0) to this colour (1)."));
 	}
 	ImGui::SliderFloat(T(TKEY("fog_density"), "Fog Density"), &settings.fogDensity, 0.0f, 1.0f, "%.3f");
+	Util::HoverTip(T(TKEY("fog_density_tooltip"), "Thickness of the fog at Fog Height. Higher values hide distant terrain sooner."));
 	if (ImGui::TreeNode(T(TKEY("second_fog_layer"), "Second Fog Layer"))) {
+		const auto secondLayerTip = [] {
+			Util::HoverTip(T(TKEY("second_fog_layer_tooltip"),
+				"Adds a second stacked exponential height fog layer with its own base height, density and height falloff.\n"
+				"The two line integrals are summed.\n"
+				"Use it for high-altitude haze above the ground layer or a distinct low-lying ground fog."));
+		};
 		ImGui::SliderFloat(T(TKEY("fog_height_2"), "Fog Height 2"), &settings.fogHeight2, -22000.0f, 22000.0f, "%.1f");
+		secondLayerTip();
 		ImGui::SliderFloat(T(TKEY("fog_height_falloff_2"), "Fog Height Falloff 2"), &settings.fogHeightFalloff2, 0.001f, 2.0f, "%.3f");
+		secondLayerTip();
 		ImGui::SliderFloat(T(TKEY("fog_density_2"), "Fog Density 2"), &settings.fogDensity2, 0.0f, 1.0f, "%.3f");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s", T(TKEY("second_fog_layer_tooltip"),
-								  "Adds a second stacked exponential height fog layer with its own base height, density and height falloff.\n"
-								  "The two line integrals are summed.\n"
-								  "Use it for high-altitude haze above the ground layer or a distinct low-lying ground fog."));
-		}
+		secondLayerTip();
 		ImGui::TreePop();
 	}
 	ImGui::SliderFloat(T(TKEY("dir_inscattering_mul"), "Directional Light Inscattering Multiplier"), &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
+	Util::HoverTip(T(TKEY("dir_inscattering_mul_tooltip"), "Strength of the sun or moon light scattered by the fog, which brightens the fog toward the light. 0 disables it."));
 	ImGui::SliderFloat(T(TKEY("sunlight_attenuation"), "Sunlight Attenuation Amount"), &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
+	Util::HoverTip(T(TKEY("sunlight_attenuation_tooltip"), "How much the fog dims sunlight reaching surfaces inside it. Low-lying objects in dense fog receive less direct light."));
 	ImGui::SliderFloat(T(TKEY("dir_inscattering_anisotropy"), "Directional Light Inscattering Anisotropy"), &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("%s", T(TKEY("dir_inscattering_anisotropy_tooltip"),
@@ -166,34 +177,47 @@ void ExponentialHeightFog::DrawSettings()
 		ImGui::Text("%s", T(TKEY("use_dynamic_cubemaps_tooltip"), "Adds the dynamic environment cubemap color to the fog inscattering in interiors."));
 	}
 	ImGui::ColorEdit4(T(TKEY("inscattering_cubemap_tint"), "Inscattering Cubemap Tint"), (float*)&settings.inscatteringTint);
+	Util::HoverTip(T(TKEY("inscattering_cubemap_tint_tooltip"), "Tint applied to the sky IBL or dynamic cubemap light added to the fog. Alpha is its intensity."));
 	ImGui::SliderFloat(T(TKEY("cubemap_mip_level"), "Cubemap Mip Level"), &settings.cubemapMipLevel, 1.0f, 8.0f, "%.1f");
+	Util::HoverTip(T(TKEY("cubemap_mip_level_tooltip"), "Blur of the cubemap sampled for fog color. Higher values give a smoother color that leans toward the overhead sky."));
 
 	ImGui::TextWrapped("%s", T("feature.view_atmosphere.quality_location", "Grid quality and temporal sampling are configured in Atmosphere and Fog."));
 	ImGui::SeparatorText(T(TKEY("volumetric_fog"), "Volumetric Fog"));
 	ImGui::Checkbox(T(TKEY("enable_volumetric_fog"), "Enable Volumetric Fog"), (bool*)&settings.volumetricFogEnabled);
+	Util::HoverTip(T(TKEY("enable_volumetric_fog_tooltip"), "Renders nearby fog in a 3D volume so it is shadowed and lit by the sun, sky and local lights, giving light shafts. Beyond the volume the regular height fog continues."));
 	if (settings.volumetricFogEnabled) {
 		ImGui::SliderFloat(T(TKEY("volumetric_start_distance"), "Volumetric Start Distance"), &settings.volumetricFogStartDistance, 0.0f, 20000.0f, "%.0f");
 		ImGui::SliderFloat(T(TKEY("near_fade_in_distance"), "Near Fade In Distance"), &settings.volumetricFogNearFadeInDistance, 0.0f, 20000.0f, "%.0f");
+		Util::HoverTip(T(TKEY("near_fade_in_distance_tooltip"), "Distance over which volumetric fog fades in from where it begins, so it does not start as a hard wall."));
 		if (ImGui::TreeNode(T(TKEY("volumetric_noise"), "Volumetric Noise"))) {
+			const auto volumetricNoiseTip = [] {
+				Util::HoverTip(T(TKEY("volumetric_noise_tooltip"),
+					"Modulates the volumetric fog density with a 3D value noise field.\n"
+					"Noise Scale: spatial frequency of the fog clumps (0 = disabled).\n"
+					"Noise Threshold: soft cutoff that carves clumps out of the noise.\n"
+					"Noise Velocity: animation drift of the noise field, scaled by time."));
+			};
 			ImGui::SliderFloat(T(TKEY("volumetric_noise_scale"), "Noise Scale"), &settings.volumetricFogNoiseScale, 0.0f, 0.01f, "%.6f");
+			volumetricNoiseTip();
 			ImGui::SliderFloat(T(TKEY("volumetric_noise_threshold"), "Noise Threshold"), &settings.volumetricFogNoiseThreshold, 0.0f, 1.0f, "%.2f");
+			volumetricNoiseTip();
 			ImGui::SliderFloat3(T(TKEY("volumetric_noise_velocity"), "Noise Velocity"), &settings.volumetricFogNoiseVelocity.x, -1.0f, 1.0f, "%.3f");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", T(TKEY("volumetric_noise_tooltip"),
-									  "Modulates the volumetric fog density with a 3D value noise field.\n"
-									  "Noise Scale: spatial frequency of the fog clumps (0 = disabled).\n"
-									  "Noise Threshold: soft cutoff that carves clumps out of the noise.\n"
-									  "Noise Velocity: animation drift of the noise field, scaled by time."));
-			}
+			volumetricNoiseTip();
 			ImGui::TreePop();
 		}
 		ImGui::SliderFloat(T(TKEY("volumetric_extinction_scale"), "Volumetric Extinction Scale"), &settings.volumetricFogExtinctionScale, 0.0f, 10.0f, "%.2f");
+		Util::HoverTip(T(TKEY("volumetric_extinction_scale_tooltip"), "Multiplies the height fog's density inside the volumetric range. Higher values make nearby fog thicker and its light shafts stronger."));
 		ImGui::SliderFloat(T(TKEY("volumetric_scattering_distribution"), "Volumetric Scattering Distribution"), &settings.volumetricFogScatteringDistribution, -0.9f, 0.9f, "%.2f");
+		Util::HoverTip(T(TKEY("volumetric_scattering_distribution_tooltip"), "Henyey-Greenstein asymmetry of the volumetric fog. Positive values brighten fog looking toward lights; negative values brighten it looking away; 0 is even."));
 		ImGui::ColorEdit4(T(TKEY("volumetric_albedo"), "Volumetric Albedo"), (float*)&settings.volumetricFogAlbedo);
+		Util::HoverTip(T(TKEY("volumetric_albedo_tooltip"), "Color and fraction of light the fog scatters rather than absorbs. Alpha scales it; darker values give a dimmer, smokier fog."));
 		ImGui::ColorEdit4(T(TKEY("volumetric_emissive"), "Volumetric Emissive"), (float*)&settings.volumetricFogEmissive);
+		Util::HoverTip(T(TKEY("volumetric_emissive_tooltip"), "Light the fog emits on its own, independent of any light source. Alpha is its intensity."));
 		ImGui::SliderFloat(T(TKEY("directional_scattering_intensity"), "Directional Scattering Intensity"), &settings.volumetricDirectionalScatteringIntensity, 0.0f, 10.0f, "%.2f");
+		Util::HoverTip(T(TKEY("directional_scattering_intensity_tooltip"), "Strength of sun and moon light scattered by the volumetric fog, which forms the shadowed light shafts."));
 		ImGui::SliderFloat(T(TKEY("sky_lighting_scattering_intensity"), "Sky Lighting Scattering Intensity"), &settings.volumetricSkyLightingIntensity, 0.0f, 10.0f, "%.2f");
 		ImGui::SliderFloat(T(TKEY("local_light_scattering_intensity"), "Local Light Scattering Intensity"), &settings.volumetricLocalLightScatteringIntensity, 0.0f, 10.0f, "%.2f");
+		Util::HoverTip(T(TKEY("local_light_scattering_intensity_tooltip"), "Strength of local light scattered by the volumetric fog, giving halos around torches, lamps and other light sources."));
 	}
 }
 
