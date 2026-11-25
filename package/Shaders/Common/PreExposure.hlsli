@@ -1,7 +1,6 @@
 #ifndef COMMON_PRE_EXPOSURE_HLSLI
 #define COMMON_PRE_EXPOSURE_HLSLI
 
-#include "Common/Permutation.hlsli"
 #include "Common/SharedData.hlsli"
 
 // Radiance storage only. Materials, light settings, transmittance and metering
@@ -32,12 +31,6 @@ namespace PreExposure
 	float Decode(float value) { return value * InverseScale; }
 	float3 Decode(float3 value) { return value * InverseScale; }
 	float3 History(float3 value) { return value * HistoryScale; }
-
-	// Reflection captures and menu models are lighting/UI data, not scene color.
-	float3 EncodeScene(float3 value)
-	{
-		return !Permutation::RenderToUI && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) ? Encode(value) : value;
-	}
 }
 
 #endif
