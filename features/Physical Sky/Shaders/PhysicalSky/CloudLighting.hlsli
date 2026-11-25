@@ -232,18 +232,11 @@ struct CloudMsProfile
 	float4 coefficients;
 };
 
-CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
+/** @brief Multiple-scattering calibration for a layer whose extinction is normalized by densityScale. */
+CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf, float densityScale)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float width = min(info.msBoundaryWidth, max(ndf.altitude.y - ndf.altitude.x, 0.0) * (0.25 * GAME_UNIT_TO_M));
-#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
-	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, ndf.stormDensity, ndf.stormBlend) : info.lowDensityScale;
-#else
-	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z, ndf.stormBlend) : info.lowDensityScale;
-#endif
-#ifdef CLOUD_VOXELS
-	densityScale += ndf.voxelBlend * (ndf.voxelDensityScale - info.lowDensityScale);
-#endif
 	const float referenceDepth = densityScale * width;
 	CloudMsProfile result = (CloudMsProfile)0;
 	result.densityScale = densityScale;
@@ -268,6 +261,21 @@ CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
 	}
 	result.coefficients = lerp(low, high, coordinate - float(index));
 	return result;
+}
+
+/** @brief Low-cloud calibration, with the storm and voxel density scales blended in. */
+CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
+{
+	const VolumetricCloudData info = VolumetricCloudBuffer[0];
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, ndf.stormDensity, ndf.stormBlend) : info.lowDensityScale;
+#else
+	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z, ndf.stormBlend) : info.lowDensityScale;
+#endif
+#ifdef CLOUD_VOXELS
+	densityScale += ndf.voxelBlend * (ndf.voxelDensityScale - info.lowDensityScale);
+#endif
+	return PrepareCloudMsProfile(ndf, densityScale);
 }
 
 float CloudMultipleScattering(float extinction, NDFInfo ndf, CloudMsProfile calibration)
