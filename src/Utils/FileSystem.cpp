@@ -1,12 +1,47 @@
 #include "FileSystem.h"
 #include <Windows.h>
 #include <cmath>
+#include <commdlg.h>
 #include <filesystem>
 #include <fstream>
 #include <psapi.h>
 
 namespace Util
 {
+	FileDialogResult ShowFileDialog(const FileDialogOptions& a_options)
+	{
+		std::array<wchar_t, 32768> buffer{};
+		const auto initial = a_options.initial.wstring();
+		if (initial.size() >= buffer.size())
+			return { {}, FNERR_BUFFERTOOSMALL };
+		std::copy(initial.begin(), initial.end(), buffer.begin());
+		OPENFILENAMEW dialog{};
+		dialog.lStructSize = static_cast<DWORD>(sizeof(dialog));
+		dialog.hwndOwner = GetActiveWindow();
+		dialog.lpstrFilter = a_options.filter;
+		dialog.lpstrFile = buffer.data();
+		dialog.nMaxFile = static_cast<DWORD>(buffer.size());
+		dialog.lpstrDefExt = a_options.extension;
+		dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+		               (a_options.save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+		if (a_options.multiple && !a_options.save)
+			dialog.Flags |= OFN_ALLOWMULTISELECT;
+		if (!(a_options.save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog)))
+			return { {}, CommDlgExtendedError() };
+
+		FileDialogResult result;
+		const std::filesystem::path first(buffer.data());
+		const wchar_t* next = buffer.data() + first.native().size() + 1;
+		if (!a_options.multiple || a_options.save || !*next)
+			result.paths.push_back(first);
+		else
+			while (*next) {
+				result.paths.push_back(first / next);
+				next += std::wcslen(next) + 1;
+			}
+		return result;
+	}
+
 	// Path helper utilities implementation
 	namespace PathHelpers
 	{

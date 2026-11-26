@@ -5,6 +5,9 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Game.hlsli"
 #include "Common/SharedData.hlsli"
+#if defined(PHYSICAL_SKY) && defined(RAIN)
+#	include "PhysicalSky/Lightning.hlsli"
+#endif
 
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
@@ -296,6 +299,7 @@ cbuffer PerGeometry : register(b2)
 #	if defined(ENVCUBE) && defined(RAIN) && defined(DYNAMIC_CUBEMAPS) && defined(RAIN_REFRACTION)
 #		define REFRACTIVE_RAIN
 #		include "Common/BRDF.hlsli"
+#		include "Common/LightDisk.hlsli"
 
 namespace Raindrop
 {
@@ -315,20 +319,21 @@ struct ParticleSurface
 };
 
 /** @brief Light a particle sends toward the viewer from lightColor arriving along L (toward the light). */
-float3 ShadeLight(ParticleSurface surface, float3 lightColor, float3 L)
+float3 ShadeLight(ParticleSurface surface, float3 lightColor, float3 L, float2 disk = float2(0.0, 1.0))
 {
 #	if defined(REFRACTIVE_RAIN)
 	if (surface.isRaindrop) {
-		float3 H = normalize(surface.view + L);
-		float NdotL = saturate(dot(surface.normal, L));
+		const float3 specularLight = LightDisk::SpecularDirection(surface.normal, surface.view, L, disk);
+		float3 H = normalize(surface.view + specularLight);
+		float NdotL = saturate(dot(surface.normal, specularLight));
 		float NdotV = saturate(dot(surface.normal, surface.view));
 		float NdotH = saturate(dot(surface.normal, H));
 		float VdotH = saturate(dot(surface.view, H));
 		float3 specular = BRDF::D_GGX(Raindrop::Roughness, NdotH) * BRDF::Vis_SmithJointApprox(Raindrop::Roughness, NdotV, NdotL) *
-		                  BRDF::F_Schlick(Raindrop::WaterF0, VdotH) * NdotL;
+		                  BRDF::F_Schlick(Raindrop::WaterF0, VdotH) * NdotL * LightDisk::GGXNormalization(Raindrop::Roughness, disk);
 
 		// A light behind the drop is seen through it along the refracted view ray; normalized Phong lobe
-		float transmissionLobe = pow(saturate(dot(surface.refractDir, L)), Raindrop::TransmissionExponent) * (Raindrop::TransmissionExponent + 2.0) / Math::TAU;
+		float transmissionLobe = LightDisk::PhongCosine(surface.refractDir, L, Raindrop::TransmissionExponent, disk) * (Raindrop::TransmissionExponent + 2.0) / Math::TAU;
 		float3 transmission = transmissionLobe * (1.0 - BRDF::F_Schlick(Raindrop::WaterF0, NdotV));
 
 		return ColorManagement::SceneToLinear(lightColor) * (specular + transmission);
@@ -363,6 +368,11 @@ void AddPointLighting(float3 positionWS, ParticleSurface surface, inout float3 l
 		{
 			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
 			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+#		if defined(PHYSICAL_SKY) && defined(RAIN)
+			// Rain uses the luminous cloud's finite solid angle below.
+			if (light.lightFlags & LightLimitFix::LightFlags::Lightning)
+				continue;
+#		endif
 			const bool localShadow = light.lightFlags & LightLimitFix::LightFlags::LocalShadow;
 			if (LightLimitFix::IsLightIgnored(light) || ((light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) && !localShadow)) {
 				continue;
@@ -442,12 +452,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		// The env cubemap only carries faint bounce light, so lights are shaded on the drop directly
 		ParticleSurface drop = { true, normalWS, V, refractDir };
-		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz);
+		float3 directLighting = ShadeLight(drop, GetDirLightColor(posWS.xyz), SharedData::DirLightDirection.xyz, LightDisk::DirectionalSource());
+#		if defined(PHYSICAL_SKY) && defined(RAIN)
+		const float3 lightningPosition = posWS.xyz + FrameBuffer::CameraPosAdjust.xyz;
+		[unroll] for (uint emitter = 0u; emitter < 2u; ++emitter)
+		{
+			const float3 lightningDirection = normalize(Lightning::Emitter(emitter).xyz - lightningPosition);
+			directLighting += ShadeLight(drop, ColorManagement::LinearToScene(Lightning::IncidentFrom(emitter, lightningPosition)), lightningDirection);
+		}
+#		endif
 		AddPointLighting(posWS.xyz, drop, directLighting);
 
 		psout.Color.xyz = ColorManagement::LinearToScene(lerp(refractColor, reflectColor, fresnel) + directLighting);
 		psout.Color.w = alpha;
 		psout.Normal = float4(0, 1, 0, alpha);
+		psout.Color.rgb = PreExposure::EncodeScene(psout.Color.rgb);
 		return psout;
 	}
 #	endif
@@ -480,10 +499,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
 	float3 dirLightColor = GetDirLightColor(positionWS.xyz);
+#	if defined(PHYSICAL_SKY) && defined(RAIN)
+	dirLightColor = ColorManagement::SceneColor::ScaleAndAddLinear(dirLightColor, 1.0, Lightning::Incident(positionWS.xyz + FrameBuffer::CameraPosAdjust.xyz) * (1.0 / 3.14159265));
+#	endif
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1));
+		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1), positionWS.xyz);
 	}
 #	endif
 
@@ -507,6 +529,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (Permutation::RenderToUI && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection))
 		psout.Color.rgb = ColorManagement::WorkingToUI(psout.Color.rgb);
 #	endif
+	psout.Color.rgb = PreExposure::EncodeScene(psout.Color.rgb);
 	return psout;
 }
 #endif

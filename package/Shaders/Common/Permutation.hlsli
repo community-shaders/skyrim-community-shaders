@@ -83,6 +83,7 @@ namespace Permutation
 		static const uint NoSkyScattering = (1 << 9);
 		static const uint IsAurora = (1 << 10);
 		static const uint IsMoon = (1 << 11);
+		static const uint IsSecunda = (1 << 14);
 		static const uint ProjectedTextureIsSRGB = (1 << 12);
 		static const uint GrassPBR = (1 << 13);
 	}
@@ -112,5 +113,17 @@ namespace Permutation
 		float GrassCanopyHeight;  // Model-space height of the grass mesh being drawn
 	};
 
+}
+
+// Scene encoding depends on the draw permutation, so it lives here.
+#include "Common/PreExposure.hlsli"
+
+namespace PreExposure
+{
+	// Reflection captures and menu models are lighting/UI data, not scene color.
+	float3 EncodeScene(float3 value)
+	{
+		return !Permutation::RenderToUI && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) ? Encode(value) : value;
+	}
 }
 #endif  // __PERMUTATION_DEPENDENCY_HLSL__

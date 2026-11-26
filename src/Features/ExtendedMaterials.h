@@ -20,7 +20,7 @@ struct ExtendedMaterials : Feature
 				T("feature.extended_materials.key_feature_5", "Height-based texture blending") } };
 	};
 
-	/** @brief Returns true only for Lighting shader type. */
+	/** @brief Returns true for Lighting and Grass shader types. */
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
 	struct alignas(16) Settings

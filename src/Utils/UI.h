@@ -389,6 +389,45 @@ namespace Util
 		bool m_locked;
 	};
 
+	/** @brief Number of live DefaultsWhileActive scopes, across all settings types. */
+	inline int g_activeDefaultsScopes = 0;
+
+	/** @brief True while some feature's settings show defaults, so saving them would not yield the saved values. */
+	inline bool AreSettingsShowingDefaults()
+	{
+		return g_activeDefaultsScopes > 0;
+	}
+
+	/** @brief While active, shows a default-constructed copy in place of the saved settings until the scope ends. */
+	template <class Settings>
+	class DefaultsWhileActive
+	{
+	public:
+		DefaultsWhileActive(Settings& a_settings, bool a_active) :
+			m_settings(a_settings), m_active(a_active)
+		{
+			if (m_active) {
+				std::swap(m_settings, m_saved);
+				++g_activeDefaultsScopes;
+			}
+		}
+		~DefaultsWhileActive()
+		{
+			if (m_active) {
+				--g_activeDefaultsScopes;
+				std::swap(m_settings, m_saved);
+			}
+		}
+
+		DefaultsWhileActive(const DefaultsWhileActive&) = delete;
+		DefaultsWhileActive& operator=(const DefaultsWhileActive&) = delete;
+
+	private:
+		Settings& m_settings;
+		Settings m_saved{};
+		bool m_active;
+	};
+
 	/** @brief Explainer text behind a collapsed-by-default disclosure row. */
 	void Explainer(const char* a_label, const char* a_text);
 
@@ -683,6 +722,11 @@ namespace Util
 		const char* title = "";              /**< @brief Heading-sized title. */
 		const char* status = nullptr;        /**< @brief Short status line under the title, or null. */
 		ImVec4 statusColor{ 1, 1, 1, 1 };    /**< @brief Colour of the status line. */
+		const char* status2 = nullptr;       /**< @brief Second status segment after a divider, in its own colour, or null. */
+		ImVec4 status2Color{ 1, 1, 1, 1 };   /**< @brief Colour of the second status segment. */
+		const char* cornerIcon = nullptr;    /**< @brief Tabler glyph of a small button on the top right corner (e.g. a power toggle), or null. */
+		const char* cornerTooltip = nullptr; /**< @brief Hover text of the corner button, or null. */
+		bool cornerActive = false;           /**< @brief Tints the corner button with the accent while the option is on. */
 		const char* description = nullptr;   /**< @brief Wrapped secondary text, or null. */
 		const char* action = nullptr;        /**< @brief Label of a button along the card's bottom edge, or null for none. */
 		const char* actionTooltip = nullptr; /**< @brief Hover text of the action button, or null. */
@@ -694,7 +738,7 @@ namespace Util
 	{
 		None,
 		Card,  /**< @brief The card itself: select it. */
-		Action /**< @brief The action button. */
+		Action /**< @brief The action or corner button. */
 	};
 
 	/** @brief Height an OptionCard needs to show its content at a given width; take the max to line up a row of cards. */
@@ -904,6 +948,12 @@ namespace Util
 
 	/** @brief Slider that shows a 0..1 member as a percentage (lb..ub) and writes back only on edit. */
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%", ImGuiSliderFlags flags = 0);
+
+	/**
+	 * @brief Drop-in for ImGui::ColorEdit3 that keeps HDR HSV inputs bounded: H and S in [0, 1], V from 0 up.
+	 * ImGui leaves all three unbounded under ImGuiColorEditFlags_HDR, and its HSV conversion breaks outside [0, 1].
+	 */
+	bool ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags = 0);
 
 	/**
 	 * Draws a 2-4 component float slider. Holding Shift edits all components from the first component.

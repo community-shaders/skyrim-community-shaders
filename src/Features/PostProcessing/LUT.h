@@ -37,7 +37,6 @@ struct LUT : PostProcessFeature
 
 	eastl::unique_ptr<Texture2D> texLUT2D = nullptr;
 	eastl::unique_ptr<Texture3D> texLUT3D = nullptr;
-	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
 	winrt::com_ptr<ID3D11PixelShader> lutPS = nullptr;
 

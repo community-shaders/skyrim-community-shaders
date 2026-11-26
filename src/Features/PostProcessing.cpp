@@ -210,12 +210,14 @@ void PostProcessing::DrawSettings()
 			ImGui::PushID(feat->GetType().c_str());
 
 			const bool automatic = isForcedOn(*feat);
+			const bool experimental = feat->IsExperimental();
 			if (!drawForcedEnabled("##Enabled", *feat))
 				ImGui::Checkbox("##Enabled", &feat->enabled);
 
 			// The name opens the settings too, so the whole row reads as one entry
 			ImGui::SameLine();
 			const char* autoLabel = T("feature.post_processing.auto_badge", "Auto");
+			const char* experimentalLabel = T("feature.post_processing.experimental_badge", "Experimental");
 			const float nameWidth = std::max(ImGui::GetContentRegionAvail().x - Util::IconButtonSize() - spacing, ImGui::GetFontSize());
 			{
 				const bool dim = !feat->IsActive();
@@ -230,14 +232,22 @@ void PostProcessing::DrawSettings()
 			}
 			if (!description.empty())
 				Util::AddTooltip(description.c_str());
-			if (automatic) {
-				// Forced on by Cinematic Camera: flag it at the row's right end
+			if (automatic || experimental) {
 				const ImVec2 rowMin = ImGui::GetItemRectMin();
 				const ImVec2 rowMax = ImGui::GetItemRectMax();
-				Util::BadgeOptions badge;
-				badge.at = ImVec2(rowMax.x - Util::MeasureBadgeWidth(autoLabel), rowMin.y);
-				badge.rowHeight = rowMax.y - rowMin.y;
-				Util::Badge(autoLabel, Util::Colors::GetAccent(), badge);
+				float rightX = rowMax.x;
+				auto drawRowBadge = [&](const char* label, const ImVec4& tint) {
+					const float width = Util::MeasureBadgeWidth(label);
+					Util::BadgeOptions badge;
+					badge.at = ImVec2(rightX - width, rowMin.y);
+					badge.rowHeight = rowMax.y - rowMin.y;
+					Util::Badge(label, tint, badge);
+					rightX -= width + spacing;
+				};
+				if (automatic)
+					drawRowBadge(autoLabel, Util::Colors::GetAccent());
+				if (experimental)
+					drawRowBadge(experimentalLabel, Util::Colors::GetWarning());
 			}
 
 			ImGui::SameLine();
@@ -287,7 +297,7 @@ void PostProcessing::DrawSettings()
 		if (!cinematicCamera.settings.Enabled)
 			Util::SettingHint(T("feature.post_processing.enable_the_feature_to_see_its_settings", "Enable the feature to see its settings."), false);
 
-		cinematicCamera.DrawSettings();
+		cinematicCamera.DrawSettings(GetPipelineFeature<PhysicalLens>(FeaturePipelineIndex::PhysicalLens));
 		if (cinematicCamera.settings.Enabled) {
 			if (auto* exposure = GetPipelineFeature<HistogramAutoExposure>(FeaturePipelineIndex::AutoExposure)) {
 				ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.exposure_meter", "Exposure Meter"));
@@ -312,6 +322,7 @@ void PostProcessing::DrawSettings()
 				};
 				drawLinked(FeaturePipelineIndex::DoF, "Depth of Field");
 				drawLinked(FeaturePipelineIndex::LensFlare, "Lens Flare");
+				drawLinked(FeaturePipelineIndex::PhysicalLens, "Physical Lens");
 				drawLinked(FeaturePipelineIndex::PhysicalGlare, "Physical Glare");
 				drawLinked(FeaturePipelineIndex::Vignette, "Vignette");
 				drawLinked(FeaturePipelineIndex::MotionBlur, "Motion Blur");
@@ -417,6 +428,7 @@ void PostProcessing::BuildPipeline()
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalGlare)] = std::make_shared<PhysicalGlare>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)] = std::make_shared<CODBloom>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_shared<LensFlare>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalLens)] = std::make_shared<PhysicalLens>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)] = std::make_shared<Composite>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_shared<Vignette>();
 	pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_shared<Camera>();
@@ -427,7 +439,7 @@ void PostProcessing::BuildPipeline()
 void PostProcessing::ApplyDefaultEnabledStates()
 {
 	using enum FeaturePipelineIndex;
-	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, Camera, Border };
+	constexpr std::array kOffByDefault = { LUT, MotionBlur, PhysicalGlare, PhysicalLens, Camera, Border };
 	for (size_t index = 0; index < pipeline.size(); ++index) {
 		if (auto& pipe = pipeline[index]; pipe && !pipe->IsAutoEnabled())
 			pipe->enabled = std::ranges::find(kOffByDefault, static_cast<FeaturePipelineIndex>(index)) == kOffByDefault.end();
@@ -460,54 +472,15 @@ void PostProcessing::ClearShaderCache()
 
 void PostProcessing::SetupResources()
 {
-	{
-		auto renderer = globals::game::renderer;
-		auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+	colorTargets.clear();
+	colorTargetLastUse.clear();
+	colorTargetRetry.clear();
 
-		D3D11_TEXTURE2D_DESC texDesc;
-		D3D11_TEXTURE2D_DESC texMainDesc;
-		D3D11_TEXTURE2D_DESC texMainCopyDesc;
-		gameTexMain.texture->GetDesc(&texMainDesc);
-		gameTexMainCopy.texture->GetDesc(&texMainCopyDesc);
-		texDesc = texMainDesc;
+	auto& renderTargets = globals::game::renderer->GetRuntimeData().renderTargets;
+	renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&mainColorDesc);
+	renderTargets[RE::RENDER_TARGETS::kMAIN_COPY].texture->GetDesc(&sceneColorDesc);
 
-		texDesc.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-		texDesc.MiscFlags = 0;
-
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texCopyMain = eastl::make_unique<Texture2D>(texDesc);
-		texCopyMain->CreateRTV(rtvDesc);
-
-		if (texMainCopyDesc.Format != texMainDesc.Format) {
-			texDesc = texMainCopyDesc;
-			rtvDesc.Format = texDesc.Format;
-			texDesc.MipLevels = 1;
-			texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-			texDesc.MiscFlags = 0;
-
-			texCopyMainCopy = eastl::make_unique<Texture2D>(texDesc);
-			texCopyMainCopy->CreateRTV(rtvDesc);
-		} else {
-			texCopyMainCopy = nullptr;
-		}
-	}
-
-	{
-		auto desc = texCopyMain->desc;
-		desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texInput = std::make_unique<Texture2D>(desc);
-		texInput->CreateSRV({ .Format = desc.Format, .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D, .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
-		texInput->CreateRTV({ .Format = desc.Format, .ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D, .Texture2D = { .MipSlice = 0 } });
-		copyCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CopyCB>());
-	}
+	copyCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<CopyCB>());
 
 	if (auto rawPtr = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\PostProcessing\\fullscreen.hlsli", {}, "vs_5_0", "FullscreenTriangleVS")))
 		fullscreenVS.attach(rawPtr);
@@ -544,44 +517,55 @@ void PostProcessing::Reset()
 	isrefraction = false;
 }
 
-void PostProcessing::CopyToRenderTarget(
-	RE::BSGraphics::RenderTargetData& targetRT,
-	Texture2D* convertTex,
-	ID3D11Texture2D* srcTex,
-	ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion)
+std::optional<PostProcessing::RenderTargetCopy> PostProcessing::PrepareRenderTargetCopy(
+	ID3D11Texture2D* target, PostProcessFeature::TextureInfo source, const CopyCB& conversion)
 {
-	const bool convert = conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
-	if (!targetRT.texture || !srcTex || (!convert && targetRT.texture == srcTex))
-		return;
+	if (!target || !source.tex)
+		return std::nullopt;
 
-	auto context = globals::d3d::context;
-
+	const bool convert = conversion.scale != 1.f || conversion.gamma != 1.f || conversion.inputGamut != conversion.outputGamut;
 	D3D11_TEXTURE2D_DESC srcDesc;
-	srcTex->GetDesc(&srcDesc);
+	source.tex->GetDesc(&srcDesc);
 
 	D3D11_TEXTURE2D_DESC targetDesc;
-	targetRT.texture->GetDesc(&targetDesc);
+	target->GetDesc(&targetDesc);
 
-	if (!convert && srcDesc.Format == targetDesc.Format) {
-		globals::profiler->BeginPass("PostProcessing::CopyToTarget");
-		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, srcTex, 0, nullptr);
-		globals::profiler->EndPass();
+	if (!convert && srcDesc.Format == targetDesc.Format)
+		return RenderTargetCopy{ target, source, nullptr, conversion };
+
+	if (!copyPS || !fullscreenVS || !source.srv)
+		return std::nullopt;
+
+	auto* scratch = GetColorTarget(source.tex, targetDesc.Width, targetDesc.Height, targetDesc.Format);
+	if (!scratch)
+		return std::nullopt;
+
+	return RenderTargetCopy{ target, source, scratch, conversion };
+}
+
+void PostProcessing::CopyToRenderTarget(const RenderTargetCopy& copy)
+{
+	auto* context = globals::d3d::context;
+	auto* scratch = copy.scratch;
+	if (!scratch) {
+		if (copy.target != copy.source.tex) {
+			globals::profiler->BeginPass("PostProcessing::CopyToTarget");
+			context->CopySubresourceRegion(copy.target, 0, 0, 0, 0, copy.source.tex, 0, nullptr);
+			globals::profiler->EndPass();
+		}
 		return;
 	}
-
-	if (!copyPS || !fullscreenVS || !convertTex || !convertTex->rtv || !convertTex->resource)
-		return;
 
 	globals::profiler->BeginPass("PostProcessing::ConvertToTarget");
 	{
 		PostProcessingRaster::RasterPass pass(context);
 
-		copyCB->Update(conversion);
+		copyCB->Update(copy.conversion);
 		ID3D11Buffer* cb = copyCB->CB();
 		context->PSSetConstantBuffers(1, 1, &cb);
-		ID3D11ShaderResourceView* srv = srcSRV;
+		ID3D11ShaderResourceView* srv = copy.source.srv;
 		context->PSSetShaderResources(0, 1, &srv);
-		pass.SetTargets({ convertTex->rtv.get() }, (float)convertTex->desc.Width, (float)convertTex->desc.Height);
+		pass.SetTargets({ scratch->rtv.get() }, (float)scratch->desc.Width, (float)scratch->desc.Height);
 		pass.SetShaders(fullscreenVS.get(), copyPS.get());
 		pass.Draw();
 
@@ -591,15 +575,92 @@ void PostProcessing::CopyToRenderTarget(
 		context->PSSetConstantBuffers(1, 1, &cb);
 	}
 
-	context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+	context->CopySubresourceRegion(copy.target, 0, 0, 0, 0, scratch->resource.get(), 0, nullptr);
 	globals::profiler->EndPass();
 }
 
-void PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& texture)
+Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, DXGI_FORMAT format)
+{
+	return GetColorTarget(input, sceneColorDesc.Width, sceneColorDesc.Height,
+		format == DXGI_FORMAT_UNKNOWN ? sceneColorDesc.Format : format);
+}
+
+Texture2D* PostProcessing::GetColorTarget(ID3D11Texture2D* input, UINT width, UINT height, DXGI_FORMAT format)
+{
+	// Writeback can also target formats that only need an RTV.
+	const bool needsShaderViews = format == sceneColorDesc.Format || format == DXGI_FORMAT_R16G16B16A16_FLOAT || format == DXGI_FORMAT_R32G32B32A32_FLOAT;
+	const UINT bindFlags = D3D11_BIND_RENDER_TARGET | (needsShaderViews ? D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS : 0u);
+
+	// Only the current input is live. Two targets per size and format suffice,
+	// even for a pass such as Camera that advances the chain twice.
+	const uint32_t frame = globals::state->frameCount;
+	for (size_t i = 0; i < colorTargets.size(); ++i) {
+		const auto& target = colorTargets[i];
+		if (target->resource.get() != input && target->desc.Width == width &&
+			target->desc.Height == height && target->desc.Format == format && target->desc.BindFlags == bindFlags) {
+			colorTargetLastUse[i] = frame;
+			return target.get();
+		}
+	}
+
+	const auto now = std::chrono::steady_clock::now();
+	const auto key = std::tuple{ width, height, format, bindFlags };
+	if (const auto retry = colorTargetRetry.find(key); retry != colorTargetRetry.end()) {
+		if (now < retry->second)
+			return nullptr;
+		colorTargetRetry.erase(retry);
+	}
+
+	try {
+		const D3D11_TEXTURE2D_DESC desc{
+			.Width = width,
+			.Height = height,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = format,
+			.SampleDesc = { 1, 0 },
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = bindFlags
+		};
+		auto name = std::format("PostProcessing::ColorScratch{}", colorTargetSerial++);
+		auto target = std::make_unique<Texture2D>(desc, name.c_str());
+		target->CreateRTV({ .Format = format, .ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D, .Texture2D = { .MipSlice = 0 } });
+		if (needsShaderViews) {
+			target->CreateSRV({ .Format = format, .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D, .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
+			target->CreateUAV({ .Format = format, .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D, .Texture2D = { .MipSlice = 0 } });
+		}
+		colorTargetLastUse.push_back(frame);
+		return colorTargets.emplace_back(std::move(target)).get();
+	} catch (const std::exception& e) {
+		logger::error("[PostProcessing] Could not create a {}x{} color scratch target (format {}, bind flags {}): {}",
+			width, height, static_cast<uint>(format), bindFlags, e.what());
+		colorTargetRetry.emplace(key, now + std::chrono::seconds(5));
+		return nullptr;
+	}
+}
+
+void PostProcessing::ReleaseIdleColorTargets()
+{
+	constexpr uint32_t kIdleFrames = 600;
+	const uint32_t frame = globals::state->frameCount;
+	for (size_t i = colorTargets.size(); i-- > 0;) {
+		if (frame - colorTargetLastUse[i] > kIdleFrames) {
+			colorTargets.erase(colorTargets.begin() + static_cast<std::ptrdiff_t>(i));
+			colorTargetLastUse.erase(colorTargetLastUse.begin() + static_cast<std::ptrdiff_t>(i));
+		}
+	}
+}
+
+bool PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& texture)
 {
 	auto& ll = globals::features::linearLighting;
 	if (ll.IsLinearLightingActive())
-		return;
+		return true;
+
+	auto* texInput = GetColorTarget(texture.tex, mainColorDesc.Width, mainColorDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT);
+	if (!texInput)
+		return false;
+
 	auto* context = globals::d3d::context;
 	globals::profiler->BeginPass("PostProcessing::BeginLinear");
 	PostProcessingRaster::RasterPass pass(context);
@@ -618,6 +679,7 @@ void PostProcessing::BeginLinearProcessing(PostProcessFeature::TextureInfo& text
 	context->PSSetConstantBuffers(1, 1, &cb);
 	globals::profiler->EndPass();
 	texture = { texInput->resource.get(), texInput->srv.get() };
+	return true;
 }
 
 void PostProcessing::DrawFeature(PostProcessFeature& feature, PostProcessFeature::TextureInfo& lastTexColor)
@@ -661,29 +723,32 @@ void PostProcessing::DrawBeforeUpscaling()
 			if (!processing) {
 				globals::d3d::context->OMSetRenderTargets(0, nullptr, nullptr);
 				globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
-				BeginLinearProcessing(lastTexColor);
+				if (!BeginLinearProcessing(lastTexColor))
+					break;
 				processing = true;
 			}
 			DrawFeature(*pipe, lastTexColor);
 		}
 	}
 
-	if (processing)
-		CopyToRenderTarget(gameTexMain, texCopyMain.get(), lastTexColor.tex, lastTexColor.srv,
-			CopyCB{ .gamma = globals::features::linearLighting.IsLinearLightingActive() ? 1.f : Util::ColorSpace::GAME_GAMMA_INV });
+	if (processing) {
+		const CopyCB conversion{ .gamma = globals::features::linearLighting.IsLinearLightingActive() ? 1.f : Util::ColorSpace::GAME_GAMMA_INV };
+		if (const auto copy = PrepareRenderTargetCopy(gameTexMain.texture, lastTexColor, conversion))
+			CopyToRenderTarget(*copy);
+	}
 
 	state->EndPerfEvent();
 }
 
-void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
+std::optional<RE::RENDER_TARGET> PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 {
 	if (globals::features::linearLighting.IsLinearLightingActive() &&
 		(globals::state->permutationData.RenderToUI || globals::state->IsMainOrLoadingMenuOpen()))
-		return;
+		return std::nullopt;
 	auto& ll = globals::features::linearLighting;
 	const bool linear = ll.IsLinearLightingActive();
 	if (bypass && !linear)
-		return;
+		return std::nullopt;
 
 	auto renderer = globals::game::renderer;
 
@@ -702,11 +767,14 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 
 	// The tonemap hook hands us the pass input directly, so no need to probe the bound RTV.
 	// Refraction still routes through kMAIN_COPY without that being reflected in a_input.
-	bool useMainCopy = isrefraction || a_input == RE::RENDER_TARGETS::kMAIN_COPY;
+	const bool useMainCopy = isrefraction || a_input == RE::RENDER_TARGETS::kMAIN_COPY;
+	const auto sceneTarget = useMainCopy ? RE::RENDER_TARGETS::kMAIN_COPY : RE::RENDER_TARGETS::kMAIN;
+	isrefraction = false;
 
 	auto gameTexMain = useMainCopy ? gameTexMainCopyRT : gameTexMainRT;
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
-	BeginLinearProcessing(lastTexColor);
+	if (!BeginLinearProcessing(lastTexColor))
+		return sceneTarget;
 	auto gameTexMainAlt = useMainCopy ? gameTexMainRT : gameTexMainCopyRT;
 
 	// update auto-enabled features
@@ -715,52 +783,102 @@ void PostProcessing::PreProcess(RE::RENDER_TARGET a_input)
 			pipe->UpdateAutoEnabled();
 	}
 
-	// go through each fx
-	bool colorGraded = false;
-	for (auto& pipe : pipeline) {
-		if (pipe && !bypass && pipe->IsActive() && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
-			auto* input = lastTexColor.tex;
-			DrawFeature(*pipe, lastTexColor);
-			if (pipe == pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)])
-				colorGraded = lastTexColor.tex != input;
-		}
-	}
-
-	for (auto& pipe : pipeline) {
-		if (!bypass && pipe && pipe->IsActive() && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
-			DrawFeature(*pipe, lastTexColor);
-		}
-	}
-
-	Texture2D* mainConvertTex = texCopyMain.get();
-	Texture2D* mainCopyConvertTex = texCopyMainCopy ? texCopyMainCopy.get() : texCopyMain.get();
+	const auto canDraw = [&](const auto& pipe) {
+		return !bypass && pipe && pipe->IsActive() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) &&
+		       (!pipe->DrawBeforeUpscaling() || !upscaling.loaded);
+	};
+	const auto& grading = pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)];
+	const auto& composite = pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)];
+	const auto& border = pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)];
 
 	const bool sceneOutput = globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing;
 	const auto sceneGamut = ll.IsACEScgActive() ? Gamut::ACEScg : Gamut::Rec709;
 	const auto displayGamut = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR ? Gamut::Rec2020 : Gamut::Rec709;
-	const CopyCB conversion{
-		.inputGamut = colorGraded ? displayGamut : sceneGamut,
+	CopyCB conversion{
+		.inputGamut = sceneGamut,
 		.outputGamut = sceneOutput ? sceneGamut : displayGamut,
 		.gamma = sceneOutput && !linear ? Util::ColorSpace::GAME_GAMMA_INV : 1.f
 	};
-	CopyToRenderTarget(gameTexMain, useMainCopy ? mainCopyConvertTex : mainConvertTex, lastTexColor.tex, lastTexColor.srv, conversion);
-	CopyToRenderTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex, gameTexMain.texture, gameTexMain.SRV, CopyCB{});
 
-	isrefraction = false;
-}
-
-void PostProcessing::ClearBorderMotionVectorsForFrameGen()
-{
-	// Without a drawn letterbox, zeroed motion vectors would hand frame generation static pixels over live scene content.
-	if (!IsPipelineRunning())
-		return;
-
-	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
-	auto& pipe = pipeline[borderIdx];
-	if (pipe && pipe->IsActive() && !(globals::state->IsMainOrLoadingMenuOpen() && pipe->DisableInMainLoadingMenu())) {
-		auto* border = static_cast<Border*>(pipe.get());
-		border->ClearMotionVectorsForFrameGen();
+	ColorGrading* fusedGrading = nullptr;
+	Composite::ConversionTarget fusedConversion;
+	if (linear && canDraw(composite)) {
+		if (canDraw(grading)) {
+			fusedGrading = static_cast<ColorGrading*>(grading.get());
+		} else if (gameTexMain.texture && std::ranges::none_of(pipeline, [&](const auto& pipe) {
+					   return canDraw(pipe) && pipe->DrawAfterColorGrading();
+				   })) {
+			// Composite takes a scratch target after the preceding effects have selected
+			// its input. Matching the game target lets writeback use a direct copy.
+			D3D11_TEXTURE2D_DESC targetDesc;
+			gameTexMain.texture->GetDesc(&targetDesc);
+			if (targetDesc.Width == sceneColorDesc.Width && targetDesc.Height == sceneColorDesc.Height &&
+				targetDesc.SampleDesc.Count == 1 && targetDesc.SampleDesc.Quality == 0) {
+				copyCB->Update(conversion);
+				fusedConversion = { targetDesc.Format, copyCB->CB() };
+			}
+		}
 	}
+
+	bool colorGraded = false;
+	bool borderDrawn = false;
+	bool outputConverted = false;
+	bool exposureResolved = !linear || globals::state->preExposure == 1.0f;
+	for (auto& pipe : pipeline) {
+		if (canDraw(pipe) && !pipe->DrawAfterColorGrading()) {
+			auto* input = lastTexColor.tex;
+			if (pipe == composite) {
+				const auto output = static_cast<Composite*>(pipe.get())->Draw(lastTexColor, fusedGrading, fusedConversion);
+				exposureResolved |= lastTexColor.tex != input;
+				colorGraded = output == Composite::Output::Graded;
+				outputConverted = output == Composite::Output::Converted;
+			} else if (pipe == grading) {
+				if (colorGraded)
+					continue;
+				// ISHDR can decode the original scene when an enabled tone mapper cannot run.
+				if (!exposureResolved)
+					return sceneTarget;
+				DrawFeature(*pipe, lastTexColor);
+				colorGraded = lastTexColor.tex != input;
+				if (!colorGraded)
+					return sceneTarget;
+			} else {
+				DrawFeature(*pipe, lastTexColor);
+			}
+		}
+	}
+
+	for (auto& pipe : pipeline) {
+		if (exposureResolved && canDraw(pipe) && pipe->DrawAfterColorGrading()) {
+			auto* input = lastTexColor.tex;
+			DrawFeature(*pipe, lastTexColor);
+			if (pipe == border)
+				borderDrawn = lastTexColor.tex != input;
+		}
+	}
+
+	if (outputConverted) {
+		conversion = {};
+	} else {
+		conversion.inputGamut = colorGraded ? displayGamut : sceneGamut;
+		conversion.scale = exposureResolved ? 1.f : 1.f / globals::state->preExposure;
+	}
+	// Both copies must be ready before either game target is modified. The
+	// alternate is derived from the committed main target, including its format.
+	const auto mainCopy = PrepareRenderTargetCopy(gameTexMain.texture, lastTexColor, conversion);
+	if (!mainCopy)
+		return sceneTarget;
+	const auto alternateCopy = PrepareRenderTargetCopy(gameTexMainAlt.texture, { gameTexMain.texture, gameTexMain.SRV }, CopyCB{});
+	if (!alternateCopy)
+		return sceneTarget;
+
+	CopyToRenderTarget(*mainCopy);
+	CopyToRenderTarget(*alternateCopy);
+
+	if (borderDrawn && upscaling.ShouldUseFrameGenerationThisFrame() && !globals::state->permutationData.RenderToUI)
+		static_cast<Border*>(border.get())->ClearMotionVectorsForFrameGen();
+
+	return std::nullopt;
 }
 
 bool PostProcessing::WantsTonemapOwnership() const
@@ -777,7 +895,7 @@ bool PostProcessing::IsPipelineRunning() const
 
 bool PostProcessing::WantsAutoHDR() const
 {
-	if (globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing)
+	if (globals::state->IsPostProcessingFallback() || globals::state->GetTonemapOwner() != State::TonemapOwner::kPostProcessing)
 		return false;
 
 	auto* colorGrading = static_cast<const ColorGrading*>(pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get());
@@ -833,6 +951,7 @@ void PostProcessing::Prepass()
 
 	if (auto* lut = GetPipelineFeature<::LUT>(FeaturePipelineIndex::LUT))
 		lut->UpdateTexture();
+	ReleaseIdleColorTargets();
 
 	{
 		auto graphicsState = globals::game::graphicsState;

@@ -14,6 +14,7 @@ namespace E11Handoff
 		CloudShadows,
 		HeightFog,
 		ProceduralAurora,
+		PhysicalSky,
 		Count
 	};
 

@@ -16,7 +16,13 @@
 #include "PostProcessing/LocalExposure.h"
 #include "PostProcessing/MotionBlur.h"
 #include "PostProcessing/PhysicalGlare.h"
+#include "PostProcessing/PhysicalLens.h"
 #include "PostProcessing/Vignette.h"
+
+#include <chrono>
+#include <map>
+#include <optional>
+#include <tuple>
 
 struct PostProcessing : Feature
 {
@@ -99,6 +105,7 @@ struct PostProcessing : Feature
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
+		PhysicalLens,
 		Composite,
 		ColorGrading,
 		LUT,
@@ -137,10 +144,14 @@ struct PostProcessing : Feature
 	virtual void PostPostLoad() override;
 	virtual void Prepass() override;
 
-	void PreProcess(RE::RENDER_TARGET a_input);
+	/// Returns the untouched scene target when ISHDR must tonemap it directly.
+	std::optional<RE::RENDER_TARGET> PreProcess(RE::RENDER_TARGET a_input);
 	void DrawBeforeUpscaling();
-	void ClearBorderMotionVectorsForFrameGen();
 	void DrawFeature(PostProcessFeature& feature, PostProcessFeature::TextureInfo& lastTexColor);
+
+	/// Render-thread scratch for the serial color chain. The returned target
+	/// differs from input, which must be the only chain texture still needed.
+	Texture2D* GetColorTarget(ID3D11Texture2D* input, DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN);
 
 	enum class Gamut : uint
 	{
@@ -153,27 +164,8 @@ struct PostProcessing : Feature
 		Gamut inputGamut = Gamut::Rec709;
 		Gamut outputGamut = Gamut::Rec709;
 		float gamma = 1.f;
-		float pad = 0.f;
+		float scale = 1.f;
 	};
-
-	/**
-	 * @brief Copies the pipeline output into a game render target, converting the
-	 *        format via the copyPS fullscreen pass when the formats differ.
-	 *
-	 * Same-format, same-space copies use CopySubresourceRegion; otherwise the
-	 * source is rendered into convertTex first and then copied.
-	 *
-	 * @param targetRT  Game render target receiving the image.
-	 * @param convertTex  Intermediate texture for format conversion (needs an RTV).
-	 * @param srcTex  Texture holding the pipeline output.
-	 * @param srcSRV  SRV of srcTex, sampled by the conversion pass.
-	 */
-	void CopyToRenderTarget(
-		RE::BSGraphics::RenderTargetData& targetRT,
-		Texture2D* convertTex,
-		ID3D11Texture2D* srcTex,
-		ID3D11ShaderResourceView* srcSRV, const CopyCB& conversion);
-	void BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
 
 	/////////////////////////////////////////////////////////////////////////////////
 
@@ -187,13 +179,9 @@ struct PostProcessing : Feature
 
 	std::unique_ptr<ImageSpaceManager> imageSpaceManager = std::make_unique<ImageSpaceManager>();
 
-	eastl::unique_ptr<Texture2D> texCopyMain = nullptr;
-	eastl::unique_ptr<Texture2D> texCopyMainCopy = nullptr;
-
 	/// Format-conversion copy pass (fullscreen triangle PS draw).
 	winrt::com_ptr<ID3D11PixelShader> copyPS = nullptr;
 	std::unique_ptr<ConstantBuffer> copyCB;
-	std::unique_ptr<Texture2D> texInput;
 
 	/// Shared fullscreen-triangle vertex shader for every raster pass in the
 	/// pipeline (compiled from PostProcessing/fullscreen.hlsli).
@@ -221,4 +209,29 @@ struct PostProcessing : Feature
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+private:
+	struct RenderTargetCopy
+	{
+		ID3D11Texture2D* target;
+		PostProcessFeature::TextureInfo source;
+		Texture2D* scratch;
+		CopyCB conversion;
+	};
+
+	std::optional<RenderTargetCopy> PrepareRenderTargetCopy(
+		ID3D11Texture2D* target, PostProcessFeature::TextureInfo source, const CopyCB& conversion);
+	void CopyToRenderTarget(const RenderTargetCopy& copy);
+	bool BeginLinearProcessing(PostProcessFeature::TextureInfo& texture);
+	Texture2D* GetColorTarget(ID3D11Texture2D* input, UINT width, UINT height, DXGI_FORMAT format);
+
+	D3D11_TEXTURE2D_DESC sceneColorDesc{};
+	D3D11_TEXTURE2D_DESC mainColorDesc{};
+	/** @brief Frees pooled color targets no pass has requested for a while, e.g. after an effect is turned off or the render size changes. */
+	void ReleaseIdleColorTargets();
+
+	std::vector<std::unique_ptr<Texture2D>> colorTargets;
+	std::vector<uint32_t> colorTargetLastUse;  // frame each pooled target was last requested, parallel to colorTargets
+	uint32_t colorTargetSerial = 0;            // keeps scratch target names unique after idle ones are freed
+	std::map<std::tuple<UINT, UINT, DXGI_FORMAT, UINT>, std::chrono::steady_clock::time_point> colorTargetRetry;
 };

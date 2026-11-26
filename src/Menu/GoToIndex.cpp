@@ -5,6 +5,7 @@
 #include "FeatureIssues.h"
 #include "Features/Effects11.h"
 #include "Features/Effects11/Editor/Effects11Editor.h"
+#include "Features/PerformanceOverlay.h"
 #include "Features/ScreenshotFeature.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -198,6 +199,30 @@ namespace GoToIndex
 			}
 		}
 
+		/// Settings a feature lists itself, for controls the catalog cannot see (a feature's own tools, say).
+		void AddFeatureListedSettings(std::vector<Entry>& out)
+		{
+			for (Feature* feature : Feature::GetFeatureList()) {
+				if (!feature->loaded || !feature->IsInMenu() || feature->IsHiddenUnreleased())
+					continue;
+				const std::string shortName = feature->GetShortName();
+				for (auto& listed : feature->GetSettingsSearchEntries()) {
+					Entry entry;
+					entry.kind = Kind::Setting;
+					entry.title = listed.label;
+					entry.breadcrumb = feature->GetDisplayName();
+					entry.id = std::format("listed:{}/{}", shortName, listed.id);
+					entry.haystack = shortName + " " + listed.description;
+					entry.run = [shortName, focus = std::move(listed.focusCallback)] {
+						Navigate(shortName);
+						if (focus)
+							focus();
+					};
+					out.push_back(std::move(entry));
+				}
+			}
+		}
+
 		void AddCatalogSettings()
 		{
 			const auto generation = I18n::GetSingleton()->GetGeneration();
@@ -280,7 +305,7 @@ namespace GoToIndex
 				addCommand("cs_editor", T("menu.palette.cmd_cs_editor", "Open CS Editor"), {}, hint(Ids::kOpenEditor), Ids::kOpenEditor);
 			if (globals::features::effects11.loaded)
 				addCommand("effects11_editor", T("menu.palette.cmd_effects11_editor", "Open Effects 11 editor"), [] { Effects11Editor::GetSingleton().Open(true); }, hotkey(menuSettings.Effects11EditorKey));
-			addCommand("overlay", T("menu.palette.cmd_overlay", "Toggle performance overlay"), [] { globals::menu->overlayVisible = !globals::menu->overlayVisible; }, hotkey(menuSettings.OverlayToggleKey));
+			addCommand("overlay", T("menu.palette.cmd_overlay", "Toggle performance overlay"), [] { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.settings.ShowInOverlay); }, hotkey(menuSettings.OverlayToggleKey));
 			if (globals::features::screenshotFeature.loaded)
 				addCommand("screenshot", T("menu.palette.cmd_screenshot", "Take screenshot"), [] { globals::features::screenshotFeature.captureRequested = true; }, hotkey(menuSettings.ScreenshotKey));
 			addCommand("logs", T("menu.palette.cmd_logs", "Open logs folder"), [] {
@@ -414,6 +439,7 @@ namespace GoToIndex
 		g_entries.clear();
 		AddPages(g_entries);
 		AddFeatures(g_entries);
+		AddFeatureListedSettings(g_entries);
 		AddSettingsPageLabels(g_entries);
 		AddCommands(g_entries, shortcuts);
 		AddCatalogSettings();

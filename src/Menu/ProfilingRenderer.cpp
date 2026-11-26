@@ -15,6 +15,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
@@ -24,6 +25,7 @@
 #include "State.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 static ImU32 HslToImU32(float h, float s, float l)
 {
@@ -68,6 +70,7 @@ static constexpr float kFeatureGraphMinFrameTimeSec = 0.00001f;
 static constexpr float kTimingTableMetricColumnWidth = 55.0f;
 static constexpr float kTimingTablePercentColumnWidth = 45.0f;
 static constexpr float kStatsRefreshSeconds = 1.0f;
+static constexpr float kTimingSmoothRate = 4.0f;  // Pass Timings card totals: approach speed per second (Util::Anim::Approach)
 
 // Comparators for a timing table's columns: Pass by name (case-insensitive), then
 // Avg / P95 / P99 by value, and % by the average's share, which orders like the
@@ -170,17 +173,16 @@ void ProfilingRenderer::TextHeat(const char* fmt, float value, float maxValue)
 
 void ProfilingRenderer::RenderTimingModeToggle()
 {
-	int mode = static_cast<int>(timingMode);
-
-	ImGui::PushID("ProfilingTimingMode");
-	ImGui::RadioButton(T("menu.profiling.gpu", "GPU"), &mode, static_cast<int>(TimingMode::GPU));
-	ImGui::SameLine();
-	ImGui::RadioButton(T("menu.profiling.cpu", "CPU"), &mode, static_cast<int>(TimingMode::CPU));
-	ImGui::PopID();
-
-	const auto newMode = static_cast<TimingMode>(mode);
-	if (newMode != timingMode) {
-		timingMode = newMode;
+	// Skinny track sized to its labels, sitting straight on top of the graph
+	const std::array<Util::Segment, 2> segments{ {
+		{ .label = T("menu.profiling.gpu", "GPU") },
+		{ .label = T("menu.profiling.cpu", "CPU") },
+	} };
+	Util::SegmentedOptions options;
+	options.height = ImGui::GetFontSize() * 1.4f;
+	const int clicked = Util::SegmentedControl("##ProfilingTimingMode", segments, static_cast<int>(timingMode), options);
+	if (clicked >= 0 && static_cast<TimingMode>(clicked) != timingMode) {
+		timingMode = static_cast<TimingMode>(clicked);
 		timeSinceLastUpdate = kStatsRefreshSeconds;
 	}
 }
@@ -254,6 +256,115 @@ void ProfilingRenderer::GraphState::Draw(float baseLegendWidth, float baseHeight
 	ImGui::Spacing();
 }
 
+void ProfilingRenderer::SelectTab(Tab tab)
+{
+	selectedTab = tab;
+}
+
+void ProfilingRenderer::RenderPage()
+{
+	auto* menu = globals::menu;
+	const auto& palette = menu->GetTheme().StatusPalette;
+	auto& overlay = globals::features::performanceOverlay;
+	auto& profiler = *globals::profiler;
+	// Timed while the page is open, whichever tool is shown, so the Pass Timings card stays current
+	profiler.KeepActive();
+
+	std::array<Util::OptionCardContent, static_cast<size_t>(Tab::Count)> cards{};
+
+	// Pass Timings: GPU time of the last collected frame
+	auto& timingsCard = cards[static_cast<size_t>(Tab::PassTimings)];
+	timingsCard.icon = ICON_TI_CLOCK;
+	timingsCard.title = T("menu.profiling.timings_tab", "Pass Timings");
+	timingsCard.description = T("menu.profiling.timings_blurb", "GPU and CPU time of every Community Shaders render pass.");
+	std::string timingsGpu;
+	std::string timingsCpu;
+	if (profiler.GetResults().empty()) {
+		timingsCard.status = T("menu.profiling.timings_no_data", "No data yet (enter the game world)");
+		timingsCard.statusColor = palette.Disable;
+	} else {
+		float cpuTotalMs = 0.0f;
+		for (const auto& result : profiler.GetResults())
+			if (result.valid)
+				cpuTotalMs += result.cpuTimeMs;
+		const float gpuSmooth = Util::Anim::Approach(ImGui::GetID("##TimingsGpu"), profiler.GetTotalTimeMs(), kTimingSmoothRate);
+		const float cpuSmooth = Util::Anim::Approach(ImGui::GetID("##TimingsCpu"), cpuTotalMs, kTimingSmoothRate);
+		const auto gpuMs = std::format("{:.1f}", gpuSmooth);
+		const auto cpuMs = std::format("{:.1f}", cpuSmooth);
+		timingsGpu = std::vformat(T("menu.profiling.timings_gpu_total", "{} ms GPU"), std::make_format_args(gpuMs));
+		timingsCpu = std::vformat(T("menu.profiling.timings_cpu_total", "{} ms CPU"), std::make_format_args(cpuMs));
+		timingsCard.status = timingsGpu.c_str();
+		timingsCard.statusColor = palette.SuccessColor;
+		timingsCard.status2 = timingsCpu.c_str();
+		timingsCard.status2Color = palette.InfoColor;
+	}
+
+	// Performance Overlay: the corner power button turns the overlay window on or off
+	auto& overlayCard = cards[static_cast<size_t>(Tab::PerformanceOverlay)];
+	overlayCard.icon = MenuIcons::kProfiling;
+	overlayCard.title = T("menu.profiling.overlay_tab", "Performance Overlay");
+	overlayCard.description = T("menu.profiling.overlay_blurb", "FPS, frame time graphs, draw calls, VRAM and A/B testing in an in-game window.");
+	std::string overlayStatus;
+	if (!overlay.loaded) {
+		overlayCard.unavailable = true;
+		if (globals::state->IsFeatureDisabled(overlay.GetShortName())) {
+			overlayCard.status = T("menu.profiling.overlay_disabled_at_boot", "Disabled at boot");
+			overlayCard.statusColor = palette.Disable;
+		} else if (overlay.installed) {
+			overlayCard.status = T("menu.profiling.overlay_restart", "Restart to enable");
+			overlayCard.statusColor = palette.RestartNeeded;
+		} else {
+			overlayCard.status = T("menu.profiling.overlay_not_installed", "Not installed");
+			overlayCard.statusColor = palette.Disable;
+		}
+	} else {
+		const bool on = overlay.settings.ShowInOverlay;
+		const auto hotkey = Util::Input::KeyIdToString(menu->GetSettings().OverlayToggleKey);
+		overlayStatus = std::vformat(on ? T("menu.profiling.overlay_turn_off", "Turn off ({})") : T("menu.profiling.overlay_turn_on", "Turn on ({})"), std::make_format_args(hotkey));
+		overlayCard.status = on ? T("menu.profiling.overlay_showing", "Showing") : T("menu.profiling.overlay_off", "Off");
+		overlayCard.statusColor = on ? palette.SuccessColor : palette.Disable;
+		overlayCard.cornerIcon = ICON_TI_POWER;
+		overlayCard.cornerActive = on;
+		overlayCard.cornerTooltip = overlayStatus.c_str();
+	}
+
+	// Every card takes the tallest one's height so the row lines up
+	if (ImGui::BeginTable("##ProfilingToolCards", static_cast<int>(Tab::Count), ImGuiTableFlags_SizingStretchSame)) {
+		const float cellWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().CellPadding.x * 2.0f * cards.size()) / cards.size();
+		float height = 0.0f;
+		for (const auto& card : cards)
+			height = std::max(height, Util::OptionCardHeight(card, cellWidth));
+		for (size_t i = 0; i < cards.size(); ++i) {
+			ImGui::TableNextColumn();
+			ImGui::PushID(static_cast<int>(i));
+			const auto tab = static_cast<Tab>(i);
+			const auto click = Util::OptionCard("##ToolCard", cards[i], selectedTab == tab, ImVec2(0.0f, height));
+			if (click != Util::OptionCardClick::None)
+				selectedTab = tab;
+			if (click == Util::OptionCardClick::Action && tab == Tab::PerformanceOverlay) {
+				const bool shown = !overlay.settings.ShowInOverlay;
+				FeatureListRenderer::RunFeatureCommand(&overlay, [&overlay, shown] { overlay.SetShowInOverlay(shown); });
+			}
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	switch (selectedTab) {
+	case Tab::PerformanceOverlay:
+		FeatureListRenderer::DrawEmbeddedFeaturePage(&overlay);
+		break;
+	case Tab::PassTimings:
+	default:
+		RenderStatistics();
+		break;
+	}
+}
+
 void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 {
 	auto& profiler = (*globals::profiler);
@@ -263,7 +374,6 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 	if (showModeToggle) {
 		RenderTimingModeToggle();
 		cpuMode = (timingMode == TimingMode::CPU);
-		ImGui::Separator();
 	}
 
 	float currentTime = static_cast<float>(ImGui::GetTime());
@@ -635,6 +745,7 @@ void ProfilingRenderer::RenderOverlayGroupToggle(const std::string& group)
 void ProfilingRenderer::OpenProfilingPage(const std::string& group)
 {
 	focusGroup = group;
+	selectedTab = Tab::PassTimings;
 	FeatureListRenderer::RequestPage(MenuPageIds::kProfiling);
 }
 

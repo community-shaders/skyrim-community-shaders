@@ -938,7 +938,7 @@ std::optional<SceneSettingsManager::SceneContextId> SceneSettingsManager::FindSu
 
 	// Narrowest first, mirroring the resolve order in reverse.
 	std::vector<SceneContextId> candidates;
-	const auto& locationTargets = GetCurrentLocationTargets();
+	const auto& locationTargets = GetCurrentLocationTargetKeys();
 	for (auto target = locationTargets.rbegin(); target != locationTargets.rend(); ++target)
 		candidates.push_back(withActiveSet(
 			{ .type = SceneContextType::Location, .locationType = target->type, .locationFormKey = target->formKey }));
@@ -1109,9 +1109,8 @@ void SceneSettingsManager::ReloadOverwrites()
 
 void SceneSettingsManager::OnDataLoaded()
 {
+	// The render thread's next Update loads location data; loading it here as well races that thread.
 	gameDataReady = true;
-	if (dataLoaded)
-		TryEnsureLocationDataLoaded();
 }
 
 bool SceneSettingsManager::TryEnsureLocationDataLoaded()
@@ -1160,7 +1159,7 @@ void SceneSettingsManager::LoadWeatherData()
 	RefreshTimeOfDayModes();
 }
 
-float SceneSettingsManager::GetTimeOfDayPeriodFallbackFloat(float baseValue, const std::string& featureShortName,
+json SceneSettingsManager::GetTimeOfDayPeriodFallbackValue(const json& baseValue, const std::string& featureShortName,
 	const std::vector<std::string>& settingPath, const std::string& settingKey, int periodIndex) const
 {
 	const json* value = nullptr;
@@ -1180,12 +1179,10 @@ float SceneSettingsManager::GetTimeOfDayPeriodFallbackFloat(float baseValue, con
 
 	if (!value)
 		return baseValue;
-	if (!IsNumericValue(*value)) {
-		logger::warn("[SceneSettings] Time of day fallback value for '{}' is not a float",
+	if (!SceneBlend::IsBlendable(*value)) {
+		logger::warn("[SceneSettings] Time of day fallback value for '{}' is not blendable",
 			GetSettingLogName(featureShortName, settingPath, settingKey));
 		return baseValue;
 	}
-
-	const float result = value->get<float>();
-	return std::isfinite(result) ? result : baseValue;
+	return *value;
 }

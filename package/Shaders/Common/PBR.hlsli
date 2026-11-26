@@ -4,6 +4,7 @@
 
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
+#include "Common/LightDisk.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/PBRMath.hlsli"
 #include "Common/Shading.hlsli"
@@ -29,7 +30,7 @@ namespace PBR
 	}
 #endif
 
-	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, MaterialProperties material)
+	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, MaterialProperties material, float2 disk)
 	{
 		float3 S = 0;
 
@@ -50,18 +51,16 @@ namespace PBR
 			Shift,
 			Shift * 4
 		};
-		float B[] = {
-			area + material.Roughness,
-			area + material.Roughness / 2,
-			area + material.Roughness * 2
-		};
+		float3 B = area + material.Roughness * float3(1.0, 0.5, 2.0);
+		// The longitudinal Gaussians are parameterized by the sum of the two tangent cosines.
+		B = sqrt(B * B + LightDisk::CosineVariance(NdotL, disk));
 
 		float hairIOR = HairIOR();
 		float F0 = IORToF0(hairIOR);
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
-		float ThetaH = NdotL + NdotV;
+		float ThetaH = LightDisk::MeanCosine(NdotL, disk) + NdotV;
 		// R
 		Mp = HairGaussian(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
@@ -89,15 +88,15 @@ namespace PBR
 		return S;
 	}
 
-	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float NdotL, float NdotV, float shadow, MaterialProperties material)
+	float3 GetHairDiffuseAttenuationKajiyaKay(float3 N, float3 V, float3 L, float NdotL, float NdotV, float shadow, MaterialProperties material, float2 disk)
 	{
 		float3 S = 0;
 
-		float diffuseKajiya = 1 - abs(NdotL);
+		float diffuseKajiya = 1.0 - LightDisk::MeanAbsCosine(NdotL, disk);
 
 		float3 fakeN = normalize(V - N * NdotV);
 		const float wrap = 1;
-		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
+		float wrappedNdotL = LightDisk::WrappedCosine(dot(fakeN, L), wrap, 0.25, disk);
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(material.BaseColor);
 		float3 scatterTint = pow(material.BaseColor / max(luma, 1e-5), 1 - shadow);
@@ -106,12 +105,12 @@ namespace PBR
 		return S;
 	}
 
-	float3 GetHairColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float shadow, float backlit, float area, MaterialProperties material)
+	float3 GetHairColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float shadow, float backlit, float area, MaterialProperties material, float2 disk = float2(0.0, 1.0))
 	{
 		float3 color = 0;
 
-		color += GetHairDiffuseColorMarschner(N, V, L, NdotL, NdotV, VdotL, backlit, area, material);
-		color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, material);
+		color += GetHairDiffuseColorMarschner(N, V, L, NdotL, NdotV, VdotL, backlit, area, material, disk);
+		color += GetHairDiffuseAttenuationKajiyaKay(N, V, L, NdotL, NdotV, shadow, material, disk);
 
 		return color;
 	}
@@ -201,11 +200,13 @@ namespace PBR
 
 		GetThinSurfaceDirectScattering(surface.reflectionAlbedo, surface.frontTransmissionAlbedo, surface.backTransmissionAlbedo, shineThroughAlbedo,
 			material.Thickness, irradiance, NdotL, wrap, context.detailedShadow, float2(context.softShadow, context.softShadow * context.backTransmissionVisibility),
-			lightingOutput.diffuse, lightingOutput.transmission);
+			lightingOutput.diffuse, lightingOutput.transmission, context.lightDisk);
 
 		[branch] if (doSpecular)
 		{
-			float3 H = context.halfVector;
+			float3 specularLight = LightDisk::SpecularDirection(specularNormal, V, L, context.lightDisk);
+			float3 H = normalize(V + specularLight);
+			specularNdotL = saturate(dot(specularNormal, specularLight));
 			float NdotH = saturate(dot(specularNormal, H));
 			float VdotH = saturate(dot(V, H));
 			float D = BRDF::D_GGX(material.Roughness, NdotH);
@@ -219,14 +220,15 @@ namespace PBR
 				        .x;
 			}
 #	endif
+			D *= LightDisk::GGXNormalization(material.Roughness, context.lightDisk);
 			float visibility = BRDF::Vis_SmithJoint(material.Roughness, NdotV, max(specularNdotL, EPSILON_DOT_CLAMP));
 			float3 F = BRDF::F_Schlick(material.F0, VdotH);
 			float3 detailedLightColor = context.lightColor * context.detailedShadow;
 			lightingOutput.specular = saturate(material.ThinSurfaceSpecularWeight) * D * visibility * F * detailedLightColor * specularNdotL * material.Fuzz.specularThroughput;
 			[branch] if (material.Fuzz.weightedAlbedo > 0.0f)
 			{
-				float3 fuzzReflection = FuzzLobe(L, material.Fuzz.ltc) * detailedLightColor;
-				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, material.Fuzz.ltc) *
+				float3 fuzzReflection = FuzzLobe(L, material.Fuzz.ltc, context.lightDisk) * detailedLightColor;
+				float3 fuzzTransmission = Color::PBRMaterialToLinear(surface.backTransmissionAlbedo) * FuzzLobeTransmitted(L, material.Fuzz.ltc, context.lightDisk) *
 				                          context.lightColor * context.softShadow * context.backTransmissionVisibility;
 				lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * (fuzzReflection + fuzzTransmission);
 			}
@@ -254,6 +256,15 @@ namespace PBR
 		                       SpecularOcclusion(NdotV, material.Roughness * material.Roughness, material.AO);
 	}
 #endif
+
+	float GetDirectSpecularNdotV(float NdotV)
+	{
+#if defined(TREE_ANIM)
+		return clamp(NdotV, EPSILON_DOT_CLAMP, 1.0f);
+#else
+		return saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
+#endif
+	}
 
 	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 	{
@@ -284,59 +295,61 @@ namespace PBR
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 L = context.lightDir;
-		const float3 H = context.halfVector;
 
 #if defined(TRUE_PBR)
 		// Coat members exist only on the TRUE_PBR DirectContext.
 		const float3 coatN = context.coatWorldNormal;
 		const float3 coatV = context.coatViewDir;
 		const float3 coatL = context.coatLightDir;
-		const float3 coatH = context.coatHalfVector;
 #endif
 
 		float NdotL = dot(N, L);
 		float NdotV = dot(N, V);
 		float VdotL = dot(V, L);
-		float NdotH = dot(N, H);
-		float VdotH = dot(V, H);
 
 		float satNdotL = clamp(NdotL, EPSILON_DOT_CLAMP, 1);
-		float satNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
 		float satVdotL = saturate(VdotL);
-		float satNdotH = saturate(NdotH);
-		float satVdotH = saturate(VdotH);
 
 #if defined(TREE_ANIM)
 		float specularNdotL = saturate(NdotL);
-		float specularNdotV = clamp(NdotV, EPSILON_DOT_CLAMP, 1.0f);
 #else
 		float specularNdotL = satNdotL;
-		float specularNdotV = satNdotV;
 #endif
+		float specularNdotV = GetDirectSpecularNdotV(NdotV);
 
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
+			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material, context.lightDisk);
 		}
 		else
 #endif
 		{
+			const float3 specularLight = LightDisk::SpecularDirection(N, V, L, context.lightDisk);
+			const float3 specularH = normalize(V + specularLight);
+			const float diskNdotH = saturate(dot(N, specularH));
+			const float diskVdotH = saturate(dot(V, specularH));
+#if defined(TREE_ANIM)
+			specularNdotL = saturate(dot(N, specularLight));
+#else
+			specularNdotL = clamp(dot(N, specularLight), EPSILON_DOT_CLAMP, 1.0f);
+#endif
 			float3 F;  // Fresnel reflectance at current (V,H) angle
 #if defined(GLINT)
-			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, mul(tbnTr, H),
+			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, diskNdotH, diskVdotH, mul(tbnTr, specularH),
 				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
-			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, satNdotH, satVdotH, F);
+			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, max(specularNdotL, EPSILON_DOT_CLAMP), specularNdotV, diskNdotH, diskVdotH, F);
 #endif
+			Fr *= LightDisk::GGXNormalization(material.Roughness, context.lightDisk);
 #if defined(TREE_ANIM)
 			float3 kD = 1.0f - saturate(SpecularDirectionalAlbedo(material.F0, material.Roughness, saturate(abs(NdotV))));
 #else
 			float3 kD = 1 - F;
 #endif
 
-			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert() * kD;
-			lightingOutput.specular += Fr * detailedLightColor * specularNdotL;
+			lightingOutput.diffuse += detailedLightColor * max(LightDisk::DiffuseCosine(NdotL, context.lightDisk), EPSILON_DOT_CLAMP) * BRDF::Diffuse_Lambert() * kD;
+			lightingOutput.specular += Fr * material.DirectSpecularEnergyCompensation * detailedLightColor * specularNdotL;
 
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 #	if !defined(TREE_ANIM)
@@ -344,7 +357,12 @@ namespace PBR
 			{
 				const float subsurfacePower = 12.234;
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
-				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
+				if (context.lightDisk.x > 0.0) {
+					const float3 cosine = saturate(LightDisk::CosineSamples(-VdotL, context.lightDisk));
+					forwardScatter = dot(exp2((cosine - 1.0) * subsurfacePower), float3(0.25, 0.5, 0.25));
+				}
+				const float incidentCosine = max(LightDisk::DiffuseCosine(NdotL, context.lightDisk), EPSILON_DOT_CLAMP);
+				float backScatter = saturate(incidentCosine * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
 				float3 transmissionKD = 1.0f - saturate(SpecularDirectionalAlbedo(material.F0, material.Roughness, saturate(abs(NdotV))));
 				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert() * transmissionKD;
@@ -353,26 +371,32 @@ namespace PBR
 #	endif
 				if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
-				float coatNdotL = satNdotL;
-				float coatNdotV = satNdotV;
-				float coatNdotH = satNdotH;
-				float coatVdotH = satVdotH;
+				float coatNdotL = max(specularNdotL, EPSILON_DOT_CLAMP);
+				float coatNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
+				float coatDiffuseCosine = LightDisk::DiffuseCosine(NdotL, context.lightDisk);
+				float coatNdotH = diskNdotH;
+				float coatVdotH = diskVdotH;
 				[branch] if ((PBRFlags & Flags::CoatNormal) != 0)
 				{
-					coatNdotL = clamp(dot(coatN, coatL), EPSILON_DOT_CLAMP, 1);
+					coatDiffuseCosine = LightDisk::DiffuseCosine(dot(coatN, coatL), context.lightDisk);
+					const float3 coatSpecularLight = LightDisk::SpecularDirection(coatN, coatV, coatL, context.lightDisk);
+					const float3 coatSpecularH = normalize(coatV + coatSpecularLight);
+					coatNdotL = clamp(dot(coatN, coatSpecularLight), EPSILON_DOT_CLAMP, 1);
 					coatNdotV = saturate(abs(dot(coatN, coatV)) + EPSILON_DOT_CLAMP);
-					coatNdotH = saturate(dot(coatN, coatH));
-					coatVdotH = saturate(dot(coatV, coatH));
+					coatNdotH = saturate(dot(coatN, coatSpecularH));
+					coatVdotH = saturate(dot(coatV, coatSpecularH));
 				}
 
 				float3 coatF;
 				float3 coatFr = SpecularMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF);
 
+				coatFr *= LightDisk::GGXNormalization(material.CoatRoughness, context.lightDisk);
+
 				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
 				lightingOutput.diffuse *= layerAttenuation;
 				lightingOutput.specular *= layerAttenuation;
 
-				lightingOutput.coatDiffuse += context.coatLightColor * coatNdotL * BRDF::Diffuse_Lambert();
+				lightingOutput.coatDiffuse += context.coatLightColor * max(coatDiffuseCosine, EPSILON_DOT_CLAMP) * BRDF::Diffuse_Lambert();
 				lightingOutput.specular += coatFr * context.coatLightColor * coatNdotL * material.CoatStrength;
 			}
 
@@ -388,7 +412,7 @@ namespace PBR
 
 				// An invisible layer has no cached LTC, and evaluating the zeroed one is 0 / 0.
 				[branch] if (material.Fuzz.weightedAlbedo > 0.0f)
-					lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * FuzzLobe(L, material.Fuzz.ltc) * detailedLightColor;
+					lightingOutput.specular += material.Fuzz.weightedAlbedo * material.Fuzz.color * FuzzLobe(L, material.Fuzz.ltc, context.lightDisk) * detailedLightColor;
 			}
 #endif
 		}

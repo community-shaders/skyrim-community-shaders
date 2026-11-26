@@ -1,0 +1,20 @@
+{
+    "Settings": {
+        "cinematicBrightness": 1.2799999713897705,
+        "cinematicContrast": 1.5499999523162842,
+        "cinematicSaturation": 2.0,
+        "dofDistance": 0.0,
+        "dofRange": 4000.0,
+        "dofStrength": 0.3499999940395355,
+        "hdrBloomBlurRadius": 7.0,
+        "hdrBloomScale": 2.75,
+        "hdrBloomThreshold": 0.6499999761581421,
+        "hdrEyeAdaptSpeed": 40.0,
+        "hdrEyeAdaptStrength": 5.0,
+        "hdrSkyScale": 0.10000000149011612,
+        "hdrSunlightScale": 8.100000381469727,
+        "hdrWhite": 0.875,
+        "tintAmount": 0.7250000238418579,
+        "tintColor": [0.7058823704719543, 0.6666666865348816, 0.6000000238418579]
+    }
+}

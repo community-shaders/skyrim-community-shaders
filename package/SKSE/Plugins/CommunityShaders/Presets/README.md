@@ -65,6 +65,10 @@ Presets/MyModpack/
 - Files left in `CommunityShaders/Overrides/` by older versions are no longer read; move them into a pack's `Baseline/` folder.
 - Author one from **Export Overwrite** (feature header or Scene Manager): tick _Save as Baseline preset pack_ and the selected settings are written to `Presets/<Mod Name>/Baseline/<Feature>.json` with a starter manifest.
 
+## Default packs
+
+`Default Physical Sky` ships with Physical Sky and `Default Post Processing` with Post Processing. At startup, the first of these whose `requiredFeatures` are all installed is applied (made active, its Baseline enabled and its `disableAtBoot` saved) the first time it becomes available, unless another preset or an `enbseries.ini` install is in use. A better default replaces a lesser one in use. Each pack is applied at most once, so turning it off sticks; the packs already seen are kept as `defaultPacksSeen` in the `Presets` section of `SettingsUser.json`.
+
 ## Discovery
 
 Packs are found under both the Data (VFS) path and the Community Shaders mod's own folder, so packs from other MO2 mods and packs created mid-session both show up. Folders starting with `_` or `.` are ignored.

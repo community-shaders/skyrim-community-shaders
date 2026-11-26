@@ -1,0 +1,11 @@
+{
+    "_feature": "ExponentialHeightFog",
+    "_metadata": {
+        "coc": "",
+        "description": "Exponential Height Fog scene settings overwrite (Worldspace)",
+        "targetName": "Skuldafn",
+        "targetType": "Worldspace",
+        "timeOfDayEnabled": false
+    },
+    "enabled": 0
+}

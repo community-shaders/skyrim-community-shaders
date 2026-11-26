@@ -9,6 +9,7 @@ namespace SharedData
 	static const uint TonemapOwnerVanilla = 0;
 	static const uint TonemapOwnerPostProcessing = 1;
 	static const uint TonemapOwnerEffects11 = 2;
+	static const uint TonemapOwnerPostProcessingFallback = 3;
 
 	cbuffer SharedData : register(b5)
 	{
@@ -39,6 +40,10 @@ namespace SharedData
 		float4 AmbientSHG;
 		float4 AmbientSHB;
 		float4 HDRData;
+		float PreExposure;
+		float RcpPreExposure;
+		float PreviousPreExposure;
+		float PreExposureHistoryRatio;
 	};
 
 	struct GrassLightingSettings
@@ -233,9 +238,13 @@ namespace SharedData
 		float EnvIBLSaturation;
 		float SkyIBLSaturation;
 		float FogAmount;
-		uint DALCMode;       // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
+		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky, 3: DALC + Sky (Directional)
+		uint EnableReflectionFallback;
+		float ReflectionFallbackDistance;
 		uint ENBSkyFalloff;  // Effects 11 owns IBL: darken sky irradiance from below
 		float pad0;
+		float pad1;
+		float pad2;
 	};
 
 	struct ExtendedTranslucencySettings
@@ -415,6 +424,26 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct ViewAtmosphereSettings
+	{
+		uint enabled;
+		uint nearPixelSize;
+		uint nearSlices;
+		uint middlePixelSize;
+		uint middleSlices;
+		uint distantPixelSize;
+		uint distantSlices;
+		uint historyMissSamples;
+		float nearRange;
+		float localRange;
+		float historyWeight;
+		float sampleJitter;
+		float shadowBias;
+		float depthDistribution;
+		float lookupJitter;
+		float padding;
+	};
+
 	struct ExponentialHeightFogSettings
 	{
 		uint enabled;
@@ -437,26 +466,14 @@ namespace SharedData
 		float4 fogInscatteringColor;
 		float originalFogColorAmount;
 		uint volumetricFogEnabled;
-		uint volumetricGridPixelSize;
-		uint volumetricGridSizeZ;
-		float volumetricFogDistance;
 		float volumetricFogStartDistance;
 		float volumetricFogNearFadeInDistance;
-		float volumetricFogExtinctionScale;
 		float4 volumetricFogAlbedo;
 		float4 volumetricFogEmissive;
 		float volumetricDirectionalScatteringIntensity;
-		float volumetricShadowBias;
-		float volumetricDepthDistributionScale;
 		float volumetricSkyLightingIntensity;
 		float volumetricFogScatteringDistribution;
-		float volumetricHistoryWeight;
-		uint volumetricHistoryMissSampleCount;
-		float volumetricSampleJitterMultiplier;
-		float volumetricUpsampleJitterMultiplier;
-		float volumetricNearGridDistance;
-		uint volumetricFarGridPixelSize;
-		uint volumetricFarGridSizeZ;
+		float volumetricFogExtinctionScale;
 		float volumetricLocalLightScatteringIntensity;
 		float volumetricFogNoiseScale;
 		float volumetricFogNoiseThreshold;
@@ -489,6 +506,91 @@ namespace SharedData
 	{
 		float farWaterDistance;
 		float3 pad;
+	};
+
+	struct PhysSkyData
+	{
+		// DYNAMIC
+		float2 texDim;
+		float2 rcpTexDim;  //
+		float2 frameDim;
+		float2 rcpFrameDim;  //
+
+		float zCameraPlanet;
+		float3 sunDir;  //
+		float3 sunlightColor;
+		float trMix;  //
+		float3 masserDir;
+		float apLumMix;  //
+		float3 masserColor;
+		float apTrMix;  //
+		float3 secundaDir;
+		float sunDiskCos;  //
+		float3 secundaColor;
+
+		// GENERAL
+		uint enabled;  //
+		float pad;
+		float vanillaMix;
+
+		// WORLD
+		float zBottom;
+		float rPlanet;  //
+		float rAtmosphere;
+		float3 groundAlbedo;  //
+
+		// ATMOSPHERE
+		float2 cloudShadowRemapRange;
+
+		float aerosolFalloff;
+		float aerosolPhaseG;  //
+		float3 aerosolScatter;
+		uint halfResApShadow;  //
+		float3 aerosolAbsorption;
+
+		float rayleighFalloff;
+		float3 rayleighScatter;  //
+
+		float ozoneAltitude;  //
+		float ozoneThickness;
+		float3 ozoneAbsorption;  //
+
+		// CLOUDS (VANILLA)
+		uint enableVanillaClouds;
+		float cloudRelightMix;
+		float cloudOriginalMix;
+		float silverLiningMix;  //
+		float silverLiningSpread;
+
+		// VOLUMETRIC CLOUDS
+		uint enableVolumetricClouds;
+		float shadowVolumeRange;
+		float lowestCloudAltitude;  //
+		float highestCloudAltitude;
+		float3 volCloudScatter;  //
+		uint volCloudUseSun;
+		float3 volCloudAbsorption;  //
+		float volCloudLowBottom;
+		float volCloudLowThickness;
+
+		// SETTINGS
+		uint lightSkyStatics;
+		float skyStaticsBrightness;  //
+		float4 lightningPositionRadius;
+		float4 lightningEndPosition;
+		float4 lightningColorIntensity;
+		float4 lightningControl;
+		float4 lightningPhotometry;
+		float4 lightningPlacement;
+		float4 lightningChannelEmitter;
+		float4 lightningPreparationPositionRadius;
+		float4 lightningPreparationControl;  // base mode, history valid, active mask lane, preparing
+		float4 diskAngularRadius;            // Sun, Masser, Secunda, directional light
+		float3 dirLightBodyDir;
+		uint dirLightDiskIndex;
+		float4 dirLightDisc;
+		float4 diskBillboardScale;
+		float4 moonDiscRadiance[2];  // Masser, Secunda; w = 0: rgb is radiance per texture colour, 1: rgb is mean * solid angle / light Y for the glare tint, -1: vanilla
 	};
 
 	struct RainRefractionSettings
@@ -560,7 +662,9 @@ namespace SharedData
 		TruePBRSettings truePBRSettings;
 		SkinData skinData;
 		HorizonFixSettings horizonFixSettings;
+		PhysSkyData physSkyData;
 		RainRefractionSettings rainRefractionSettings;
+		ViewAtmosphereSettings viewAtmosphereSettings;
 		ProceduralSunSettings proceduralSunSettings;
 		ProceduralAuroraSettings proceduralAuroraSettings;
 	};

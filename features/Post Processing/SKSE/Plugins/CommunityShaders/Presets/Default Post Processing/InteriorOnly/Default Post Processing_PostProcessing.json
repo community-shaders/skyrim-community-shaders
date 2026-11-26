@@ -1,0 +1,16 @@
+{
+    "COD Bloom": {
+        "settings": {
+            "Threshold": 2.0
+        }
+    },
+    "Lens Flare": {
+        "settings": {
+            "ThresholdEV": 7.0
+        }
+    },
+    "_feature": "PostProcessing",
+    "_metadata": {
+        "description": "Post Processing scene settings overwrite (Interior Only)"
+    }
+}

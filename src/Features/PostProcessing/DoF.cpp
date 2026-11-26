@@ -53,6 +53,9 @@ void DoF::DrawSettings()
 {
 	const auto* cam = owner ? owner->GetActivePhysicalCameraState() : nullptr;
 	const bool camActive = cam != nullptr;
+	bool adaptiveGather = settings.UseAdaptiveGather;
+	if (camActive)
+		adaptiveGather = true;
 
 	float autoFocusCoord[2] = { settings.FocusCoord.x, settings.FocusCoord.y };
 	float manualFocus = settings.ManualFocusPlane;
@@ -161,8 +164,17 @@ void DoF::DrawSettings()
 		T("feature.post_processing.do_f.bokeh_mode_procedural", "Procedural"),
 		T("feature.post_processing.do_f.bokeh_mode_custom_texture", "Custom Texture (Higher Cost)")
 	};
-	ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &settings.BokehMode, bokehModes, IM_ARRAYSIZE(bokehModes));
-	if (settings.BokehMode == 0) {
+	int bokehMode = settings.BokehMode;
+	if (camActive)
+		bokehMode = 0;
+	ImGui::BeginDisabled(camActive);
+	{
+		const SceneWidgetInterceptor::ProxyScope proxy(&settings.BokehMode, 1.0f);
+		if (ImGui::Combo(T("feature.post_processing.do_f.bokeh_mode", "Bokeh Mode"), &bokehMode, bokehModes, IM_ARRAYSIZE(bokehModes)) && !SceneWidgetInterceptor::IsArmed())
+			settings.BokehMode = bokehMode;
+	}
+	ImGui::EndDisabled();
+	if (bokehMode == 0) {
 		ImGui::BeginDisabled(camActive);
 		{
 			const SceneWidgetInterceptor::ProxyScope proxy(&settings.BokehBladeCount, 1.0f);
@@ -177,7 +189,7 @@ void DoF::DrawSettings()
 			settings.BokehBladeCount = bladeCount;
 			settings.BokehBladeRoundness = bladeRoundness;
 		}
-		if (!settings.UseAdaptiveGather)
+		if (!adaptiveGather)
 			Util::SettingHint(T("feature.post_processing.do_f.procedural_requires_adaptive", "Procedural blades require Adaptive Gather; the compatibility path uses a circle."), false);
 	} else if (owner) {
 		const int shapeCount = owner->bokehResources.GetTotalShapeCount();
@@ -215,17 +227,23 @@ void DoF::DrawSettings()
 		ImGui::TextUnformatted(T("feature.post_processing.do_f.petzval_strength_desc", "Stretches out-of-focus highlights toward the frame edges, like the swirly bokeh of vintage lenses."));
 
 	ImGui::SeparatorText(T("feature.post_processing.do_f.section_quality", "Quality"));
-	ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &settings.UseAdaptiveGather);
+	ImGui::BeginDisabled(camActive);
+	{
+		const SceneWidgetInterceptor::ProxyScope proxy(&settings.UseAdaptiveGather, 1.0f);
+		if (ImGui::Checkbox(T("feature.post_processing.do_f.adaptive_gather", "Adaptive Gather"), &adaptiveGather) && !SceneWidgetInterceptor::IsArmed())
+			settings.UseAdaptiveGather = adaptiveGather;
+	}
+	ImGui::EndDisabled();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextUnformatted(T("feature.post_processing.do_f.adaptive_gather_desc", "Uses a fixed low-sample kernel and a CoC-aware image pyramid."));
-	if (settings.UseAdaptiveGather) {
+	if (adaptiveGather) {
 		const char* gatherQuality[] = {
 			T("feature.post_processing.do_f.gather_quality_performance", "Performance (4 rings)"),
 			T("feature.post_processing.do_f.gather_quality_quality", "Quality (5 rings)")
 		};
 		ImGui::Combo(T("feature.post_processing.do_f.gather_quality", "Gather Quality"), &settings.GatherQuality, gatherQuality, IM_ARRAYSIZE(gatherQuality));
 	}
-	if (!settings.UseAdaptiveGather)
+	if (!adaptiveGather)
 		ImGui::SliderFloat(T("feature.post_processing.do_f.blur_quality", "Compatibility Blur Quality"), &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
 }
 
@@ -349,6 +367,7 @@ void DoF::UpdateProceduralBokehSamples(int bladeCount, float bladeRoundness, boo
 
 void DoF::SetupResources()
 {
+	focusFrame = ~0u;
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
@@ -386,33 +405,28 @@ void DoF::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
-		texOutput = eastl::make_unique<Texture2D>(texDesc, "DoF::Output");
-		texOutput->CreateSRV(srvDesc);
-		texOutput->CreateUAV(uavDesc);
-
-		texPostSmooth = eastl::make_unique<Texture2D>(texDesc, "DoF::PostSmooth");
-		texPostSmooth->CreateSRV(srvDesc);
-		texPostSmooth->CreateUAV(uavDesc);
-
-		texPostSmooth2 = eastl::make_unique<Texture2D>(texDesc, "DoF::PostSmooth2");
-		texPostSmooth2->CreateSRV(srvDesc);
-		texPostSmooth2->CreateUAV(uavDesc);
-
 		D3D11_TEXTURE2D_DESC texDescHalf = texDesc;
 		texDescHalf.Width = std::max(1u, texDescHalf.Width / 2u);
 		texDescHalf.Height = std::max(1u, texDescHalf.Height / 2u);
 
-		texPreBlurred = eastl::make_unique<Texture2D>(texDescHalf, "DoF::SetupColor");
-		texPreBlurred->CreateSRV(srvDesc);
-		texPreBlurred->CreateUAV(uavDesc);
+		// Both the near layer and its postfilter destination carry coverage in
+		// alpha. Scene formats such as R11G11B10_FLOAT discard it and sample 1,
+		// causing the half-resolution layer to overwrite even in-focus pixels.
+		auto nearDesc = texDescHalf;
+		auto nearSRV = srvDesc;
+		auto nearUAV = uavDesc;
+		nearDesc.Format = nearSRV.Format = nearUAV.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texPreBlurred = eastl::make_unique<Texture2D>(nearDesc, "DoF::SetupColor");
+		texPreBlurred->CreateSRV(nearSRV);
+		texPreBlurred->CreateUAV(nearUAV);
 
 		texFarBlurred = eastl::make_unique<Texture2D>(texDescHalf, "DoF::FarLayer");
 		texFarBlurred->CreateSRV(srvDesc);
 		texFarBlurred->CreateUAV(uavDesc);
 
-		texNearBlurred = eastl::make_unique<Texture2D>(texDescHalf, "DoF::NearLayer");
-		texNearBlurred->CreateSRV(srvDesc);
-		texNearBlurred->CreateUAV(uavDesc);
+		texNearBlurred = eastl::make_unique<Texture2D>(nearDesc, "DoF::NearLayer");
+		texNearBlurred->CreateSRV(nearSRV);
+		texNearBlurred->CreateUAV(nearUAV);
 
 		texBlurredFiltered = eastl::make_unique<Texture2D>(texDescHalf, "DoF::FarFiltered");
 		texBlurredFiltered->CreateSRV(srvDesc);
@@ -543,7 +557,6 @@ void DoF::ClearShaderCache()
 			}
 	}
 
-	globals::shaderCache->ClearStandaloneComputeCache(L"PostProcessing/DoF");
 	CompileComputeShaders();
 }
 
@@ -579,8 +592,42 @@ void DoF::CompileComputeShaders()
 // TDM lookup) lives in CinematicCamera::FocusResolver, shared with the
 // Cinematic Camera focus modes. See CinematicCamera.cpp.
 
+bool DoF::EnsurePostSmoothingTargets(const D3D11_TEXTURE2D_DESC& colorDesc)
+{
+	if (texPostSmooth && texPostSmooth2)
+		return true;
+
+	const auto now = std::chrono::steady_clock::now();
+	if (now < nextPostSmoothingAttempt)
+		return false;
+
+	auto desc = colorDesc;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	const auto makeTarget = [&desc](const char* debugName) {
+		auto target = eastl::make_unique<Texture2D>(desc, debugName);
+		target->CreateSRV({ .Format = desc.Format, .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D, .Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
+		target->CreateUAV({ .Format = desc.Format, .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D, .Texture2D = { .MipSlice = 0 } });
+		return target;
+	};
+
+	try {
+		auto smooth = makeTarget("DoF::PostSmooth");
+		auto smoothed = makeTarget("DoF::PostSmooth2");
+		texPostSmooth = std::move(smooth);
+		texPostSmooth2 = std::move(smoothed);
+		return true;
+	} catch (const std::exception& e) {
+		logger::error("[PostProcessing] Could not create DoF smoothing targets: {}", e.what());
+		nextPostSmoothingAttempt = now + std::chrono::seconds(5);
+		return false;
+	}
+}
+
 void DoF::Draw(TextureInfo& inout_tex)
 {
+	if (!owner)
+		return;
+
 	Settings renderSettings = settings;
 	auto state = globals::state;
 	auto context = globals::d3d::context;
@@ -590,7 +637,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		return;
 	}
 
-	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
+	float2 res = { (float)texCoC->desc.Width, (float)texCoC->desc.Height };
 	float focusLen = renderSettings.FocalLength;
 	float fNumber = renderSettings.FNumber;
 	float sensorWidthMM = renderSettings.SensorWidthMM;
@@ -667,7 +714,8 @@ void DoF::Draw(TextureInfo& inout_tex)
 	// RaceMenu always autofocuses the player, regardless of the configured mode.
 	auto* player = globals::game::player;
 	if (resolver && player && globals::game::ui->IsMenuOpen(RE::RaceSexMenu::MENU_NAME)) {
-		focusLen = RaceMenuFocalLengthMM;
+		if (!cam)
+			focusLen = RaceMenuFocalLengthMM;
 		autoFocus = resolver->GetReferenceFocusCoord(player, focusCoord);
 		if (!autoFocus) {
 			manualFocus = Util::Units::GameUnitsToMeters(resolver->GetDistanceToReference(player)) * 0.001f;
@@ -677,12 +725,18 @@ void DoF::Draw(TextureInfo& inout_tex)
 
 	// No-op the whole frame until the core kernels are ready -- a partial
 	// sequential pipeline would write garbage into the scene target.
-	const bool needPostSmoothing = renderSettings.PostBlurSmoothing >= 0.01f;
+	bool needPostSmoothing = renderSettings.PostBlurSmoothing >= 0.01f;
 	const bool coreReady = AllShadersReady({ &UpdateFocusCS, &CalculateCoCCS, &CoCTileFlattenCS,
 		&CoCTileDilateHCS, &CoCTileDilateVCS, &DownsampleLegacyCS, &FarBlurCS, &NearBlurCS,
 		&GatherPostfilterCS, &CombinerCS });
 	if (!coreReady || (needPostSmoothing && !AllShadersReady({ &PostSmoothing1CS, &PostSmoothing2AndFocusingCS })))
 		return;
+
+	auto* texOutput = owner->GetColorTarget(inout_tex.tex);
+	if (!texOutput)
+		return;
+	needPostSmoothing = needPostSmoothing && EnsurePostSmoothingTargets(texOutput->desc);
+
 	state->BeginPerfEvent("Depth of Field");
 
 	const uint halfResX = std::max(1u, (uint)res.x / 2);
@@ -692,7 +746,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 	const size_t gatherQuality = (size_t)std::clamp(renderSettings.GatherQuality, 0, 1);
 	UpdateProceduralBokehSamples(bladeCount, bladeRoundness);
 
-	const int requestedBokehMode = std::clamp(renderSettings.BokehMode, 0, 1);
+	const int requestedBokehMode = cam ? 0 : std::clamp(renderSettings.BokehMode, 0, 1);
 	int customShapeIndex = 0;
 	ID3D11ShaderResourceView* customShapeSRV = nullptr;
 	ID3D11ShaderResourceView* customShapeSampleSRV = nullptr;
@@ -708,7 +762,11 @@ void DoF::Draw(TextureInfo& inout_tex)
 	const bool adaptiveGatherReady = bokehSampleSRV &&
 	                                 AllShadersReady({ &DownsampleCS, &ReduceColorCoCCS, &ReduceColorCS,
 										 &FarGatherCS[gatherQuality], &NearGatherCS[gatherQuality] });
-	const bool useAdaptiveGather = renderSettings.UseAdaptiveGather && adaptiveGatherReady;
+	if (cam && !adaptiveGatherReady) {
+		state->EndPerfEvent();
+		return;
+	}
+	const bool useAdaptiveGather = (cam || renderSettings.UseAdaptiveGather) && adaptiveGatherReady;
 
 	// Tile propagation carries the near disc reach itself, so the same low-resolution dilation used
 	// for group culling now replaces the two old half-resolution Gaussian passes.
@@ -718,7 +776,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 	const float nearMaxReachPx = tileDilateRadius > 0u ? std::min(wantNearRadiusPx, (float)(tileDilateRadius - 1u) * conservativeTileStepPx) : 0.0f;
 
 	DoFCB dofData = {
-		.TransitionSpeed = transitionSpeed,
+		.TransitionSpeed = focusFrame == ~0u || state->frameCount != focusFrame + 1 || state->ShouldResetHistory() ? 1.f : transitionSpeed,
 		.FocusCoord = focusCoord,
 		.ManualFocusPlane = manualFocus,
 		.FocalLength = focusLen,
@@ -789,6 +847,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 
 	resetViews();
 	context->CopyResource(texPreFocus->resource.get(), texFocus->resource.get());
+	focusFrame = state->frameCount;
 
 	// Calculate CoC
 	{

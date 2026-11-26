@@ -54,6 +54,39 @@ namespace
 
 	constexpr const char* kPipelineKey = "pipeline";
 	constexpr const char* kPipelineRevisionKey = "pipelineRevision";
+	constexpr const char* kDefaultPacksSeenKey = "defaultPacksSeen";
+	/// Packs shipped with features, best first; each is a candidate only with its requiredFeatures installed.
+	constexpr std::array<std::string_view, 2> kDefaultPackIds = { "Default Physical Sky", "Default Post Processing" };
+	/// Where an Effects 11 Legacy install or a real ENB keeps enbseries.ini, relative to the game folder.
+	constexpr std::array<const char*, 2> kEnbSeriesRoots = { ".", "Data" };
+
+	/** @brief Whether a pack id names one of the shipped default packs. */
+	bool IsDefaultPackId(const std::string& id)
+	{
+		return std::ranges::contains(kDefaultPackIds, std::string_view(id));
+	}
+
+	/** @brief A shipped default pack's manifest, or nullopt when the pack is absent or a required feature is not installed. */
+	std::optional<json> ReadAvailableDefaultPack(const std::string& packId)
+	{
+		auto manifest = UnifiedPresetCatalog::ReadPackManifest(Util::PathHelpers::GetUnifiedPackPath(packId));
+		if (manifest.empty())
+			return std::nullopt;
+		std::error_code ec;
+		const bool installed = std::ranges::all_of(PackManifest::Read(manifest, packId).requiredFeatures, [&](const std::string& shortName) {
+			return std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(shortName), ec);
+		});
+		return installed ? std::optional(std::move(manifest)) : std::nullopt;
+	}
+
+	/** @brief Whether an enbseries.ini sits in the game or Data folder, meaning the user already runs an ENB-style preset. */
+	bool HasEnbSeriesInstall()
+	{
+		std::error_code ec;
+		return std::ranges::any_of(kEnbSeriesRoots, [&](const char* root) {
+			return std::filesystem::exists(std::filesystem::path(root) / PresetManager::kEnbSeriesIniName, ec);
+		});
+	}
 
 	/** @brief The Effects 11 preset id a pack switches to, read off the form of its id. */
 	std::string GetEffects11PresetId(const std::string& packId)
@@ -318,6 +351,7 @@ void UnifiedPresetCatalog::LoadActiveState()
 {
 	activePackId.clear();
 	baselinePackIds.clear();
+	defaultPacksSeen.clear();
 	activePipeline.reset();
 	pipelineRevision = 0;
 	sceneControlOverrides = json::object();
@@ -350,9 +384,15 @@ void UnifiedPresetCatalog::LoadActiveState()
 					baselinePackIds.push_back(id.get<std::string>());
 			}
 		}
+		if (const auto seen = state->find(kDefaultPacksSeenKey); seen != state->end() && seen->is_array()) {
+			for (const auto& id : *seen)
+				if (id.is_string() && IsDefaultPackId(id.get<std::string>()))
+					defaultPacksSeen.push_back(id.get<std::string>());
+		}
 	} catch (...) {
 		activePackId.clear();
 		baselinePackIds.clear();
+		defaultPacksSeen.clear();
 		activePipeline.reset();
 		pipelineRevision = 0;
 		sceneControlOverrides = json::object();
@@ -364,6 +404,8 @@ json UnifiedPresetCatalog::SerializeActiveState() const
 	json state;
 	state["activePackId"] = activePackId;
 	state[kBaselinePackIdsKey] = baselinePackIds;
+	if (!defaultPacksSeen.empty())
+		state[kDefaultPacksSeenKey] = defaultPacksSeen;
 	if (activePipeline) {
 		state[kPipelineKey] = magic_enum::enum_name(*activePipeline);
 		state[kPipelineRevisionKey] = pipelineRevision;
@@ -727,6 +769,55 @@ void UnifiedPresetCatalog::DisableActivePack()
 	SetActivePackId("");
 	globals::features::sceneManager.ReloadOverwrites();
 	CSEditor::ReloadFormEdits();
+}
+
+std::optional<json> UnifiedPresetCatalog::ApplyDefaultPackIfNew()
+{
+	static bool checked = false;
+	if (std::exchange(checked, true))
+		return std::nullopt;
+
+	std::string bestId;
+	std::optional<json> bestManifest;
+	bool bestIsNew = false;
+	bool anyNew = false;
+	for (const auto candidate : kDefaultPackIds) {
+		const std::string packId(candidate);
+		auto manifest = ReadAvailableDefaultPack(packId);
+		if (!manifest)
+			continue;
+		const bool isNew = !std::ranges::contains(defaultPacksSeen, packId);
+		if (isNew)
+			defaultPacksSeen.push_back(packId);
+		anyNew |= isNew;
+		if (!bestManifest) {
+			bestId = packId;
+			bestManifest = std::move(manifest);
+			bestIsNew = isNew;
+		}
+	}
+	if (!anyNew)
+		return std::nullopt;
+
+	// Another default pack in use is replaced by a better one; anything the user picked is left alone.
+	const bool otherPresetInUse = (!activePackId.empty() && !IsDefaultPackId(activePackId)) ||
+	                              !std::ranges::all_of(baselinePackIds, IsDefaultPackId) || HasEnbSeriesInstall();
+	if (!bestIsNew || otherPresetInUse) {
+		SaveActiveState();
+		return std::nullopt;
+	}
+
+	// Set directly rather than through ApplyPack: no feature, pipeline or scene layer is loaded yet.
+	std::erase_if(baselinePackIds, IsDefaultPackId);
+	baselinePackIds.push_back(bestId);
+	activePackId = bestId;
+	activePipeline = PostProcessingMode::Mode::PostProcessing;
+	++pipelineRevision;
+	SaveActiveState();
+	logger::info("[Presets] Applied default pack '{}'", bestId);
+
+	const auto disableAtBoot = bestManifest->find(kDisableAtBootKey);
+	return disableAtBoot != bestManifest->end() && disableAtBoot->is_object() ? *disableAtBoot : json::object();
 }
 
 bool UnifiedPresetCatalog::IsBaselineEnabled(const std::string& id) const

@@ -1,0 +1,16 @@
+{
+    "ExteriorCustomSize": {
+        "Depth": 90,
+        "Height": 192,
+        "Width": 320
+    },
+    "ExteriorEnabled": false,
+    "ExteriorQuality": 2,
+    "InteriorCustomSize": {
+        "Depth": 90,
+        "Height": 192,
+        "Width": 320
+    },
+    "InteriorEnabled": false,
+    "InteriorQuality": 2
+}

@@ -2,6 +2,7 @@
 
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
+#include "PhysicalLens.h"
 #include "Util.h"
 
 #include <cmath>
@@ -55,11 +56,6 @@ namespace CinematicCamera
 	// FOV comparisons use a small epsilon so float round-trips through the
 	// game never look like an external takeover.
 	constexpr float kFovEpsilon = 1e-3f;
-
-	// Reference camera the exposure delta is measured against:
-	// f/2.8, ISO 100, 24 fps, 180 deg shutter. EV100 = log2(2.8^2 * 48) = 8.5573427,
-	// so the default settings produce a 0 EV offset and keep the current look.
-	constexpr float kReferenceEV100 = 8.5573427f;
 
 	/////////////////////////////////////////////////////////////////////////////////
 	// FocusResolver
@@ -296,7 +292,7 @@ namespace CinematicCamera
 			s.EffectiveSensorWidthMM = fb.SensorWidthMM;
 			s.HorizontalFOVDeg = DirectX::XMConvertToDegrees(2.0f * std::atan(fb.SensorWidthMM / (2.0f * lens.FocalLengthMM)));
 			s.VerticalFOVDeg = DirectX::XMConvertToDegrees(2.0f * std::atan(
-																	  fb.SensorHeightMM / (2.0f * lens.FocalLengthMM)));
+																	  fb.SensorWidthMM / (viewportAspect * 2.0f * lens.FocalLengthMM)));
 		}
 
 		s.FocalLengthMM = lens.FocalLengthMM;
@@ -319,7 +315,6 @@ namespace CinematicCamera
 		s.ShutterAngleDeg = exp.ShutterAngleDeg;
 		s.ShutterTimeS = exp.ShutterAngleDeg / (360.0f * exp.FrameRate);
 		s.EV100 = std::log2(lens.FNumber * lens.FNumber / s.ShutterTimeS) - std::log2(exp.ISO / 100.0f);
-		s.ExposureDeltaEV = kReferenceEV100 - s.EV100;
 
 		s.Valid = std::isfinite(s.HorizontalFOVDeg) && std::isfinite(s.EV100) &&
 		          std::isfinite(s.EffectiveSensorWidthMM) && s.EffectiveSensorWidthMM > 0.0f &&
@@ -439,7 +434,7 @@ namespace CinematicCamera
 		}
 	}
 
-	void Controller::DrawSettings()
+	void Controller::DrawSettings(PhysicalLens* physicalLens)
 	{
 		if (!settings.Enabled)
 			return;
@@ -482,9 +477,30 @@ namespace CinematicCamera
 		}
 
 		ImGui::SeparatorText(T("feature.post_processing.cinematic_camera.lens", "Lens"));
+		if (physicalLens && physicalLens->IsActive())
+			physicalLens->DrawLensPresetCombo();
 		ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.focal_length", "Focal Length"), &lens.FocalLengthMM, 1.0f, 300.0f, "%.1f mm", logSliderFlags);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.focal_length_desc", "Shorter focal lengths give a wider view; longer focal lengths zoom in. Uses a logarithmic scale for finer control at short focal lengths."));
+		if (physicalLens && physicalLens->IsActive()) {
+			const auto range = PhysicalLens::GetPresetFocalLengthRange(physicalLens->settings.LensPreset);
+			if (range.isZoom) {
+				if (lens.FocalLengthMM < range.minMM - 1e-3f || lens.FocalLengthMM > range.maxMM + 1e-3f) {
+					Util::Text::WrappedWarning(
+						T("feature.post_processing.cinematic_camera.focal_length_out_of_zoom_range",
+							"Focal length is outside the %.0f-%.0f mm zoom range; Physical Lens uses equivalent scaling."),
+						range.minMM, range.maxMM);
+				}
+			} else {
+				constexpr float kPrimeFocalTolerance = 0.2f;
+				if (std::abs(lens.FocalLengthMM - range.minMM) > range.minMM * kPrimeFocalTolerance) {
+					Util::Text::WrappedWarning(
+						T("feature.post_processing.cinematic_camera.focal_length_far_from_prime",
+							"Focal length differs significantly from the %.0f mm prime lens; Physical Lens uses equivalent scaling."),
+						range.minMM);
+				}
+			}
+		}
 		ImGui::SliderFloat(T("feature.post_processing.cinematic_camera.f_number", "F-Number"), &lens.FNumber, 0.7f, 32.0f, "f/%.2f", logSliderFlags);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::TextUnformatted(T("feature.post_processing.cinematic_camera.f_number_desc", "Lower f-numbers give a shallower depth of field and let in more light. Auto ISO compensates for aperture changes within its ISO limits."));

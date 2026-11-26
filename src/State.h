@@ -22,6 +22,7 @@ using json = nlohmann::json;
 #include <Hooks.h>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 struct Feature;
 
@@ -106,9 +107,10 @@ public:
 	 */
 	enum class TonemapOwner : uint
 	{
-		kVanilla = 0,         ///< Vanilla ISHDR tonemap runs unmodified.
-		kPostProcessing = 1,  ///< Post Processing pipeline drives tonemapping.
-		kEffects11 = 2        ///< Effects11 (ENB-compatible) replaces the pass entirely.
+		kVanilla = 0,                ///< Vanilla ISHDR tonemap runs unmodified.
+		kPostProcessing = 1,         ///< Post Processing pipeline drives tonemapping.
+		kEffects11 = 2,              ///< Effects11 (ENB-compatible) replaces the pass entirely.
+		kPostProcessingFallback = 3  ///< ISHDR receives raw scene color after a failed Post Processing pass.
 	};
 
 	/**
@@ -121,6 +123,10 @@ public:
 	 * @return The feature owning tonemapping this frame.
 	 */
 	TonemapOwner GetTonemapOwner();
+
+	/// Publishes the tone pass result to ISHDR and HDR Display without changing frame ownership.
+	void SetPostProcessingFallback(bool fallback);
+	bool IsPostProcessingFallback() const { return postProcessingFallback; }
 
 	/**
 	 * @brief Dispatches the HDR tonemap pass to the resolved owner.
@@ -208,13 +214,10 @@ public:
 	/** @brief Drops the user's edits to every setting an enabled Baseline pack sets on one feature. */
 	void ClearFeatureEditsUnderBaselines(Feature* feature);
 
-	/** @brief Notes that feature settings were edited, so the main menu's Save shows them as unsaved. */
-	void MarkSettingsChanged() { settingsChanged = true; }
+	/** @brief Notes that a feature's settings were edited, without diffing them; for edits still in progress. */
+	void MarkSettingsChanged(Feature* feature);
 
-	/**
-	 * @brief Marks the settings changed if a feature's settings now differ from what was last saved or
-	 *        loaded. For actions ImGui does not flag as edits, such as a button that resets or applies a preset.
-	 */
+	/** @brief Marks a feature unsaved when its settings differ from what was last saved or loaded, and clears it otherwise. */
 	void CheckFeatureSettingsChanged(Feature* feature);
 
 	/** @brief Re-checks the sections that are not feature settings (Menu, General, ...) against the last save or
@@ -258,7 +261,7 @@ public:
 	}
 
 	/** @brief True when the user config has changes not yet saved. */
-	bool HasUnsavedChanges() const { return settingsChanged || coreSettingsChanged; }
+	bool HasUnsavedChanges() const { return !changedFeatures.empty() || coreSettingsChanged; }
 
 	/** @brief Loads the active theme preset from the menu settings. */
 	void LoadTheme();
@@ -422,6 +425,7 @@ public:
 		IsMoon = 1 << 11,
 		ProjectedTextureIsSRGB = 1 << 12,
 		GrassPBR = 1 << 13,
+		IsSecunda = 1 << 14,
 	};
 
 	/** @brief Bitflags describing extra feature-specific properties related to terrain displacement and material models. */
@@ -539,6 +543,10 @@ public:
 	bool ShouldResetHistory() const { return frameCount == historyResetFrame; }
 
 	uint frameCount = 0;
+	// Frozen for all views/passes in a frame, including reflection rendering.
+	float preExposure = 1.0f;
+	float previousPreExposure = 1.0f;
+	uint preExposureFrame = UINT_MAX;
 	// Thread-safe mirror of frameCount maintained by the render thread.
 	// Off-thread readers (MCP listener, future telemetry) must read this
 	// instead of touching frameCount directly to avoid a data race.
@@ -656,12 +664,15 @@ private:
 	 *  The caller holds a SceneLayerGuard. */
 	void DropEditsUnder(Feature* feature, const nlohmann::json& packData);
 
-	bool settingsChanged = false;
+	/// GetName() of each feature whose settings differ from the last save or load.
+	std::unordered_set<std::string> changedFeatures;
 	bool coreSettingsChanged = false;
 	/// The core sections as last saved or loaded; partial saves patch it.
 	nlohmann::json savedCore;
 
 	std::optional<TonemapOwner> tonemapOwner;
+	bool postProcessingFallback = false;
+	inline static SharedDataCB sharedData{};
 	uint historyResetFrame = UINT_MAX;
 	winrt::com_ptr<ID3DUserDefinedAnnotation> pPerf;
 	std::mutex statsMutex;

@@ -51,9 +51,13 @@ public:
 	 * @param glyphBox Edge of the square the glyph is drawn in; the button adds frame padding around it.
 	 * @param tooltip Hover tooltip; null for none.
 	 * @param active Draws the button as the current selection, in the accent colour.
+	 * @param caption Small text under the glyph, which shrinks to make room; the button keeps its size. Null or
+	 *        empty for none.
+	 * @param padding Gap between the button edge and its glyph; negative uses the frame padding.
 	 * @return True when clicked.
 	 */
-	static bool GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active = false);
+	static bool GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active = false,
+		const char* caption = nullptr, float padding = -1.0f);
 
 	/** @brief "Community Shaders <version>", as the header title shows it. */
 	static std::string GetTitleText();

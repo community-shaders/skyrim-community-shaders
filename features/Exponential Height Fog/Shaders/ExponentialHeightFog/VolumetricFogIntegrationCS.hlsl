@@ -29,13 +29,14 @@ RWTexture3D<float4> IntegratedLightScattering : register(u0);
 		previousPositionWS = layerPositionWS;
 
 		float extinction = max(scatteringAndExtinction.w, 0.0f);
-		float transmittance = exp(-extinction * stepLength);
+		float opticalDepth = extinction * stepLength;
+		float transmittance = exp(-opticalDepth);
 
 		accumulatedDepth += stepLength;
 		float fadeIn = saturate(accumulatedDepth * VolumetricFogNearFadeInDistanceInv);
 
-		float3 scatteringIntegratedOverSlice =
-			fadeIn * (scatteringAndExtinction.rgb - scatteringAndExtinction.rgb * transmittance) / max(extinction, 1e-5f);
+		float integral = opticalDepth < 1e-3f ? stepLength * (1.0f - 0.5f * opticalDepth) : (1.0f - transmittance) / extinction;
+		float3 scatteringIntegratedOverSlice = fadeIn * scatteringAndExtinction.rgb * integral;
 		accumulatedLighting += scatteringIntegratedOverSlice * accumulatedTransmittance;
 		accumulatedTransmittance *= lerp(1.0f, transmittance, fadeIn);
 

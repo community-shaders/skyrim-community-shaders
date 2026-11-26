@@ -188,6 +188,7 @@ jobs:
                       @google/semantic-release-replace-plugin
                       @semantic-release/git
                       @semantic-release/github
+                      conventional-changelog-conventionalcommits@9
                   tag_format: "v${version}"
               env:
                   # App token required for two reasons:

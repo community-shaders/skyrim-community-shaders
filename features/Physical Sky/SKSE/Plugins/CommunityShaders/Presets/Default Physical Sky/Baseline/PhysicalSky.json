@@ -1,0 +1,445 @@
+{
+    "aerosolAbsorption": [0.6615324020385742, 0.7338919639587402, 0.806682825088501],
+    "aerosolFalloff": 0.8333333134651184,
+    "aerosolHumidity": 20.0,
+    "aerosolLoading": 1.0,
+    "aerosolPhaseG": 0.5920916199684143,
+    "aerosolScatter": [9.781353950500488, 13.253780364990234, 17.75579833984375],
+    "aerosolType": 1,
+    "apLumMix": 1.0,
+    "apTrMix": 1.0,
+    "atmosphereRadius": 6420.0,
+    "cloudAmbientSHOnly": true,
+    "cloudBlurRadius": 2,
+    "cloudCascadeShadows": true,
+    "cloudFastReconstruction": false,
+    "cloudHalfResTrace": false,
+    "cloudLayer": {
+        "cirrus": {
+            "altitude": 8000.0,
+            "densityScale": 1.0,
+            "enabled": true,
+            "uvSize": 4.0,
+            "weather": {
+                "states": [
+                    {
+                        "value": {
+                            "layers": [
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 1,
+                                    "offset": [0.0, 0.0],
+                                    "range": [
+                                        -0.699999988079071, 0.699999988079071, 0.0,
+                                        0.6000000238418579
+                                    ]
+                                },
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 2,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-1.0, 1.0, 0.0, 0.0]
+                                }
+                            ],
+                            "localBlendMode": 0,
+                            "localMap": "",
+                            "localWeight": 0.0,
+                            "localWindScale": 1.0
+                        },
+                        "weight": 1.0
+                    }
+                ]
+            }
+        },
+        "lighting": {
+            "ambientStrength": 1.0,
+            "brightness": 1.0,
+            "cirrusLightThickness": 200.0,
+            "dropletDiameter": 20.0,
+            "msAlbedo": 0.9990000128746033,
+            "msBoundaryWidth": 100.0,
+            "msStrength": 1.0,
+            "phaseBackwardG": -0.30000001192092896,
+            "phaseForwardG": 0.8500000238418579,
+            "scatterDensityPower": 1.0,
+            "scatterDensityThreshold": 0.0010000000474974513,
+            "sunExtinction": 1.0,
+            "viewExtinction": 1.0
+        },
+        "low": {
+            "bottomSoftness": 0.6499999761581421,
+            "bottomSoftnessHeight": 0.6800000071525574,
+            "bottomSpreadHeight": 0.30000001192092896,
+            "bottomSpreadScale": 0.75,
+            "curvatureRadius": 1000.0,
+            "densityScale": 0.75,
+            "ndfAltitudeOffset": 256.0,
+            "ndfAltitudeScale": 1792.0,
+            "ndfScale": [16.0, 16.0],
+            "topExpansionScale": 0.0
+        },
+        "middle": {
+            "altitude": 3500.0,
+            "bands": {
+                "coverage": 0.0,
+                "direction": 0.0,
+                "displacement": 0.0,
+                "thickness": 0.0,
+                "warp": 0.25,
+                "wavelength": 2000.0
+            },
+            "cellFrequency": 2.0,
+            "cellStrength": 0.8999999761581421,
+            "densityScale": 0.019999999552965164,
+            "detailMode": 1,
+            "detailScale": 256.0,
+            "edgeSoftness": 0.10000000149011612,
+            "enabled": true,
+            "heightPower": 1.0,
+            "stratusCellStrength": 0.10000000149011612,
+            "thickness": 800.0,
+            "uvSize": 1.0,
+            "warpStrength": 0.10000000149011612,
+            "weather": {
+                "states": [
+                    {
+                        "value": {
+                            "coverageGain": {
+                                "frequency": 1.0,
+                                "noise": 2,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            },
+                            "layers": [
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 1,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-0.699999988079071, 0.699999988079071, 0.0, 0.0]
+                                },
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 2,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-1.0, 1.0, 0.6499999761581421, 0.6499999761581421]
+                                }
+                            ],
+                            "localBlendMode": 0,
+                            "localMap": "",
+                            "localWeight": 0.0,
+                            "localWindScale": 1.0,
+                            "secondaryCoverage": {
+                                "frequency": 1.0,
+                                "noise": 3,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            },
+                            "thicknessVariation": {
+                                "frequency": 1.0,
+                                "noise": 0,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            }
+                        },
+                        "weight": 1.0
+                    }
+                ]
+            }
+        },
+        "wind": {
+            "development": 0.25,
+            "disturbance": 0.20000000298023224,
+            "highVelocity": [10.0, 0.0],
+            "lowVelocity": [5.0, 0.0]
+        }
+    },
+    "cloudMap": {
+        "localCloud": {
+            "states": []
+        },
+        "localTexelSize": 32.0,
+        "procedural": {
+            "local": {
+                "heightPath": "",
+                "modelingPath": ""
+            },
+            "localMaskPath": "",
+            "noise": [
+                {
+                    "parameters": {
+                        "bias": 0.0,
+                        "contrast": 1.0,
+                        "frequency": 4,
+                        "lacunarity": 2,
+                        "octaves": 4,
+                        "persistence": 0.5,
+                        "repetitions": 1,
+                        "responseExponent": 1.0,
+                        "seed": 1337,
+                        "type": 0
+                    },
+                    "texturePath": ""
+                },
+                {
+                    "parameters": {
+                        "bias": -0.019999999552965164,
+                        "contrast": 1.600000023841858,
+                        "frequency": 4,
+                        "lacunarity": 2,
+                        "octaves": 6,
+                        "persistence": 0.6000000238418579,
+                        "repetitions": 2,
+                        "responseExponent": 1.7999999523162842,
+                        "seed": 1337,
+                        "type": 1
+                    },
+                    "texturePath": ""
+                },
+                {
+                    "parameters": {
+                        "bias": 0.0,
+                        "contrast": 1.0,
+                        "frequency": 32,
+                        "lacunarity": 2,
+                        "octaves": 4,
+                        "persistence": 0.5,
+                        "repetitions": 1,
+                        "responseExponent": 1.0,
+                        "seed": 1337,
+                        "type": 1
+                    },
+                    "texturePath": ""
+                },
+                {
+                    "parameters": {
+                        "bias": -0.05000000074505806,
+                        "contrast": 1.100000023841858,
+                        "frequency": 12,
+                        "lacunarity": 2,
+                        "octaves": 4,
+                        "persistence": 0.5,
+                        "repetitions": 1,
+                        "responseExponent": 2.0,
+                        "seed": 1337,
+                        "type": 2
+                    },
+                    "texturePath": ""
+                }
+            ],
+            "parameters": {
+                "baseHeight": [0.20000000298023224, 0.6000000238418579],
+                "bottomTypeExponent": 1.0,
+                "bottomTypeRange": [-0.4000000059604645, 0.5, 0.0, 0.10000000149011612],
+                "coverageGain": {
+                    "exponent": 1.0,
+                    "frequency": 1.0,
+                    "noise": 2,
+                    "offset": [0.0, 0.0],
+                    "range": [-1.0, 1.0, 1.0, 1.0]
+                },
+                "heightAuxiliaryRange": [0.0, 1.0, 0.0, 0.0],
+                "heightFromCoverage": 0,
+                "heightVariation": {
+                    "exponent": 1.0,
+                    "frequency": 1.0,
+                    "noise": 2,
+                    "offset": [0.0, 0.0],
+                    "range": [0.0, 1.0, 0.0, 0.019999999552965164]
+                },
+                "localBlendMode": 0,
+                "localHeightWeight": 1.0,
+                "localModelingWeight": 1.0,
+                "localWindScale": 1.0,
+                "modeling": {
+                    "exponent": 1.600000023841858,
+                    "frequency": 1.0,
+                    "noise": 2,
+                    "offset": [0.0, 0.0],
+                    "range": [-0.25999999046325684, 0.7699999809265137, 0.0, 0.4000000059604645]
+                },
+                "modelingGain": {
+                    "exponent": 1.0,
+                    "frequency": 1.0,
+                    "noise": 2,
+                    "offset": [0.0, 0.0],
+                    "range": [-1.0, 1.0, 1.0, 1.0]
+                },
+                "primary": {
+                    "exponent": 1.399999976158142,
+                    "frequency": 1.0,
+                    "noise": 3,
+                    "offset": [0.0, 0.0],
+                    "range": [0.3199999928474426, 0.5199999809265137, 0.0, 0.699999988079071]
+                },
+                "secondary": {
+                    "exponent": 1.0,
+                    "frequency": 1.0,
+                    "noise": 1,
+                    "offset": [0.0, 0.0],
+                    "range": [-0.20000000298023224, 0.800000011920929, 0.0, 0.4000000059604645]
+                },
+                "windOffset": [0.0, 0.0]
+            }
+        },
+        "texture": {
+            "heightPath": "",
+            "modelingPath": ""
+        },
+        "type": 1,
+        "version": 3
+    },
+    "cloudNoise": {
+        "procedural": true,
+        "seed": 1337,
+        "shape": [
+            {
+                "bias": 0.13300000131130219,
+                "contrast": 0.9599999785423279,
+                "exponent": 3.489000082015991,
+                "frequency": 3,
+                "octaves": 5,
+                "perlinMix": 1.0,
+                "persistence": 0.625
+            },
+            {
+                "bias": 0.31700000166893005,
+                "contrast": 1.628000020980835,
+                "exponent": 1.1640000343322754,
+                "frequency": 3,
+                "octaves": 4,
+                "perlinMix": 0.0,
+                "persistence": 0.5
+            },
+            {
+                "bias": 0.11500000208616257,
+                "contrast": 1.2619999647140503,
+                "exponent": 0.9959999918937683,
+                "frequency": 4,
+                "octaves": 4,
+                "perlinMix": 0.0,
+                "persistence": 0.5
+            },
+            {
+                "bias": 0.22599999606609344,
+                "contrast": 1.4630000591278076,
+                "exponent": 1.031000018119812,
+                "frequency": 9,
+                "octaves": 4,
+                "perlinMix": 0.0,
+                "persistence": 0.6000000238418579
+            }
+        ],
+        "skipShapeNoise": false,
+        "useVoxelNoise": false,
+        "warp": [
+            {
+                "bias": 0.17599999904632568,
+                "contrast": 1.5160000324249268,
+                "exponent": 2.4170000553131104,
+                "frequency": 4,
+                "octaves": 4,
+                "perlinMix": 0.0,
+                "persistence": 0.6499999761581421
+            },
+            {
+                "bias": 0.8169999718666077,
+                "contrast": 2.7079999446868896,
+                "exponent": 2.368000030517578,
+                "frequency": 3,
+                "octaves": 4,
+                "perlinMix": 0.0,
+                "persistence": 1.0
+            }
+        ],
+        "warpCorrelation": -0.3499999940395355
+    },
+    "cloudOriginalMix": 0.5,
+    "cloudRelightMix": 1.0,
+    "cloudShadowRemapRange": [0.0, 1.0],
+    "enableAllExteriorCells": false,
+    "enableVanillaClouds": false,
+    "enableVolumetricClouds": true,
+    "enabled": true,
+    "fallbackZBottom": 0.0,
+    "forceEnableAllInteriorCells": false,
+    "groundAlbedo": [0.20000000298023224, 0.20000000298023224, 0.20000000298023224],
+    "halfResApShadow": false,
+    "lightSkyStatics": true,
+    "lightning": {
+        "channelLuminance": 10000000.0,
+        "channelRadius": 0.11999999731779099,
+        "cloudBaseChance": 35.0,
+        "cloudLuminance": 1000.0,
+        "color": [0.8600000143051147, 0.8999999761581421, 1.0],
+        "distanceRange": [0.3499999940395355, 7.0],
+        "groundChance": 35.0,
+        "radius": 600.0,
+        "rate": 3.0,
+        "strokeCount": 3,
+        "strokeDecay": 0.6499999761581421,
+        "strokeDuration": 20.0,
+        "strokeInterval": 90.0
+    },
+    "lightningIntensity": 0.0,
+    "marchStepScale": 1.5,
+    "masserColor": [0.10000000149011612, 0.06000000238418579, 0.06000000238418579],
+    "masserDiscMatchLight": true,
+    "masserDiskRad": 0.13962633907794952,
+    "overrideDirLight": true,
+    "ozoneAbsorption": [2.291100025177002, 1.5404000282287598, 0.0],
+    "ozoneAbsorptionAP1": [2.2499001026153564, 1.6601999998092651, 0.0],
+    "ozoneAltitude": 40.18025207519531,
+    "ozoneThickness": 35.660709381103516,
+    "planetRadius": 6360.0,
+    "proceduralSun": true,
+    "rayMarchRange": 16.0,
+    "rayleighFalloff": 0.11498944461345673,
+    "rayleighScatter": [6.604899883270264, 12.345000267028809, 29.413000106811523],
+    "rayleighScatterAP1": [6.9344000816345215, 12.020299911499023, 28.90999984741211],
+    "secundaColor": [0.04000000283122063, 0.05000000074505806, 0.05000000074505806],
+    "secundaDiscMatchLight": true,
+    "secundaDiskRad": 0.06981316953897476,
+    "shadowVolumeRange": 8.0,
+    "silverLiningMix": 1.0,
+    "silverLiningSpread": 0.0,
+    "skyStaticsBrightness": 1.0,
+    "sunDiskRad": 0.009250244125723839,
+    "sunlightColor": [102.5711441040039, 99.4940185546875, 97.44258880615234],
+    "supercellStorms": {
+        "states": []
+    },
+    "trMix": 1.0,
+    "vanillaMix": 0.0,
+    "voxelClouds": {
+        "states": []
+    },
+    "worldspaceWhitelist": {
+        "DLC01FalmerValley": {
+            "zBottom": 3000.0
+        },
+        "DLC2SolstheimWorld": {
+            "zBottom": 256.0
+        },
+        "MarkarthWorld": {
+            "zBottom": -14500.0
+        },
+        "RiftenWorld": {
+            "zBottom": -14500.0
+        },
+        "SolitudeWorld": {
+            "zBottom": -14500.0
+        },
+        "Tamriel": {
+            "zBottom": -14500.0
+        },
+        "WhiterunDragonsreachWorld": {
+            "zBottom": -14500.0
+        },
+        "WhiterunWorld": {
+            "zBottom": -14500.0
+        },
+        "WindhelmWorld": {
+            "zBottom": -14500.0
+        }
+    }
+}

@@ -7,6 +7,7 @@
 #include "Effects11/SettingManager.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "PhysicalSky.h"
 #include "Utils/UI.h"
 
 #define I18N_KEY_PREFIX "feature.procedural_sun."
@@ -27,7 +28,8 @@ namespace
 {
 	constexpr float kMinimumAngularRadius = DirectX::XMConvertToRadians(0.05f);
 	constexpr float kMaximumAngularRadius = DirectX::XMConvertToRadians(5.0f);
-	constexpr float kMaximumDiskIntensity = 20.0f;
+	// A physical disc (L = E / solid angle) is ~3700x the sunlight at the default radius
+	constexpr float kMaximumDiskIntensity = 5000.0f;
 	constexpr float kMinimumEdgeSoftness = 0.01f;
 	constexpr float kMaximumEdgeSoftness = 1.0f;
 	constexpr float kMinimumHaloAngularWidth = DirectX::XMConvertToRadians(0.05f);
@@ -69,8 +71,10 @@ namespace
 
 void ProceduralSun::DrawSettings()
 {
-	const Util::LockedSection enbLock(IsManagedByENB(),
-		T("common.settings_managed_by_enb", "This setting is managed by Effects 11."));
+	const bool managedByENB = IsManagedByENB();
+	const Util::LockedSection ownerLock(managedByENB || IsManagedByPhysicalSky(), managedByENB ?
+																					  T("common.settings_managed_by_enb", "This setting is managed by Effects 11.") :
+																					  T(TKEY("managed_by_physical_sky"), "Procedural Sun is disabled while Physical Sky is enabled."));
 
 	bool enabled = settings.enabled != 0;
 	if (ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &enabled))
@@ -80,7 +84,7 @@ void ProceduralSun::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextWrapped("%s", T(TKEY("angular_radius_tooltip"), "The real sun's angular radius is about 0.27 degrees. The 0.53 degree default preserves Jiaye's established procedural-sun scale."));
 
-	ImGui::SliderFloat(T(TKEY("disk_intensity"), "Disk Intensity"), &settings.diskIntensity, 0.0f, kMaximumDiskIntensity, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("disk_intensity"), "Disk Intensity"), &settings.diskIntensity, 0.0f, kMaximumDiskIntensity, "%.2f", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextWrapped("%s", T(TKEY("disk_intensity_tooltip"), "Brightness of the procedural disc before the existing sky brightness and HDR adjustments."));
 
@@ -133,6 +137,11 @@ bool ProceduralSun::IsManagedByENB() const
 {
 	const auto& effects11 = globals::features::effects11;
 	return effects11.loaded && effects11.enableEffect && SettingManager::GetSingleton().GetValue<bool>("EnableProceduralSun", "EFFECT");
+}
+
+bool ProceduralSun::IsManagedByPhysicalSky() const
+{
+	return globals::features::physicalSky.IsRendering();
 }
 
 ProceduralSun::PerFrameData ProceduralSun::GetCommonBufferData() const

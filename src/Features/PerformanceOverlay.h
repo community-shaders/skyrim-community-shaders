@@ -130,6 +130,8 @@ struct PerformanceOverlay : OverlayFeature
 	std::string GetShortName() override { return "PerformanceOverlay"; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
+	// Drawn on the Profiling page (ProfilingRenderer::RenderPage) as one of its tools, not as its own list entry.
+	bool IsInFeatureList() const override { return false; }
 	bool IsOverlayVisible() const override { return settings.ShowInOverlay; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -307,7 +309,7 @@ struct PerformanceOverlay : OverlayFeature
 		static constexpr int kMinFrameHistorySize = 120;             // 2s @ 60fps, 0.5s @ 240fps
 		static constexpr int kMaxFrameHistorySize = 1800;            // 30s @ 60fps, 7.5s @ 240fps
 
-		bool ShowInOverlay = true;       // was: Enabled
+		bool ShowInOverlay = false;      // was: Enabled
 		bool ShowWeatherPicker = false;  // standalone weather picker window, independent of the overlay above
 		bool ShowDrawCalls = true;
 		bool ShowCSPasses = true;
@@ -343,6 +345,13 @@ struct PerformanceOverlay : OverlayFeature
 	 * @param shown True to include the group's passes.
 	 */
 	void SetProfilerGroupShown(std::string_view group, bool shown);
+
+	/**
+	 * @brief Turns the overlay window on or off (Settings::ShowInOverlay). Safe to call from outside this feature's
+	 * settings, like SetProfilerGroupShown.
+	 * @param shown True to show the overlay while the global overlay toggle is on.
+	 */
+	void SetShowInOverlay(bool shown);
 
 private:
 	// ============================================================================

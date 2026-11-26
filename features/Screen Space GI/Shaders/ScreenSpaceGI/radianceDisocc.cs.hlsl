@@ -14,6 +14,7 @@ Texture2D<half> srcPrevAo : register(t6);              // maybe half-res
 Texture2D<half4> srcPrevIlY : register(t7);            // maybe half-res
 Texture2D<half2> srcPrevIlCoCg : register(t8);         // maybe half-res
 Texture2D<half4> srcPrevGISpecular : register(t9);     // maybe half-res
+Texture2D<float> srcNDCDepth : register(t10);
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
@@ -69,6 +70,32 @@ void readHistory(
 		wsum += bilinear_weight;
 	}
 };
+
+/** @brief Scene radiance with sky pixels excluded, so the physical sky sun disc cannot leak into GI through mip filtering. */
+half3 LoadSurfaceRadiance(uint2 pixCoord, float2 texCoord)
+{
+#if defined(HALF_RES) || defined(QUARTER_RES)
+	// texCoord sits on a full-res texel corner, so the gather footprint matches the bilinear one.
+	const float4 surfaceMask = srcNDCDepth.GatherRed(samplerPointClamp, texCoord) < 1.0;
+	const float surfaceCount = dot(surfaceMask, 1.0.xxxx);
+	half3 radiance;
+	[branch] if (surfaceCount == 4)
+	{
+		radiance = srcDiffuse.SampleLevel(samplerLinearClamp, texCoord, 0).rgb;
+	}
+	else
+	{
+		const float4 weights = surfaceMask / max(surfaceCount, 1);
+		radiance = half3(
+			dot(srcDiffuse.GatherRed(samplerPointClamp, texCoord), weights),
+			dot(srcDiffuse.GatherGreen(samplerPointClamp, texCoord), weights),
+			dot(srcDiffuse.GatherBlue(samplerPointClamp, texCoord), weights));
+	}
+	return radiance;
+#else
+	return srcNDCDepth[pixCoord] < 1.0 ? srcDiffuse[pixCoord].rgb : 0;
+#endif
+}
 
 [numthreads(8, 8, 1)] void main(const uint2 pixCoord : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
@@ -141,7 +168,8 @@ void readHistory(
 
 	half3 radiance = 0;
 #ifdef GI
-	radiance = ColorManagement::SceneToLinear(FULLRES_LOAD(srcDiffuse, pixCoord, uv * frameScale, samplerLinearClamp).rgb * GIStrength);
+	// Keep GI radiance and temporal history independent of scene pre-exposure.
+	radiance = ColorManagement::SceneToLinear(PreExposure::Decode(LoadSurfaceRadiance(pixCoord, uv * frameScale)) * GIStrength);
 	radiance = filterNaN(radiance);
 	radiance = filterInf(radiance);
 	outRadianceDisocc[pixCoord] = radiance;
@@ -155,11 +183,9 @@ void readHistory(
 	if (wsum < 1e-2)
 		prevAccum = prevAccum * 0.5;
 
-	// Reduce max accumulation proportionally to motion vector length.
-	// Fast camera/head movement means history is less trustworthy.
-	float2 motionVec = prev_screen_pos - screen_pos;
-	float motionLen = length(motionVec);
-	float motionMaxAccum = lerp(MaxAccumFrames, max(MaxAccumFrames * 0.25, 4), saturate(motionLen * 20));
+	// Lag ~ speed x history: cap it at ~16 px of motion at 2160 lines.
+	float2 motionVec = (prev_screen_pos - screen_pos) * float2(FrameDim.x * RcpFrameDim.y, 1);
+	float motionMaxAccum = min(max((16.0 / 2160.0) / max(length(motionVec), 1e-6), 2.0), MaxAccumFrames);
 
 	accum_frames = max(1, min(prevAccum + 1, motionMaxAccum));
 	outAccumFrames[pixCoord] = accum_frames / 255.0;

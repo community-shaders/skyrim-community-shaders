@@ -36,11 +36,13 @@ namespace SceneSettingsInternal
 			CombineHash(signature, std::hash<double>{}(value.get<double>()));
 		else if (value.is_string())
 			CombineHash(signature, std::hash<std::string_view>{}(value.get_ref<const std::string&>()));
+		else if (SceneBlend::IsValid(value))
+			CombineHash(signature, std::hash<std::string>{}(value.dump()));
 	}
 
 	bool IsSceneSettingPrimitive(const json& value)
 	{
-		return value.is_boolean() || value.is_number_integer() || value.is_number_float() || value.is_string();
+		return value.is_boolean() || value.is_number_integer() || value.is_number_float() || value.is_string() || SceneBlend::IsValid(value);
 	}
 
 	bool IsEntryListSceneType(SceneSettingsManager::SceneType type)
@@ -590,6 +592,8 @@ namespace SceneSettingsInternal
 			return value.is_number_float() || value.is_number_integer();
 		case String:
 			return value.is_string();
+		case Blend:
+			return SceneBlend::IsValid(value);
 		default:
 			return false;
 		}
@@ -765,7 +769,7 @@ namespace SceneSettingsInternal
 				auto& allowed = allowedByType[index];
 				allowed.reserve(SceneSettingsCatalog::GetSettings().size());
 				for (const auto& candidate : SceneSettingsCatalog::GetSettings()) {
-					// Time-of-day blending interpolates, so only transitionable floats qualify.
+					// Time-of-day blending interpolates, so only transitionable values qualify.
 					const bool transitionable = sceneType != SceneSettingsManager::SceneType::TimeOfDay ||
 					                            SceneSettingsCatalog::HasFlag(candidate.flags,
 													SceneSettingsCatalog::SettingFlag::Transitionable);
@@ -940,7 +944,7 @@ namespace SceneSettingsInternal
 		}
 
 		if (requireNumeric && (!SceneSettingsCatalog::HasFlag(setting.flags, SceneSettingsCatalog::SettingFlag::Transitionable) ||
-								  !IsNumericValue(featureValue) || !IsNumericValue(value) || !std::isfinite(value.get<float>())))
+								  !SceneBlend::IsBlendable(featureValue) || !SceneBlend::IsBlendable(value)))
 			return false;
 		if (!requireNumeric && !IsSceneSettingPrimitive(value))
 			return false;
