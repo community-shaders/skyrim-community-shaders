@@ -1,0 +1,7 @@
+{
+    "EnableIBL": 0,
+    "_feature": "ImageBasedLighting",
+    "_metadata": {
+        "description": "Image Based Lighting scene settings overwrite (Interior Only)"
+    }
+}

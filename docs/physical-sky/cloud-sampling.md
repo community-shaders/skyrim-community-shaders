@@ -3,7 +3,7 @@
 ## Ray integration
 
 The step follows Nubis Evolved slide 39: `3 + 60 * distance / 16384`, with
-distances in metres, scaled by `marchStepScale` (default 0.5). The march ends
+distances in metres, scaled by `marchStepScale` (default 0.8, Medium preset). The march ends
 at the occupied interval's far bound, at `T <= 0.1`, or at `rayMarchRange`
 measured from the camera. Long grazing intervals take as many probes as the
 step function yields. Cirrus uses one sheet intersection and four light probes.
@@ -74,7 +74,12 @@ changes retain history and do not reset cubemap accumulation. Trace dispatches
 cover only the current active region. Traced pixels update from their actual
 sample. Other valid pixels retain reprojected history. Four trace neighbours
 supply only missing history, with scene-depth rejection; there is no spatial
-upscale pass applied to the accumulated result.
+upscale pass applied to the accumulated result. When none of the four matches
+the pixel's scene depth, a 6 x 6 trace window is searched instead. This avoids
+reconstructing sky gaps in foliage from foreground rays that stop before the clouds
+only when the window contains a depth-matched sample. Otherwise the pixel has no
+valid current sample and motion falls back to a bilinear trace
+sample without depth rejection. Gaps wider than the window can therefore still show foreground leakage.
 
 Temporary hole fills have validity 0.5; actual samples have validity 1. Their
 first traced update replaces the fill. A traced pixel mixes its reprojected

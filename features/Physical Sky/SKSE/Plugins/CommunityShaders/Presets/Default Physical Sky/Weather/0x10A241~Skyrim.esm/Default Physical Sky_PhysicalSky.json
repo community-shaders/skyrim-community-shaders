@@ -1,0 +1,106 @@
+{
+    "_feature": "PhysicalSky",
+    "_metadata": {
+        "description": "Physical Sky scene settings overwrite (Weather)",
+        "timeOfDayEnabled": false
+    },
+    "cloudLayer": {
+        "low": {
+            "topExpansionScale": 1.0
+        },
+        "middle": {
+            "altitude": 2000.0,
+            "densityScale": 0.014999999664723873,
+            "thickness": 800.0,
+            "weather": {
+                "states": [
+                    {
+                        "value": {
+                            "coverageGain": {
+                                "frequency": 1.0,
+                                "noise": 2,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 1.0, 1.0]
+                            },
+                            "layers": [
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 1,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-0.699999988079071, 0.699999988079071, 1.0, 1.0]
+                                },
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 2,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-1.0, 1.0, 0.6499999761581421, 0.6499999761581421]
+                                }
+                            ],
+                            "localBlendMode": 0,
+                            "localMap": "",
+                            "localWeight": 0.0,
+                            "localWindScale": 1.0,
+                            "secondaryCoverage": {
+                                "frequency": 1.0,
+                                "noise": 3,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            },
+                            "thicknessVariation": {
+                                "frequency": 1.0,
+                                "noise": 0,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            }
+                        },
+                        "weight": 1.0
+                    }
+                ]
+            }
+        }
+    },
+    "cloudMap": {
+        "procedural": {
+            "parameters": {
+                "modeling": {
+                    "range": {
+                        "w": 0.9300000071525574,
+                        "x": -0.5299999713897705,
+                        "y": 0.6000000238418579,
+                        "z": -0.009999999776482582
+                    }
+                },
+                "primary": {
+                    "range": {
+                        "x": 0.15000000596046448,
+                        "y": 0.5899999737739563
+                    }
+                },
+                "secondary": {
+                    "range": {
+                        "w": 0.6299999952316284,
+                        "z": 0.05999999865889549
+                    }
+                }
+            }
+        }
+    },
+    "lightning": {
+        "channelLuminance": 10000.0,
+        "cloudLuminance": 100.0,
+        "rate": 20.0
+    },
+    "lightningIntensity": 1.0,
+    "supercellStorms": {
+        "states": [
+            {
+                "value": {
+                    "instances": {
+                        "Supercell": true
+                    }
+                },
+                "weight": 1.0
+            }
+        ]
+    }
+}

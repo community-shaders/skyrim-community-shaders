@@ -226,3 +226,7 @@ Shaders are [GPL-3.0 with exceptions](#default) unless a file carries its own li
 ### Icons
 
 - [Community Shaders Logo](package/Interface/CommunityShaders/Icons/Community%20Shaders%20Logo/) is not covered by the GPL-3.0 license. It is provided solely for personal use (e.g., building from source) and may only be used in unmodified form. There is no license for any other purpose or to distribute the logo. No trademark license is granted for the logo. Any use not expressly permitted is prohibited without the express written consent of the Community Shaders team.
+
+### Trademarks
+
+The "Community Shaders" name and logo are not licensed under the GPL-3.0. See the [Trademark Policy](TRADEMARKS.md) for what you may do without asking, what needs permission, and how to name forks. The policy does not limit your rights to the code.

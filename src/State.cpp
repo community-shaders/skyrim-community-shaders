@@ -192,7 +192,7 @@ void State::Draw()
 			}
 		}
 
-		if (globals::menu->overlayVisible && globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
+		if (globals::features::performanceOverlay.loaded && globals::features::performanceOverlay.IsOverlayVisible())
 			Debug();
 
 		// Active Shaders counts draws per frame whether or not the performance overlay is up
@@ -280,6 +280,17 @@ State::TonemapOwner State::GetTonemapOwner()
 	return *tonemapOwner;
 }
 
+void State::SetPostProcessingFallback(bool fallback)
+{
+	postProcessingFallback = fallback;
+	const auto owner = static_cast<uint>(fallback ? TonemapOwner::kPostProcessingFallback : GetTonemapOwner());
+	if (sharedData.TonemapOwner == owner)
+		return;
+
+	sharedData.TonemapOwner = owner;
+	sharedDataCB->Update(sharedData);
+}
+
 bool State::HandlePostProcessing(RE::RENDER_TARGET a_input, RE::RENDER_TARGET a_output)
 {
 	if (GetTonemapOwner() != TonemapOwner::kEffects11)
@@ -354,6 +365,7 @@ void State::Reset()
 	std::memset(&permutationDataPrevious, 0xFF, sizeof(PermutationCB));
 	frameCount++;
 	tonemapOwner.reset();
+	postProcessingFallback = false;
 	// Publish for off-thread readers (e.g. the MCP listener thread).
 	frameCountAtomic.store(frameCount, std::memory_order_relaxed);
 
@@ -473,7 +485,7 @@ namespace
 	{
 		json data = json::object();
 		for (const auto* info : BaselineManager::GetSingleton()->GetFeatureFiles(featureShortName))
-			if ((packId.empty() || info->packId == packId) && info->unknownKeys.empty())
+			if (packId.empty() || info->packId == packId)
 				Util::Settings::MergeSettings(data, info->values);
 		return data;
 	}
@@ -537,6 +549,9 @@ void State::Load(bool a_allowReload)
 		logger::info("No usable user config at: {}", userConfigFilePath.string());
 	}
 
+	// Before the layering below, so a newly applied default pack's Baseline and boot toggles take effect this launch.
+	const auto defaultPackBootToggles = UnifiedPresetCatalog::GetSingleton().ApplyDefaultPackIfNew();
+
 	// Step 3: Layer each feature's settings; the user's edits win over Baseline packs
 	BaselineManager::GetSingleton()->DiscoverFiles();
 	featureBases.clear();
@@ -554,8 +569,10 @@ void State::Load(bool a_allowReload)
 		}
 		json merged = BuildFeatureBase(feature);
 		// A value whose type changed between versions would make LoadSettings throw and lose every edit.
+		// Checked against the defaults: a Baseline may hold a boolean where the feature stores a number.
 		std::vector<std::string> mismatched;
-		Util::Settings::EraseMismatchedSettings(edits, merged, "", mismatched);
+		if (const auto defaults = defaultSettings.find(name); defaults != defaultSettings.end())
+			Util::Settings::EraseMismatchedSettings(edits, *defaults, "", mismatched);
 		for (const auto& path : mismatched)
 			logger::warn("Dropped {} setting '{}': its saved type no longer matches", name, path);
 		featureBases[name] = merged;
@@ -580,6 +597,8 @@ void State::Load(bool a_allowReload)
 		}
 
 		json& disabledFeaturesJson = settings["Disable at Boot"];
+		if (defaultPackBootToggles)
+			disabledFeaturesJson.update(*defaultPackBootToggles);
 		logger::info("Loading 'Disable at Boot' settings");
 
 		// Load runs again on config switches; stale entries would otherwise outlive the config that set them.
@@ -629,6 +648,9 @@ void State::Load(bool a_allowReload)
 
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
+			Save();
+		} else if (defaultPackBootToggles) {
+			// Unsaved, the pack's boot toggles would fall back to the feature defaults next launch.
 			Save();
 		}
 
@@ -733,15 +755,20 @@ json State::CaptureCoreSettings()
 
 void State::MarkSettingsSaved()
 {
-	settingsChanged = false;
+	changedFeatures.clear();
 	coreSettingsChanged = false;
 	savedCore = CaptureCoreSettings();
+}
+
+void State::MarkSettingsChanged(Feature* feature)
+{
+	changedFeatures.insert(feature->GetName());
 }
 
 void State::CheckFeatureSettingsChanged(Feature* feature)
 {
 	InvalidateEditsUnderBaselines(feature);
-	if (settingsChanged || !feature->loaded || !feature->UsesMainSettings())
+	if (!feature->loaded || !feature->UsesMainSettings())
 		return;
 	const auto name = feature->GetName();
 	const auto base = featureBases.find(name);
@@ -752,8 +779,10 @@ void State::CheckFeatureSettingsChanged(Feature* feature)
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 	json current;
 	feature->SaveSettings(current);
-	if (!DiffFromBase(current, saved).empty())
-		settingsChanged = true;
+	if (DiffFromBase(current, saved).empty())
+		changedFeatures.erase(name);
+	else
+		changedFeatures.insert(name);
 }
 
 void State::CheckCoreSettingsChanged()
@@ -1023,9 +1052,10 @@ void State::DropEditsUnder(Feature* feature, const json& packData)
 void State::ClearEditsUnderPack(const std::string& packId)
 {
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
-	for (auto* feature : FindEditsUnderPack(packId))
+	for (auto* feature : FindEditsUnderPack(packId)) {
 		DropEditsUnder(feature, GetPackFeatureData(packId, feature->GetShortName()));
-	MarkSettingsChanged();
+		CheckFeatureSettingsChanged(feature);
+	}
 	InvalidateEditsUnderBaselines();
 }
 
@@ -1113,27 +1143,25 @@ void State::ClearFeatureEditsUnderBaselines(Feature* feature)
 		SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 		DropEditsUnder(feature, GetPackFeatureData({}, feature->GetShortName()));
 	}
-	MarkSettingsChanged();
-	InvalidateEditsUnderBaselines(feature);
+	CheckFeatureSettingsChanged(feature);
 }
 
 void State::RestoreFeatureLayers(Feature* feature)
 {
-	MarkSettingsChanged();
-	InvalidateEditsUnderBaselines(feature);
 	SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 	// Defaults first, so settings a partial base leaves out still reset.
 	feature->RestoreDefaultSettings();
 	const auto base = featureBases.find(feature->GetName());
-	if (base == featureBases.end() || base->second.empty())
-		return;
-	json values = base->second;
-	try {
-		feature->LoadSettings(values);
-	} catch (const std::exception& e) {
-		logger::warn("Could not restore {} to its Baseline values, using defaults: {}", feature->GetName(), e.what());
-		feature->RestoreDefaultSettings();
+	if (base != featureBases.end() && !base->second.empty()) {
+		json values = base->second;
+		try {
+			feature->LoadSettings(values);
+		} catch (const std::exception& e) {
+			logger::warn("Could not restore {} to its Baseline values, using defaults: {}", feature->GetName(), e.what());
+			feature->RestoreDefaultSettings();
+		}
 	}
+	CheckFeatureSettingsChanged(feature);
 }
 
 bool State::ValidateCache(CSimpleIniA& a_ini)
@@ -1539,7 +1567,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 	}
 	{
-		SharedDataCB data{};
+		auto& data = sharedData;
+		data = {};
 		data.PreExposure = preExposure;
 		data.RcpPreExposure = 1.0f / preExposure;
 		data.PreviousPreExposure = previousPreExposure;
@@ -1671,7 +1700,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.SunColor = lighting.sun.GetColor();
 		data.MasserColor = lighting.masser.GetColor();
 		data.SecundaColor = lighting.secunda.GetColor();
-		data.TonemapOwner = static_cast<uint>(GetTonemapOwner());
+		data.TonemapOwner = static_cast<uint>(postProcessingFallback ? TonemapOwner::kPostProcessingFallback : GetTonemapOwner());
 		sharedDataCB->Update(data);
 	}
 

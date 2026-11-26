@@ -1,0 +1,32 @@
+{
+    "_feature": "PhysicalSky",
+    "_metadata": {
+        "description": "Physical Sky scene settings overwrite (Weather)",
+        "timeOfDayEnabled": false
+    },
+    "aerosolAbsorption": {
+        "x": 51.311370849609375,
+        "y": 64.61776733398438,
+        "z": 82.67528533935547
+    },
+    "aerosolPhaseG": 0.5594760775566101,
+    "aerosolScatter": {
+        "x": 113.52418518066406,
+        "y": 157.05841064453125,
+        "z": 215.35675048828125
+    },
+    "cloudMap": {
+        "procedural": {
+            "parameters": {
+                "primary": {
+                    "range": {
+                        "w": 0.7099999785423279,
+                        "x": 0.1899999976158142,
+                        "y": 0.3400000035762787,
+                        "z": 0.0
+                    }
+                }
+            }
+        }
+    }
+}

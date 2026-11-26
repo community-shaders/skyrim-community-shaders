@@ -333,6 +333,9 @@ Compatibility is **group-aware**: members of one logical control (a colour, a ve
 `CopyGroupKey`, and one unusable member disqualifies the whole group, so a copy can never leave half a
 colour behind.
 
+**Tombstones copy too**, but only into a destination with an `Overwrite` at the same address and no tombstone
+there yet; elsewhere there is nothing for them to suppress, so they are left out of the candidates.
+
 **Conflicts** are compatible settings the destination already holds as a `User` entry.
 `CopyConflictPolicy::SkipExisting` leaves the whole conflicting group alone, `OverwriteExisting` replaces
 the value in place (keeping the existing `originalValue`), and `Cancel` aborts the entire operation and
@@ -494,6 +497,11 @@ rather than an authoring panel.
   this fork's `Feature`.
 - Upstream's `InvertedCheckbox`, `RadioButton`, `ActiveControlStorageGuard` and
   `GetActiveControlStorageAddress` UI helpers, used only by the excluded UI.
+- `PerformanceOverlay` `ShowInOverlay` as a scene-controllable checkbox. The Profiling page's Display card no longer
+  draws it, so the setting has no catalog binding and `PerformanceOverlay` drops from 12 to 11 in the floors file.
+  Existing override entries for it in `SceneManager.json` or the overwrite folders stop resolving: the loader keeps
+  them as unresolved entries and writes them back on save, but never applies them, so they are inert. The overlay
+  is still toggled from the Profiling page's power button and the overlay hotkey.
 
 ### Existing UI
 

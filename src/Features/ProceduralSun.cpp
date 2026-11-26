@@ -28,7 +28,8 @@ namespace
 {
 	constexpr float kMinimumAngularRadius = DirectX::XMConvertToRadians(0.05f);
 	constexpr float kMaximumAngularRadius = DirectX::XMConvertToRadians(5.0f);
-	constexpr float kMaximumDiskIntensity = 20.0f;
+	// A physical disc (L = E / solid angle) is ~3700x the sunlight at the default radius
+	constexpr float kMaximumDiskIntensity = 5000.0f;
 	constexpr float kMinimumEdgeSoftness = 0.01f;
 	constexpr float kMaximumEdgeSoftness = 1.0f;
 	constexpr float kMinimumHaloAngularWidth = DirectX::XMConvertToRadians(0.05f);
@@ -83,7 +84,7 @@ void ProceduralSun::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextWrapped("%s", T(TKEY("angular_radius_tooltip"), "The real sun's angular radius is about 0.27 degrees. The 0.53 degree default preserves Jiaye's established procedural-sun scale."));
 
-	ImGui::SliderFloat(T(TKEY("disk_intensity"), "Disk Intensity"), &settings.diskIntensity, 0.0f, kMaximumDiskIntensity, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat(T(TKEY("disk_intensity"), "Disk Intensity"), &settings.diskIntensity, 0.0f, kMaximumDiskIntensity, "%.2f", ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::TextWrapped("%s", T(TKEY("disk_intensity_tooltip"), "Brightness of the procedural disc before the existing sky brightness and HDR adjustments."));
 

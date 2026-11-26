@@ -61,8 +61,9 @@ struct CloudStormData
 	std::array<float4, 49> msCalibration = {};
 	std::array<CloudStormParcel, 8> parcels = {};
 	float4 plumeLower = {}, plumeUpper = {};
+	float4 lifecycle = {};  // Scene activation in x. The cached NDF uses authored strength.
 };
-static_assert(sizeof(CloudStormData) == 1824);
+static_assert(sizeof(CloudStormData) == 1840);
 
 /// World-placed storm instances and supercell NDF generation.
 struct CloudStormManager
@@ -70,12 +71,16 @@ struct CloudStormManager
 	void LoadInstances();
 	void SetupResources();
 	void CompileShaders(Util::AsyncShaderSet& a_shaders);
-	void Update(TextureManager& textures, ID3D11ShaderResourceView* pattern, uint64_t noiseRevision, const std::string& worldspace, bool enabled);
+	/// Applies the resolved scene selection and advances interrupted or instantaneous transitions.
+	void Update(TextureManager& textures, ID3D11ShaderResourceView* pattern, uint64_t noiseRevision,
+		const std::string& worldspace, bool enabled, const SceneBlend& selection, double time, float transitionSeconds);
 	void UpdateMotion(double time, double previousTime, float2 lowWind, float2 highWind, float lowWindAltitude, float highWindAltitude);
 	void CommitMotion();
 	/// Rebuilds instance scattering calibration only when albedo or phase changes.
 	void UpdateLighting(float dropletDiameter);
 	void DrawSettings();
+	/// Edits the Supercell selection for the scene armed in Scene Manager.
+	void DrawSceneSettings();
 	bool Replaces(const RE::BSGeometry* geometry) const;
 	/// Conservative low-resolution pixel rectangle, including local light probes.
 	std::array<uint32_t, 4> ScreenRect(float bottomZ, uint32_t width, uint32_t height, float2 weatherAltitude, float curvatureRadius) const;
@@ -94,7 +99,19 @@ struct CloudStormManager
 
 private:
 	std::map<std::string, CloudStormSettings> instances;
-	std::string selected, key, error;
+	std::string selected, error;
+	struct NdfKey
+	{
+		uint64_t textureRevision;
+		uint64_t noiseRevision;
+		std::vector<std::string> instances;
+		bool operator==(const NdfKey&) const = default;
+	};
+	std::optional<NdfKey> key;
+	std::string activeWorldspace;
+	double activationTime = 0.0;
+	std::map<std::string, float> activation;
+	std::vector<std::string> activeIds;
 	uint64_t revision = 0;
 	uint64_t lightingRevision = ~uint64_t(0);
 	float lightingDiameter = -1.f;

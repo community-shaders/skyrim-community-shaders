@@ -1409,16 +1409,15 @@ void EditorWindow::SetupResources()
 
 	// Widgets load their saves as they are made, and saved form references resolve through the
 	// collections of the forms they name, so those are populated first.
-	Util::FormEditorIDIndex editorIDs;
-	WidgetFactory::PopulateSimpleWidgets<RE::BGSArtObject>(artObjectWidgets, editorIDs);
-	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<PrecipitationWidget, RE::BGSShaderParticleGeometryData>(precipitationWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<LensFlareWidget, RE::BGSLensFlare>(lensFlareWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<ReferenceEffectWidget, RE::BGSReferenceEffect>(referenceEffectWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets, editorIDs);
-	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets, editorIDs);
+	WidgetFactory::PopulateSimpleWidgets<RE::BGSArtObject>(artObjectWidgets);
+	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
+	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets);
+	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets);
+	WidgetFactory::PopulateWidgets<PrecipitationWidget, RE::BGSShaderParticleGeometryData>(precipitationWidgets);
+	WidgetFactory::PopulateWidgets<LensFlareWidget, RE::BGSLensFlare>(lensFlareWidgets);
+	WidgetFactory::PopulateWidgets<ReferenceEffectWidget, RE::BGSReferenceEffect>(referenceEffectWidgets);
+	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets);
+	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets);
 }
 
 void EditorWindow::ReloadFormEdits(const FormEditSources::FormKeySet& keys)
@@ -1494,6 +1493,9 @@ void EditorWindow::UpdateOpenState()
 				std::vformat(T(TKEY("weather_still_locked"), "Weather is still locked: {}"), std::make_format_args(weatherName)),
 				Util::Colors::GetWarning(), kLongNotificationDuration);
 		}
+		// A pause owned by a panel releases itself right after the close, so only the user's is worth a warning.
+		if (timePaused && !SceneSettingsUI::IsTimePausedByPanel())
+			ShowNotification(T(TKEY("time_still_paused"), "Time is still paused"), Util::Colors::GetWarning(), kLongNotificationDuration);
 		delete tempTexture;
 		tempTexture = nullptr;
 		for (auto& widget : weatherWidgets)
@@ -2147,15 +2149,18 @@ void EditorWindow::UnlockWeather()
 
 void EditorWindow::PauseTime()
 {
+	auto calendar = Util::Climate::GetCalendar();
+	if (!calendar || !calendar->timeScale)
+		return;
+	// A nonzero timescale set elsewhere (a save load, the console) means our pause flag is stale
+	if (timePaused && calendar->timeScale->value > 0.0f)
+		timePaused = false;
 	if (timePaused)
 		return;
-	auto calendar = Util::Climate::GetCalendar();
-	if (calendar && calendar->timeScale) {
-		savedTimeScale = calendar->timeScale->value;
-		calendar->timeScale->value = 0.0f;
-		timePaused = true;
-		logger::info("Time paused (saved timescale: {})", savedTimeScale);
-	}
+	savedTimeScale = calendar->timeScale->value;
+	calendar->timeScale->value = 0.0f;
+	timePaused = true;
+	logger::info("Time paused (saved timescale: {})", savedTimeScale);
 }
 
 void EditorWindow::ResumeTime()
@@ -2407,8 +2412,12 @@ bool EditorWindow::DrawTimePauseToggle(const char* id, const ImVec2& size)
 	const ImU32 glyphColor = ImGui::GetColorU32(ImGuiCol_Text);
 	const bool isPaused = IsTimePaused();
 	const bool clicked = DrawToggleIconButton(id, Icons::TI(ICON_TI_CLOCK_PAUSE), isPaused, pausedColor, buttonSize, glyphColor);
-	if (clicked)
+	if (clicked) {
 		TogglePause();
+		// Only a pause the user just started becomes theirs; a failed pause or resume leaves ownership alone.
+		if (!isPaused && IsTimePaused())
+			SceneSettingsUI::ClaimTimePause();
+	}
 	return clicked;
 }
 

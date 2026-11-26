@@ -76,6 +76,13 @@ namespace SphericalHarmonics
 		return float3(r * cos(phi), z, r * sin(phi));
 	}
 
+	/** @brief Stratified subsample of one cell in a cellsPerAxis^2 uniform sphere grid, for supersampling a projection. */
+	float3 GetUniformSphereCellSample(uint2 cell, uint2 subsample, uint cellsPerAxis, uint subsamplesPerAxis)
+	{
+		const float2 coord = (float2(cell) + (float2(subsample) + 0.5) / subsamplesPerAxis) / cellsPerAxis;
+		return GetUniformSphereSample(coord.x, coord.y);
+	}
+
 	sh2 Zero()
 	{
 		return float4(0.0f, 0.0f, 0.0f, 0.0f);

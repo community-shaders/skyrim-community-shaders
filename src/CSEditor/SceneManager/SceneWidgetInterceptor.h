@@ -81,6 +81,9 @@ namespace SceneWidgetInterceptor
 	/** @brief Binds a custom control that edits an RGB setting, including derived intensity controls. */
 	bool InterceptFloat3(const char* a_label, float* a_value, const std::function<bool(float*)>& a_draw);
 
+	/** @brief Binds a custom colour control as the ColorEdit3 detour does, palette drops included. Draw it inside one group. */
+	bool InterceptColor3(const char* a_label, float* a_value, const std::function<bool(float*)>& a_draw);
+
 	/// The armed context, or nullptr when unarmed. For SceneWidgetBinding and CustomSceneControls.
 	const Context* GetArmedContext();
 

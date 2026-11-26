@@ -22,8 +22,7 @@ namespace FeatureUndo
 			SceneSettingsManager::SceneLayerGuard sceneLayerGuard;
 			nlohmann::json values = UndoHistory::Get<nlohmann::json>(snapshot);
 			feature->LoadSettings(values);
-			globals::state->MarkSettingsChanged();
-			globals::state->InvalidateEditsUnderBaselines(feature);
+			globals::state->CheckFeatureSettingsChanged(feature);
 		};
 		return target;
 	}

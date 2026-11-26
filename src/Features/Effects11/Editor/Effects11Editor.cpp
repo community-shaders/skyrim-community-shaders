@@ -1664,16 +1664,14 @@ void Effects11Editor::DrawLauncher()
 	ImGui::Spacing();
 	ImGui::Separator();
 
-	{
-		// Without a preset Effects 11 cannot be selected, so the editor stays open to explain how to get one.
-		const Util::LockedSection modeLock(presetLoaded && PostProcessingMode::Get() != PostProcessingMode::Mode::Effects11,
-			T(TKEY("not_active_mode"), "Effects 11 is not the active mode, so the editor shows no changes. Select Effects 11 above to use it."));
-		ImGui::PushTextWrapPos(0.0f);
-		Util::TextUnformattedDisabled(T(TKEY("launcher_body"),
-			"The editor opens over the game, like the ENB editor, so every change shows live. "
-			"Close it or press Esc to come back here."));
-		ImGui::PopTextWrapPos();
-	}
+	// Without a preset Effects 11 cannot be selected, so the page stays open to explain how to get one.
+	const Util::LockedSection modeLock(presetLoaded && PostProcessingMode::Get() != PostProcessingMode::Mode::Effects11,
+		T(TKEY("not_active_mode"), "Effects 11 is not the active mode, so its settings have no effect. Select Effects 11 above to use them."));
+	ImGui::PushTextWrapPos(0.0f);
+	Util::TextUnformattedDisabled(T(TKEY("launcher_body"),
+		"The editor opens over the game, like the ENB editor, so every change shows live. "
+		"Close it or press Esc to come back here."));
+	ImGui::PopTextWrapPos();
 
 	ImGui::SeparatorText(T("menu.settings.tab_keybindings", "Keybindings"));
 	Util::InputComboWidget(T("menu.settings.effects11_editor_key", "Effects 11 Editor Key:"), menuSettings.Effects11EditorKey,

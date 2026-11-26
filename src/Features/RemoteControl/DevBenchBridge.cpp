@@ -438,10 +438,16 @@ namespace
 			auto* cache = globals::shaderCache;
 			if (!cache)
 				return json{ { "error", "shader cache unavailable" } };
+			// A changed total means matrix work began while standalonePending was read, so idle can't be claimed.
+			const uint64_t totalBefore = cache->GetTotalTasks();
+			const bool compiling = cache->IsCompiling();
+			const uint32_t standalonePending = cache->GetStandalonePending();
+			const uint64_t totalTasks = cache->GetTotalTasks();
 			return json{
-				{ "compiling", cache->IsCompiling() },
+				{ "compiling", compiling || totalTasks != totalBefore },
+				{ "standalonePending", standalonePending },
 				{ "completedTasks", cache->GetCompletedTasks() },
-				{ "totalTasks", cache->GetTotalTasks() },
+				{ "totalTasks", totalTasks },
 				{ "failedTasks", cache->GetFailedTasks() },
 				{ "currentFailedCount", cache->GetCurrentFailedCount() },
 				{ "frame_count", EnqueuedFrame() },
@@ -973,7 +979,7 @@ namespace DevBenchBridge
 		dvb->RegisterTool("communityshaders.feature", featureDesc, &FeatureToolHandler, nullptr);
 
 		static constexpr const char* inspectDesc =
-			R"({"description":"Read non-feature Community Shaders engine state. Kind-dispatched; response is a JSON object. kind=state -> {plugin,frame_count}. kind=shadercache -> {compiling,completedTasks,totalTasks,failedTasks,currentFailedCount,frame_count}. kind=profiler -> {frame:{ms,avgMs,p95Ms,p99Ms,samples,frameGeneration} (engine-frame wall clock; presents run ~2x when frameGeneration),totalGpuMs,totalCpuMs,frame_count,passes:[{name,gpuMs,gpuAvgMs,gpuP95Ms,gpuP99Ms,cpuMs,cpuAvgMs,gpuHistory:[...]}]}; optional filter param to match pass names.","readOnly":true,"inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["state","shadercache","profiler"]},"filter":{"type":"string"}},"required":["kind"]}})";
+			R"({"description":"Read non-feature Community Shaders engine state. Kind-dispatched; response is a JSON object. kind=state -> {plugin,frame_count}. kind=shadercache -> {compiling,standalonePending (on-demand compiles that compiling does not count),completedTasks,totalTasks,failedTasks,currentFailedCount,frame_count}. kind=profiler -> {frame:{ms,avgMs,p95Ms,p99Ms,samples,frameGeneration} (engine-frame wall clock; presents run ~2x when frameGeneration),totalGpuMs,totalCpuMs,frame_count,passes:[{name,gpuMs,gpuAvgMs,gpuP95Ms,gpuP99Ms,cpuMs,cpuAvgMs,gpuHistory:[...]}]}; optional filter param to match pass names.","readOnly":true,"inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["state","shadercache","profiler"]},"filter":{"type":"string"}},"required":["kind"]}})";
 		dvb->RegisterTool("communityshaders.inspect", inspectDesc, &InspectToolHandler, nullptr);
 
 		static constexpr const char* shadercacheDesc =

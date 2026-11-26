@@ -15,6 +15,7 @@
 #include "Utils/CompileDedupe.h"
 #include "Utils/D3D.h"
 #include "Utils/Logging.h"
+#include "Utils/ShaderCompileFlags.h"
 #include "Utils/ShaderContentStore.h"
 
 #include "Features/DynamicCubemaps.h"
@@ -1841,6 +1842,11 @@ namespace SIE
 			if (globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed)) {
 				flags |= D3DCOMPILE_AVOID_FLOW_CONTROL;
 			}
+			if (Util::ShaderCompileFlags::SkipsOptimization(
+					shaderClass == ShaderClass::Pixel && type == RE::BSShader::Type::Lighting, debugCompile,
+					(flags & D3DCOMPILE_PARTIAL_PRECISION) != 0, (flags & D3DCOMPILE_AVOID_FLOW_CONTROL) != 0)) {
+				flags = (flags & ~D3DCOMPILE_OPTIMIZATION_LEVEL3) | D3DCOMPILE_SKIP_OPTIMIZATION;
+			}
 			if (useDiskCache) {
 				flags |= D3DCOMPILE_SKIP_VALIDATION;
 			}
@@ -2843,10 +2849,12 @@ namespace SIE
 	{
 		static constexpr std::array kProfiles{ "vs_5_0", "ps_5_0", "cs_5_0" };
 		static_assert(static_cast<size_t>(StandaloneShaderClass::Compute) + 1 == kProfiles.size());
+		standalonePending.fetch_add(1, std::memory_order_relaxed);
 		compilationSet.EnqueueAux(
-			[sourcePath = std::move(sourcePath), entryPoint = std::move(entryPoint), defines = std::move(defines),
+			[this, sourcePath = std::move(sourcePath), entryPoint = std::move(entryPoint), defines = std::move(defines),
 				profile = kProfiles[static_cast<size_t>(shaderClass)], onReady = std::move(onReady)]() {
 				onReady(globals::d3d::device && globals::state ? Util::CompileShader(sourcePath.c_str(), defines, profile, entryPoint.c_str()) : nullptr);
+				standalonePending.fetch_sub(1, std::memory_order_relaxed);
 			});
 	}
 

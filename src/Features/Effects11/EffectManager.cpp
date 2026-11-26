@@ -24,6 +24,38 @@
 namespace
 {
 	using namespace Effects11Util;
+
+	constexpr float kNeutralLuminance[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+	/** @brief The target ImageSpaceEffectHDR::Render last wrote adapted luminance to, replaying its downsample walk. */
+	std::optional<RE::RENDER_TARGET> GetEngineAdaptedLuminanceTarget()
+	{
+		// CommonLib's GetSingleton() wrongly dereferences this global: the manager is stored inline, not behind a pointer
+		static REL::Relocation<RE::BSGraphics::RenderTargetManager*> renderTargetManager{ REL::RelocationID(524970, 411451) };
+		static REL::Relocation<int32_t*> luminanceSwap{ REL::RelocationID(528109, 415054) };
+		static const auto* multipleReferences = RE::GetINISetting("bUseMultipleLuminanceReferences:Display");
+
+		// Render walks down from kHDR_DOWNSAMPLE0 in quarter steps until it reaches finalSize
+		const uint32_t finalSize = multipleReferences && multipleReferences->GetBool() ? 2 : 1;
+		const auto& source = renderTargetManager->renderTargetData[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE0];
+		uint32_t width = source.width;
+		uint32_t height = source.height;
+		int32_t target = RE::RENDER_TARGETS::kHDR_DOWNSAMPLE0;
+		while (finalSize < width || finalSize < height) {
+			width = std::max((width + 3) / 4, finalSize);
+			height = std::max((height + 3) / 4, finalSize);
+			++target;
+		}
+
+		// The final level ping-pongs with the target two slots up; the swap selects the one written last
+		const int32_t swap = *luminanceSwap;
+		if (swap != 0 && swap != 1)
+			return std::nullopt;
+		target += 2 * swap;
+		if (target > RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13)
+			return std::nullopt;
+		return static_cast<RE::RENDER_TARGET>(target);
+	}
 }
 
 EffectManager& EffectManager::GetSingleton()
@@ -483,6 +515,8 @@ bool EffectManager::ExecuteEffects(RE::BSGraphics::RenderTargetData& a_input, RE
 	ExecuteEffect(enbEffect);
 	ExecuteEffect(enbEffectPostPass, ids.usePostPass);
 
+	PublishAdaptedLuminance(WillEffectRun(enbAdaptation, ids.useAdaptation) ? enbAdaptation.GetOutputSRV() : nullptr);
+
 	textureManager.IncrementTextureSwap();
 
 	auto* textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
@@ -652,6 +686,16 @@ void EffectManager::CreateCopyShaders()
 		return;
 	}
 	Util::SetResourceName(copyPixelShader.get(), "EffectManager::CopyPS");
+
+	// Optional: without it PublishAdaptedLuminance falls back to a neutral value
+	const D3D_SHADER_MACRO broadcastDefines[] = { { "BROADCAST_FIRST_TEXEL", "" }, { nullptr, nullptr } };
+	winrt::com_ptr<ID3DBlob> broadcastBlob;
+	if (SUCCEEDED(D3DCompile(pixelShaderSource.data(), pixelShaderSource.size(), "CopyPS.hlsl", broadcastDefines, nullptr,
+			"main", "ps_5_0", 0, 0, broadcastBlob.put(), nullptr)) &&
+		SUCCEEDED(globals::d3d::device->CreatePixelShader(broadcastBlob->GetBufferPointer(), broadcastBlob->GetBufferSize(), nullptr, broadcastPixelShader.put())))
+		Util::SetResourceName(broadcastPixelShader.get(), "EffectManager::BroadcastPS");
+	else
+		logger::warn("[EFFECTS11] Failed to create broadcast pixel shader; the engine luminance gets a neutral value");
 
 	D3D11_BUFFER_DESC cbDesc{};
 	cbDesc.ByteWidth = 16;
@@ -961,6 +1005,29 @@ bool EffectManager::WillEffectRun(EffectBase& a_effect, uint32_t enableSettingID
 	return a_effect.IsCompiled() && (enableSettingID == 0xFFFFFFFF || SettingManager::GetSingleton().GetValue<bool>(enableSettingID));
 }
 
+void EffectManager::PublishAdaptedLuminance(ID3D11ShaderResourceView* a_adaptation)
+{
+	static REL::Relocation<RE::ImageSpaceTexture*> luminanceHistory{ RELOCATION_ID(513464, 391302) };
+
+	const auto adapted = GetEngineAdaptedLuminanceTarget();
+	if (!adapted)
+		return;
+	const auto target = *adapted;
+	const auto& luminance = globals::game::renderer->GetRuntimeData().renderTargets[target];
+	if (!luminance.RTV)
+		return;
+
+	if (!a_adaptation || !broadcastPixelShader || !CopyTexture(a_adaptation, luminance.RTV, false, broadcastPixelShader.get()))
+		globals::d3d::context->ClearRenderTargetView(luminance.RTV, kNeutralLuminance);
+
+	// Same fields the engine sets when it acquires a render target into an ImageSpaceTexture
+	if (luminanceHistory->renderTarget != target) {
+		luminanceHistory->texture.reset();
+		luminanceHistory->renderTarget = target;
+		luminanceHistory->unk0C = UINT32_MAX;
+	}
+}
+
 void EffectManager::UpdateCommonVariablesForEffect(Effect& effect)
 {
 	if (!effect.GetEffect())
@@ -1033,7 +1100,7 @@ void EffectManager::CopyToTarget(ID3D11Texture2D* a_source, ID3D11ShaderResource
 	context->OMSetRenderTargets(1, &nullRTV, nullptr);
 }
 
-bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest, bool a_dither)
+bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest, bool a_dither, ID3D11PixelShader* a_pixelShader)
 {
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
 		static Util::OnceFlag logged;
@@ -1080,7 +1147,7 @@ bool EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 
 	// Set shaders
 	context->VSSetShader(copyVertexShader.get(), nullptr, 0);
-	context->PSSetShader(copyPixelShader.get(), nullptr, 0);
+	context->PSSetShader(a_pixelShader ? a_pixelShader : copyPixelShader.get(), nullptr, 0);
 
 	// Update dither frame count
 	if (ditherConstantBuffer) {
@@ -1184,6 +1251,7 @@ void EffectManager::ReloadShaders()
 	// The Create* helpers also (re)create these buffers through com_ptr::put(), which requires them to be empty
 	copyVertexShader = nullptr;
 	copyPixelShader = nullptr;
+	broadcastPixelShader = nullptr;
 	ditherConstantBuffer = nullptr;
 	colorCorrectionComputeShader = nullptr;
 	colorCorrectionConstantBuffer = nullptr;

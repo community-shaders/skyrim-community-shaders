@@ -9,6 +9,7 @@
 
 #include "CSEditor/SceneManager/SceneWidgetInterceptor.h"
 #include "I18n/I18n.h"
+#include "Util.h"
 #include "Utils/Form.h"
 
 #define I18N_KEY_PREFIX "feature.physical_sky."
@@ -24,6 +25,29 @@ namespace
 		if (asset.empty() || relative.has_root_path() || std::ranges::any_of(relative, [](const auto& part) { return part == ".."; }))
 			return {};
 		return std::filesystem::path(kStormsDirectory) / instance / relative;
+	}
+
+	using StormSelection = std::map<std::string, bool>;
+
+	const nlohmann::json* ReadStormSelection(const nlohmann::json& state)
+	{
+		const auto& value = state["value"];
+		const auto found = value.find("instances");
+		return found != value.end() && found->is_object() ? &*found : nullptr;
+	}
+
+	float GetStormActivation(const SceneBlend& selection, const std::string& id, bool enabled)
+	{
+		// A missing scene selection keeps the instance's original worldspace setting.
+		float strength = enabled ? 1.f : 0.f;
+		for (const auto& state : selection.states) {
+			if (const auto* entries = ReadStormSelection(state)) {
+				const auto entry = entries->find(id);
+				const bool selected = entry != entries->end() && entry->is_boolean() && entry->get<bool>();
+				strength += state["weight"].get<float>() * (static_cast<float>(selected) - static_cast<float>(enabled));
+			}
+		}
+		return std::clamp(strength, 0.f, 1.f);
 	}
 
 	eastl::unique_ptr<Texture2D> StormTexture(uint32_t count, const char* name)
@@ -56,13 +80,14 @@ void CloudStormManager::LoadInstances()
 			std::ifstream stream(path);
 			instances.emplace(it->path().filename().string(), nlohmann::json::parse(stream).get<CloudStormSettings>());
 		} catch (const std::exception& exception) {
-			error = path.filename().string() + ": " + exception.what();
-			logger::error("PhysicalSky storm instance {}: {}", path.string(), exception.what());
+			error = Util::PathHelpers::ToUtf8(path.filename()) + ": " + exception.what();
+			logger::error("PhysicalSky storm instance {}: {}", Util::PathHelpers::ToUtf8(path), exception.what());
 		}
 	}
 	if (!instances.contains(selected))
 		selected = instances.empty() ? "" : instances.begin()->first;
-	key.clear();
+	std::erase_if(activation, [&](const auto& entry) { return !instances.contains(entry.first); });
+	key.reset();
 	++revision;
 }
 
@@ -80,8 +105,9 @@ void CloudStormManager::SetupResources()
 
 void CloudStormManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 {
-	key.clear();
+	key.reset();
 	active.clear();
+	activeIds.clear();
 	wind.clear();
 	references.clear();
 	replacementNodes.clear();
@@ -89,31 +115,66 @@ void CloudStormManager::CompileShaders(Util::AsyncShaderSet& a_shaders)
 	a_shaders.Add(program, L"Data\\Shaders\\PhysicalSky\\StormNdf.cs.hlsl");
 }
 
-void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceView* pattern, uint64_t noiseRevision, const std::string& worldspace, bool enabled)
+void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceView* pattern, uint64_t noiseRevision,
+	const std::string& worldspace, bool enabled, const SceneBlend& selection, double time, float transitionSeconds)
 {
 	if (!enabled || !program || !generatorCb || !sampler || !pattern) {
 		active.clear();
+		activeIds.clear();
+		activation.clear();
+		activeWorldspace.clear();
 		wind.clear();
 		references.clear();
 		replacementNodes.clear();
 		replacementTextures.clear();
-		key.clear();
+		key.reset();
 		altitude = {};
 		return;
 	}
-	const auto nextKey = nlohmann::json{ worldspace, textures.revision, noiseRevision }.dump();
-	if (key == nextKey)
+	const bool worldChanged = activeWorldspace != worldspace || time < activationTime;
+	const float step = worldChanged || transitionSeconds <= 0.f ?
+	                       1.f :
+	                       std::min(static_cast<float>((time - activationTime) / transitionSeconds), 1.f);
+	activationTime = time;
+	activeWorldspace = worldspace;
+	if (worldChanged)
+		activation.clear();
+	bool discontinuous = worldChanged && !active.empty();
+	NdfKey nextKey{ textures.revision, noiseRevision, {} };
+	for (const auto& [id, instance] : instances) {
+		if (instance.worldspace.empty() || instance.worldspace != worldspace)
+			continue;
+		auto& weight = activation[id];
+		const float previous = weight;
+		if (instance.mode == "Volcanic") {
+			weight = instance.enabled ? 1.f : 0.f;
+		} else {
+			const float target = GetStormActivation(selection, id, instance.enabled);
+			weight = std::clamp(target, weight - step, weight + step);
+		}
+		if ((worldChanged && weight > 0.f) || (step >= 1.f && std::abs(weight - previous) > 0.25f))
+			discontinuous = true;
+		if (weight > 0.f)
+			nextKey.instances.push_back(id);
+	}
+	if (discontinuous)
+		++revision;
+	if (!worldChanged && key == nextKey) {
+		for (size_t index = 0; index < active.size(); ++index)
+			active[index].lifecycle.x = activation.at(activeIds[index]);
 		return;
-	active.clear();
-	wind.clear();
+	}
+	const bool preserveMotion = key.has_value() && !worldChanged;
+	const auto previousIds = std::exchange(activeIds, {});
+	const auto previousStorms = std::exchange(active, {});
+	const auto previousWind = std::exchange(wind, {});
 	references.clear();
 	replacementNodes.clear();
 	replacementTextures.clear();
 	altitude = { FLT_MAX, -FLT_MAX };
 	std::vector<std::array<ID3D11ShaderResourceView*, 5>> sources;
-	for (const auto& [id, instance] : instances) {
-		if (!instance.enabled || instance.worldspace.empty() || instance.worldspace != worldspace)
-			continue;
+	for (const auto& id : nextKey.instances) {
+		const auto& instance = instances.at(id);
 		const float values[] = { instance.center.x, instance.center.y, instance.radius, instance.backHalfSize,
 			instance.backRotation, instance.coreHeight, instance.altitude, instance.height, instance.strength,
 			instance.topOffset.x, instance.topOffset.y, instance.windInfluence, instance.rotation, instance.updraft,
@@ -171,9 +232,21 @@ void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceVie
 		const float backSize = std::clamp(instance.backHalfSize, 1.f, 16000.f);
 		gpu.animation = { 0.f, 0.f, maps ? std::max(gpu.centerRadiusStrength.z, backSize) : gpu.centerRadiusStrength.z, backSize };
 		gpu.generation = { instance.backRotation * 0.01745329252f, instance.mirrorBack ? 1.f : 0.f, std::clamp(instance.coreHeight, 0.f, 1.f), (maps ? 1.f : 0.f) + (coreMaps ? 2.f : 0.f) + (instance.mode == "Volcanic" ? 4.f : 0.f) };
-		active.push_back(gpu);
+		gpu.lifecycle.x = activation.at(id);
 		wind.push_back({ .baseOffset = { gpu.driftDensity.x, gpu.driftDensity.y },
 			.influence = instance.mode == "Volcanic" ? std::clamp(instance.windInfluence, 0.f, 2.f) : 0.f });
+		if (preserveMotion && instance.mode == "Volcanic") {
+			const auto previous = std::ranges::lower_bound(previousIds, id);
+			if (previous != previousIds.end() && *previous == id) {
+				const auto index = static_cast<size_t>(previous - previousIds.begin());
+				wind.back() = previousWind[index];
+				gpu.parcels = previousStorms[index].parcels;
+				gpu.plumeLower = previousStorms[index].plumeLower;
+				gpu.plumeUpper = previousStorms[index].plumeUpper;
+			}
+		}
+		active.push_back(gpu);
+		activeIds.push_back(id);
 		for (const auto& node : instance.replacementNodes)
 			if (!node.empty())
 				replacementNodes.emplace_back(node);
@@ -191,7 +264,9 @@ void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceVie
 		altitude.x = std::min(altitude.x, gpu.altitudeMotion.x);
 		altitude.y = std::max(altitude.y, gpu.altitudeMotion.x + gpu.altitudeMotion.y);
 	}
-	key = nextKey;
+	nextKey.textureRevision = textures.revision;
+	key = std::move(nextKey);
+	lightingRevision = ~uint64_t(0);
 	if (active.empty()) {
 		altitude = {};
 		return;
@@ -266,7 +341,6 @@ void CloudStormManager::Update(TextureManager& textures, ID3D11ShaderResourceVie
 		context->CSSetUnorderedAccessViews(i, 1, &target, nullptr);
 	}
 	data->Update(active.data(), active.size() * sizeof(CloudStormData));
-	++revision;
 }
 
 void CloudStormManager::UpdatePlume(CloudStormData& instance, WindState& motion, float2 lowWind, float2 highWind, float lowAltitude, float highAltitude, double time)
@@ -503,8 +577,10 @@ std::array<uint32_t, 4> CloudStormManager::ScreenRect(float bottomZ, uint32_t wi
 
 void PhysicalSky::UpdateCloudStorm(const std::string& worldspace)
 {
+	auto* scene = SceneSettingsManager::GetSingleton();
 	cloudStormManager.Update(ndfTexManager, ndfManager.GetNoiseInputs()[2], ndfManager.GetNoiseRevision(), worldspace,
-		IsActive() && VolumetricCloudsEnabled());
+		IsActive() && VolumetricCloudsEnabled(), settings.supercellStorms, volWind.stormTime,
+		scene->GetTransitionControl(SceneSettingsManager::TransitionControl::LocationSeconds));
 }
 
 bool PhysicalSky::IsReplacedSkyGeometry(const RE::BSGeometry* geometry) const
@@ -532,20 +608,88 @@ RE::BSShaderProperty::RenderPassArray* PhysicalSky::Hooks::BSEffectShaderPropert
 
 void PhysicalSky::DrawCloudStormSection()
 {
-	cloudStormManager.DrawSettings();
+	const bool scene = SceneWidgetInterceptor::IsArmed();
+	const char* label = scene ? T(TKEY("supercell_storms"), "Supercell Storms") : T(TKEY("storm_section"), "Storm Instances");
+	if (!ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_SpanAvailWidth))
+		return;
+	if (scene)
+		cloudStormManager.DrawSceneSettings();
+	else
+		cloudStormManager.DrawSettings();
+}
+
+void CloudStormManager::DrawSceneSettings()
+{
+	const auto* armed = SceneWidgetInterceptor::GetArmedContext();
+	auto* manager = SceneSettingsManager::GetSingleton();
+	const SceneSettingsManager::SettingIdentity identity{ "PhysicalSky", {}, "supercellStorms" };
+	const auto index = manager->FindContextUserEntry(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
+	const auto entries = manager->GetContextEntries(armed->contextId);
+	if (!index || *index >= entries.size() || entries[*index].deleted) {
+		if (Util::Button(T(TKEY("supercell_override"), "Override Supercell Storms in this scene"))) {
+			if (index)
+				manager->ClearContextTombstone(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
+			manager->AddContextSetting(armed->contextId, identity.featureShortName, identity.settingPath, identity.settingKey);
+		}
+		return;
+	}
+	if (Util::Button(T(TKEY("supercell_inherit"), "Remove Supercell Storm override / inherit"))) {
+		manager->RemoveContextSetting(armed->contextId, *index);
+		return;
+	}
+
+	const auto authored = entries[*index].value.get<SceneBlend>();
+	StormSelection storms;
+	const auto endpoint = std::ranges::max_element(authored.states, {}, [](const auto& state) { return state["weight"].template get<float>(); });
+	const auto* selectedStorms = endpoint != authored.states.end() ? ReadStormSelection(*endpoint) : nullptr;
+	if (selectedStorms) {
+		for (const auto& [id, state] : selectedStorms->items())
+			if (state.is_boolean())
+				storms.emplace(id, state.get<bool>());
+	} else {
+		for (const auto& [id, instance] : instances)
+			if (instance.mode != "Volcanic" && instance.enabled)
+				storms.emplace(id, true);
+	}
+	ImGui::TextWrapped("%s", T(TKEY("supercell_scene_hint"), "Add instances saved under Physical Sky's Storm Instances. Weather and scene changes build up and dissipate their cloud fields."));
+	Util::DisableGuard disabled(entries[*index].paused);
+	bool changed = false;
+	if (ImGui::BeginCombo(T(TKEY("supercell_add"), "Add Supercell Storm"), "")) {
+		for (const auto& [id, storm] : instances)
+			if (storm.mode != "Volcanic" && !storms.contains(id) && ImGui::Selectable(id.c_str())) {
+				storms.emplace(id, true);
+				changed = true;
+			}
+		ImGui::EndCombo();
+	}
+	for (auto it = storms.begin(); it != storms.end();) {
+		ImGui::PushID(it->first.c_str());
+		changed |= ImGui::Checkbox(it->first.c_str(), &it->second);
+		ImGui::SameLine();
+		if (Util::Button(T(TKEY("supercell_remove"), "Remove storm"))) {
+			it = storms.erase(it);
+			changed = true;
+		} else {
+			++it;
+		}
+		ImGui::PopID();
+	}
+	if (changed) {
+		SceneBlend updated;
+		updated.states.push_back({ { "value", { { "instances", storms } } }, { "weight", 1.f } });
+		const SceneSettingsManager::EntryValueUpdate update{ *index, updated };
+		manager->UpdateContextEntryValues(armed->contextId, { &update, 1 }, true);
+	}
 }
 
 void CloudStormManager::DrawSettings()
 {
-	if (!ImGui::CollapsingHeader(T(TKEY("storm_section"), "Storm Instances"), ImGuiTreeNodeFlags_SpanAvailWidth))
-		return;
 	ImGui::TextWrapped("%s", T(TKEY("storm_description"), "World-placed storm instances combine a supercell back template, mesocyclone NDF and rotating noise bands. Each instance has its own placement and replacement reference."));
 	ImGui::TextUnformatted(kStormsDirectory);
-	ImGui::BeginDisabled(SceneWidgetInterceptor::IsArmed());
-	if (ImGui::Button(T(TKEY("storm_reload"), "Reload instances")))
+	if (Util::Button(T(TKEY("storm_reload"), "Reload instances")))
 		LoadInstances();
 	ImGui::SameLine();
-	if (ImGui::Button(T(TKEY("storm_new"), "New instance"))) {
+	if (Util::Button(T(TKEY("storm_new"), "New instance"))) {
 		for (uint32_t i = 1;; ++i) {
 			const auto id = std::format("Storm{}", i);
 			if (instances.contains(id))
@@ -554,8 +698,6 @@ void CloudStormManager::DrawSettings()
 			auto& instance = instances[id];
 			instance.name = id;
 			instance.enabled = false;
-			key.clear();
-			++revision;
 			break;
 		}
 	}
@@ -578,6 +720,7 @@ void CloudStormManager::DrawSettings()
 				}
 			ImGui::EndCombo();
 		}
+		Util::HoverTip(T(TKEY("storm_mode_tooltip"), "Supercell builds a rotating thunderstorm with banded inflow and an anvil. Volcanic builds a rising, rotating eruption plume that bends with the wind."));
 		changed |= ImGui::Checkbox(T(TKEY("storm_enabled"), "Enable storm"), &storm.enabled);
 		changed |= ImGui::InputText(T(TKEY("storm_asset"), "Storm back folder (relative to instance)"), &storm.asset);
 		changed |= ImGui::InputText(T(TKEY("storm_core_asset"), "Core NDF folder (relative to instance, optional)"), &storm.coreAsset);
@@ -603,30 +746,44 @@ void CloudStormManager::DrawSettings()
 		changed |= editRules(T(TKEY("storm_replacement_textures"), "Replaced effect textures (one per line)"), storm.replacementTextures);
 		changed |= ImGui::InputText(T(TKEY("storm_worldspace"), "Storm worldspace Editor ID"), &storm.worldspace);
 		changed |= ImGui::DragFloat2(T(TKEY("storm_center"), "Storm center X / Y (m)"), &storm.center.x, 10.f);
+		Util::HoverTip(T(TKEY("storm_center_tooltip"), "World position of the storm's center in metres. The storm stays anchored there rather than drifting with the weather."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_radius"), "Vortex radius (m)"), &storm.radius, 10.f, 1.f, 16000.f);
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_half_size"), "Storm back half-size (m)"), &storm.backHalfSize, 10.f, 1.f, 16000.f);
+		Util::HoverTip(T(TKEY("storm_back_half_size_tooltip"), "Half the width of the area covered by the storm back template."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_back_rotation"), "Storm back rotation (degrees)"), &storm.backRotation, 1.f);
 		changed |= ImGui::Checkbox(T(TKEY("storm_back_mirror"), "Mirror storm back"), &storm.mirrorBack);
 		changed |= ImGui::SliderFloat(T(TKEY("storm_core_height"), "Core height within NDF span"), &storm.coreHeight, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("storm_core_height_tooltip"), "Normalized height of the analytic core and the back template within the storm's height span."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_altitude"), "NDF height zero (m)"), &storm.altitude, 10.f, -24000.f, 48000.f);
+		Util::HoverTip(T(TKEY("storm_altitude_tooltip"), "Altitude of the storm's height 0 above the worldspace ground level."));
 		changed |= ImGui::DragFloat(T(TKEY("storm_height"), "NDF height span (m)"), &storm.height, 10.f, 1.f, 24000.f);
+		Util::HoverTip(T(TKEY("storm_height_tooltip"), "Vertical distance covered by the storm's normalized heights, from height 0 to 1."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_strength"), "Storm strength"), &storm.strength, 0.f, 1.f);
+		Util::HoverTip(T(TKEY("storm_strength_tooltip"), "How strongly the storm replaces the surrounding weather clouds and how far its core reaches. 1 is the full authored storm."));
 		if (storm.mode == "Volcanic") {
 			changed |= ImGui::DragFloat2(T(TKEY("storm_top_offset"), "Plume top offset X / Y (m)"), &storm.topOffset.x, 10.f, -16000.f, 16000.f);
+			Util::HoverTip(T(TKEY("storm_top_offset_tooltip"), "Extra horizontal shift of the plume top relative to the vent, added to any wind bending."));
 			changed |= ImGui::SliderFloat(T(TKEY("storm_wind_influence"), "Wind bending strength"), &storm.windInfluence, 0.f, 2.f);
+			Util::HoverTip(T(TKEY("storm_wind_influence_tooltip"), "How strongly the wind bends the rising column and carries its outflow downwind. 0 keeps the plume upright."));
 		}
 		changed |= ImGui::SliderFloat(T(TKEY("storm_rotation"), "Storm rotation speed"), &storm.rotation, -4.f, 4.f);
+		Util::HoverTip(T(TKEY("storm_rotation_tooltip"), "Multiplies how fast the storm's noise bands rotate. Negative values reverse the direction."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_updraft"), "Storm updraft (m/s)"), &storm.updraft, -80.f, 80.f);
+		Util::HoverTip(T(TKEY("storm_updraft_tooltip"), "Supercell: how fast the anvil lifts. Volcanic: vent speed, which scales the rise and the crown outflow."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_density"), "Storm density"), &storm.density, 0.f, 4.f);
+		Util::HoverTip(T(TKEY("storm_density_tooltip"), "Extinction multiplier for the storm cloud, independent of the weather clouds' extinction scale."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_albedo"), "Storm single scattering albedo"), &storm.albedo, 0.f, 0.9999f, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+		Util::HoverTip(T(TKEY("storm_albedo_tooltip"), "Fraction of light the storm cloud scatters rather than absorbs. Lower values give darker storms, such as ash plumes."));
 		changed |= ImGui::ColorEdit3(T(TKEY("storm_emission"), "Storm emission"), &storm.emission.x, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+		Util::HoverTip(T(TKEY("storm_emission_tooltip"), "Light emitted by the storm cloud itself, strongest at its base, such as lava glow on an eruption plume. Black disables it."));
 		changed |= ImGui::SliderFloat(T(TKEY("storm_emission_height"), "Emitting height fraction"), &storm.emissionHeight, 0.001f, 1.f);
+		Util::HoverTip(T(TKEY("storm_emission_height_tooltip"), "How far up the storm the emission reaches, as a fraction of its height. The glow fades exponentially with height."));
 		if (changed) {
-			key.clear();
+			key.reset();
 			++revision;
 			globals::features::physicalSky.volMainHistoryValid = false;
 		}
-		if (ImGui::Button(T(TKEY("storm_save"), "Save instance"))) {
+		if (Util::Button(T(TKEY("storm_save"), "Save instance"))) {
 			try {
 				const auto folder = std::filesystem::path(kStormsDirectory) / selected;
 				std::filesystem::create_directories(folder);
@@ -641,7 +798,6 @@ void CloudStormManager::DrawSettings()
 			}
 		}
 	}
-	ImGui::EndDisabled();
 	ImGui::TextWrapped("%s", T(TKEY("storm_asset_hint"), "In the storm back asset, Modeling alpha is the template blend weight. The generator combines this template with the mesocyclone and writes the final storm mask separately. The optional core asset supplies final NDF channels within its valid height footprint; profile reconstruction and animated noise stay shared. Asset folders are relative to the instance folder; use . for textures beside Instance.json."));
 	ImGui::TextWrapped("%s", T(TKEY("storm_replacement_hint"), "Only active, successfully generated instances hide their configured references. Disable an instance and save it to restore its original geometry."));
 	if (!error.empty())

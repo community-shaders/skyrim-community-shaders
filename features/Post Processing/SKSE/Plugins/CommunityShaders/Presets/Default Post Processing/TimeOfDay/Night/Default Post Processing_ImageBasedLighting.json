@@ -1,0 +1,7 @@
+{
+    "DALCAmount": 0.009999999776482582,
+    "_feature": "ImageBasedLighting",
+    "_metadata": {
+        "description": "Image Based Lighting scene settings overwrite (Time of Day - Night)"
+    }
+}

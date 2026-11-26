@@ -1244,3 +1244,13 @@ void SceneSettingsUI::SyncTimePause()
 		pausedByPanel = false;
 	}
 }
+
+bool SceneSettingsUI::IsTimePausedByPanel()
+{
+	return pausedByPanel;
+}
+
+void SceneSettingsUI::ClaimTimePause()
+{
+	pausedByPanel = false;
+}

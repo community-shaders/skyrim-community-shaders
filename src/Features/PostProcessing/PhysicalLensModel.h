@@ -213,7 +213,7 @@ namespace PhysicalLensImaging
 		gradient = curvature / root;
 		double power = radiusSquared;
 		for (unsigned i = 0; i < s.asphere.size(); ++i) {
-			gradient += (4 + 2 * i) * s.asphere[i] * power;
+			gradient += (4.0 + 2.0 * i) * s.asphere[i] * power;
 			power *= radiusSquared;
 			sag += s.asphere[i] * power;
 		}

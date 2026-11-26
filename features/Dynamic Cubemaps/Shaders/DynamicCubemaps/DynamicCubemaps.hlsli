@@ -20,9 +20,9 @@ namespace DynamicCubemaps
 #if !defined(WATER)
 
 #	if defined(SKYLIGHTING)
-	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness, sh2 skylighting, float skylightingFadeOut)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness, float3 positionMS, sh2 skylighting, float skylightingFadeOut)
 #	else
-	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness, float3 positionMS)
 #	endif
 	{
 #	if defined(DEFERRED)
@@ -85,7 +85,11 @@ namespace DynamicCubemaps
 					skySpecular = 0;
 				}
 
-				finalIrradiance = envSpecular + skySpecular;
+				float3 reflectionsSpecular = ColorManagement::SceneToLinear(fullSample) * SharedData::iblSettings.SkyIBLScale;
+#			if defined(SKYLIGHTING)
+				reflectionsSpecular *= skylightingSpecular;
+#			endif
+				finalIrradiance = ImageBasedLighting::ApplyAmbientReflectionFallback(envSpecular, skySpecular, reflectionsSpecular, positionMS);
 			} else
 #		endif
 			{

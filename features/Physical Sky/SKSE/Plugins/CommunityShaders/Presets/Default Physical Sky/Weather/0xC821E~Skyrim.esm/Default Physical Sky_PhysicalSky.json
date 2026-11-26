@@ -1,0 +1,85 @@
+{
+    "_feature": "PhysicalSky",
+    "_metadata": {
+        "description": "Physical Sky scene settings overwrite (Weather)",
+        "timeOfDayEnabled": false
+    },
+    "cloudLayer": {
+        "middle": {
+            "densityScale": 0.05000000074505806,
+            "weather": {
+                "states": [
+                    {
+                        "value": {
+                            "coverageGain": {
+                                "frequency": 1.0,
+                                "noise": 2,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 1.0, 1.0]
+                            },
+                            "layers": [
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 1,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-0.699999988079071, 0.699999988079071, 1.0, 1.0]
+                                },
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 2,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-1.0, 1.0, 0.6499999761581421, 0.6499999761581421]
+                                }
+                            ],
+                            "localBlendMode": 0,
+                            "localMap": "",
+                            "localWeight": 0.0,
+                            "localWindScale": 1.0,
+                            "secondaryCoverage": {
+                                "frequency": 1.0,
+                                "noise": 3,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, 0.0, 0.0]
+                            },
+                            "thicknessVariation": {
+                                "frequency": 1.0,
+                                "noise": 0,
+                                "offset": [0.0, 0.0],
+                                "range": [-1.0, 1.0, -0.10999999940395355, 0.05000000074505806]
+                            }
+                        },
+                        "weight": 1.0
+                    }
+                ]
+            }
+        }
+    },
+    "cloudMap": {
+        "procedural": {
+            "parameters": {
+                "baseHeight": {
+                    "x": 0.0,
+                    "y": 0.30000001192092896
+                },
+                "bottomTypeRange": {
+                    "w": 0.20000000298023224,
+                    "z": -0.10000000149011612
+                },
+                "modeling": {
+                    "range": {
+                        "w": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "primary": {
+                    "range": {
+                        "w": 1.0700000524520874,
+                        "x": -0.8700000047683716,
+                        "y": 0.7300000190734863,
+                        "z": 0.3700000047683716
+                    }
+                }
+            }
+        }
+    }
+}

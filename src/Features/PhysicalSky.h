@@ -113,6 +113,22 @@ struct PhysicalSky final : public Feature
 		float zBottom = -14500.f;
 	};
 
+	/** @brief Volumetric cloud cost settings written together by the Quality & Performance preset buttons. */
+	struct CloudQualityPreset
+	{
+		float rayMarchRange;      // km
+		float shadowVolumeRange;  // km
+		float marchStepScale;
+		int cloudBlurRadius;  // px
+		bool cloudAmbientSHOnly;
+		bool cloudHalfResTrace;
+		bool cloudFastReconstruction;
+		bool cloudCascadeShadows;
+	};
+	constexpr static CloudQualityPreset kCloudQualityLow = { 5.f, 4.f, 1.5f, 0, true, true, true, false };
+	constexpr static CloudQualityPreset kCloudQualityMedium = { 10.f, 8.f, 0.8f, 1, true, false, true, true };
+	constexpr static CloudQualityPreset kCloudQualityHigh = { 32.f, 8.f, 0.5f, 1, false, false, false, true };
+
 	struct Settings
 	{
 		bool enabled = true;
@@ -138,6 +154,9 @@ struct PhysicalSky final : public Feature
 		float sunDiskRad = DirectX::XMConvertToRadians(0.53f);
 		float masserDiskRad = DirectX::XMConvertToRadians(8.f);
 		float secundaDiskRad = DirectX::XMConvertToRadians(4.f);
+		// Off tints the disc with the weather's moon glare instead; its brightness stays derived from the light.
+		bool masserDiscMatchLight = true;
+		bool secundaDiscMatchLight = true;
 
 		std::map<std::string, WorldspaceInfo> worldspaceWhitelist = {
 			{ "Tamriel", { -14500.f } },
@@ -198,14 +217,19 @@ struct PhysicalSky final : public Feature
 			float3 color = { 0.86f, 0.9f, 1.f };  // linear sRGB chromaticity
 		};
 		LightningSettings lightning;
-		float rayMarchRange = 32.f;
-		float shadowVolumeRange = 8.f;  // km
-		float marchStepScale = 0.5f;
-		int cloudBlurRadius = 1;
+		float rayMarchRange = kCloudQualityMedium.rayMarchRange;
+		float shadowVolumeRange = kCloudQualityMedium.shadowVolumeRange;
+		float marchStepScale = kCloudQualityMedium.marchStepScale;
+		int cloudBlurRadius = kCloudQualityMedium.cloudBlurRadius;
+		bool cloudAmbientSHOnly = kCloudQualityMedium.cloudAmbientSHOnly;
+		bool cloudHalfResTrace = kCloudQualityMedium.cloudHalfResTrace;
+		bool cloudFastReconstruction = kCloudQualityMedium.cloudFastReconstruction;
+		bool cloudCascadeShadows = kCloudQualityMedium.cloudCascadeShadows;
 		NdfSettings cloudMap = {};
 		CloudLayer cloudLayer = {};
 		CloudNoiseSettings cloudNoise = {};
 		SceneBlend voxelClouds;
+		SceneBlend supercellStorms;
 
 		Aerosol::Optics GetAerosolOptics() const;
 		void ApplyAerosolOptics();
@@ -295,8 +319,19 @@ struct PhysicalSky final : public Feature
 		uint dirLightDiskIndex;              // body whose disc phase the clouds show
 		float4 dirLightDisc;                 // world direction to that body, and its glow weight fading out and back in across a swap
 		float4 diskBillboardScale;
+		float4 moonDiscRadiance[2];  // Masser, Secunda; w = 0: rgb is radiance per texture colour, 1: rgb is mean * solid angle / light Y for the glare tint, -1: vanilla
 	} cbData;
 	STATIC_ASSERT_ALIGNAS_16(CbData);
+
+	/** @brief A moon's drawn texture luminance relative to its full-moon texture, and both textures' mean linear colours (zero when unreadable). */
+	struct MoonPhotometry
+	{
+		float phase = 1.f;
+		float3 fullMean{};
+		float3 currentMean{};
+		std::string texturePath;  // bound texture the values were measured for
+	};
+	std::array<MoonPhotometry, 2> moonPhotometry;  // Masser, Secunda
 
 	eastl::unique_ptr<Texture2D> texTrLut = nullptr;  // transmittance
 	constexpr static uint32_t kDiskPhaseLutSize = 2048;
@@ -343,8 +378,10 @@ struct PhysicalSky final : public Feature
 		uint cloudFrameIndex;
 		float4 localRect;
 		float4 localAltitude;
+		uint32_t traceScale;
+		uint32_t padding[3] = {};
 	};
-	static_assert(sizeof(CloudBoundaryCB) == 128);
+	static_assert(sizeof(CloudBoundaryCB) == 144);
 	eastl::unique_ptr<ConstantBuffer> cloudBoundaryCB = nullptr;
 
 	eastl::unique_ptr<Texture2D> texVolTr = nullptr;           // full-resolution volumetric transmittance result
@@ -495,8 +532,12 @@ struct PhysicalSky final : public Feature
 		float4 middleCells;
 		float4 middleBands;
 		float4 middleBandShape;
+		uint32_t cloudTraceScale;
+		uint32_t cloudAmbientSHOnly;
+		uint32_t cloudCascadeShadows;
+		uint32_t qualityPadding = 0;
 	};
-	static_assert(sizeof(VolumetricCloudCB) == 1328);
+	static_assert(sizeof(VolumetricCloudCB) == 1344);
 	static_assert(offsetof(VolumetricCloudCB, dirlightDir) == 48);
 	static_assert(offsetof(VolumetricCloudCB, previousCamera) == 64);
 	static_assert(offsetof(VolumetricCloudCB, lowNdfFrequency) == 128);
@@ -512,6 +553,7 @@ struct PhysicalSky final : public Feature
 	static_assert(offsetof(VolumetricCloudCB, middleCells) == 1280);
 	static_assert(offsetof(VolumetricCloudCB, middleBands) == 1296);
 	static_assert(offsetof(VolumetricCloudCB, middleBandShape) == 1312);
+	static_assert(offsetof(VolumetricCloudCB, cloudTraceScale) == 1328);
 	eastl::unique_ptr<ConstantBuffer> volCloudCb = nullptr;
 	eastl::unique_ptr<ConstantBuffer> cloudDispatchCb;
 	eastl::unique_ptr<Texture2D> texVolStormMotion, texVolCubeStormMotion;
@@ -531,6 +573,7 @@ struct PhysicalSky final : public Feature
 	eastl::unique_ptr<Texture2D> texCloudAmbientBoundary;
 	std::array<uint32_t, kCloudAmbientCascadeCount> cloudAmbientIterations = {};
 	bool cloudAmbientValid = false;
+	bool cloudAmbientResourcesFailed = false;
 	std::string cloudAmbientWorldspace;
 	uint32_t cloudAmbientUpdateIndex = 0;
 	struct CloudAmbientVolumeCB
@@ -601,8 +644,8 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainVolcanic, csVolCubemapVolcanic, csVolShadowVolcanic, csCloudAmbientDensityVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVolMainSingleVolcanic;
 	winrt::com_ptr<ID3D11ComputeShader> csVoxelView, csVoxelViewSingle, csVolCubemapVoxel, csVolShadowVoxel, csCloudAmbientDensityVoxel, csVoxelLighting;
-	winrt::com_ptr<ID3D11ComputeShader> csVolFilter = nullptr, csVolFilterWide = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> csVolReproject = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> csVolFilter, csVolFilterWide, csVolFilterWideFast;
+	winrt::com_ptr<ID3D11ComputeShader> csVolReproject, csVolReprojectFast;
 	winrt::com_ptr<ID3D11ComputeShader> csVolCubeReproject = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowVolume = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> csVolShadowWeather, csVolShadowColumns, csCloudShadowMeanWeather;
@@ -631,6 +674,8 @@ struct PhysicalSky final : public Feature
 		kMainViewAndCubemap
 	};
 	void SetupVolumetricResources();
+	/// Allocates the ambient transport volumes when the grid is first used.
+	bool EnsureCloudAmbientTransportResources();
 	/** @brief Creates the full-resolution cloud targets on first use; on failure disables volumetric clouds for the session. @return True when they exist. */
 	bool EnsureVolumetricScreenResources();
 	bool volumetricScreenResourcesFailed = false;
@@ -682,7 +727,10 @@ struct PhysicalSky final : public Feature
 	void RestoreSamplers();
 	void ModifyGrass();
 	void RestoreGrassSampler();
+	/** @brief Render thread, start of a water batch: binds the sky sampler to s13 once for every draw in it. */
 	void ModifyWater();
+	/** @brief Render thread, each water draw: keeps the renderer from re-binding s13. */
+	void HoldWaterSampler();
 	void RestoreWaterSampler();
 	struct Hooks
 	{
@@ -728,9 +776,15 @@ struct PhysicalSky final : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSWaterShader_RestoreGeometry
+		struct BSWaterShader_SetupTechnique
 		{
-			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
+			static bool thunk(RE::BSShader* This, uint32_t Technique);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSWaterShader_RestoreTechnique
+		{
+			static void thunk(RE::BSShader* This, uint32_t Technique);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -744,7 +798,8 @@ struct PhysicalSky final : public Feature
 			stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 			stl::write_vfunc<0x7, BSGrassShader_RestoreGeometry>(RE::VTABLE_BSGrassShader[0]);
 			stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
-			stl::write_vfunc<0x7, BSWaterShader_RestoreGeometry>(RE::VTABLE_BSWaterShader[0]);
+			stl::write_vfunc<0x2, BSWaterShader_SetupTechnique>(RE::VTABLE_BSWaterShader[0]);
+			stl::write_vfunc<0x3, BSWaterShader_RestoreTechnique>(RE::VTABLE_BSWaterShader[0]);
 		}
 	};
 };

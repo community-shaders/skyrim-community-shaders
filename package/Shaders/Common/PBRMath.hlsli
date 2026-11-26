@@ -220,10 +220,10 @@ namespace PBR
 	}
 
 	// The squared denominator preserves lobe energy as wrap broadens the terminator.
-	float2 GetThinSurfaceDiffuseCosines(float NdotL, float wrap)
+	float2 GetThinSurfaceDiffuseCosines(float NdotL, float wrap, float2 lightDisk)
 	{
 		float normalization = 1.0f / ((1.0f + wrap) * (1.0f + wrap));
-		return float2(saturate((NdotL + wrap) * normalization), saturate((wrap - NdotL) * normalization));
+		return float2(LightDisk::WrappedCosine(NdotL, wrap, normalization, lightDisk), LightDisk::WrappedCosine(-NdotL, wrap, normalization, lightDisk));
 	}
 
 	/** @brief Evaluates thin-surface diffuse lobes with separate reflection and transmission shadows. */
@@ -231,9 +231,7 @@ namespace PBR
 		float NdotL, float wrap, float reflectionShadow, float transmissionShadow,
 		out float3 reflection, out float3 transmission, float2 lightDisk = float2(0.0, 1.0))
 	{
-		float2 diffuseCosines = GetThinSurfaceDiffuseCosines(NdotL, wrap);
-		if (wrap == 0.0 && lightDisk.x > 0.0)
-			diffuseCosines = float2(LightDisk::DiffuseCosine(NdotL, lightDisk), LightDisk::DiffuseCosine(-NdotL, lightDisk));
+		float2 diffuseCosines = GetThinSurfaceDiffuseCosines(NdotL, wrap, lightDisk);
 		reflection = reflectionAlbedo * diffuseCosines.x * irradiance * reflectionShadow;
 		transmission = transmissionAlbedo * diffuseCosines.y * irradiance * transmissionShadow;
 	}
@@ -354,15 +352,25 @@ namespace PBR
 		return max(wo.z, 0.0) * Math::INV_PI * scale * scale;
 	}
 
+	float FuzzLobe(float3 L, FuzzLTC ltc, float2 disk)
+	{
+		if (disk.x <= 0.0)
+			return FuzzLobe(L, ltc);
+		float3 center, x, y;
+		LightDisk::QuadratureAxes(L, disk, center, x, y);
+		return 0.25 * (FuzzLobe(center + x, ltc) + FuzzLobe(center - x, ltc) +
+						  FuzzLobe(center + y, ltc) + FuzzLobe(center - y, ltc));
+	}
+
 	/// @brief Evaluate the fuzz lobe on the viewer-side face of a thin-walled surface lit from behind
 	/// @param L Light direction, behind the surface
 	/// @param ltc Cached view-dependent fuzz parameters
 	/// @return Lobe value as FuzzLobe, zero for light in front; scale by the transmitted share of the light
 	/// @note OpenPBR thin-walled surfaces carry fuzz on both faces. Light transmitted through the surface reaches the
 	///       viewer-side fuzz continuing from the light, so that face sees it from the light's mirror image.
-	float FuzzLobeTransmitted(float3 L, FuzzLTC ltc)
+	float FuzzLobeTransmitted(float3 L, FuzzLTC ltc, float2 disk)
 	{
-		return FuzzLobe(reflect(L, ltc.N), ltc);
+		return FuzzLobe(reflect(L, ltc.N), ltc, disk);
 	}
 
 	/// @brief Calculate index of refraction for hair using Marschner model

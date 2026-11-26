@@ -1,0 +1,424 @@
+{
+    "Border": {
+        "enabled": false,
+        "settings": {
+            "BorderColor": [0.0, 0.0, 0.0],
+            "DepthThreshold": 0.0,
+            "Scale": [0.0, 0.0, 0.0, 0.0]
+        }
+    },
+    "COD Bloom": {
+        "enabled": true,
+        "settings": {
+            "BlendFactor": 0.4000000059604645,
+            "MipBlendFactor": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0],
+            "Threshold": 3.0,
+            "UpsampleRadius": 5.0
+        }
+    },
+    "Camera": {
+        "enabled": false,
+        "settings": {
+            "AberrationFalloff": 3.5,
+            "BlurFalloff": 10.0,
+            "BlurRadius": 25.0,
+            "BlurStrength": 1.0,
+            "ChromaticAberration": [-1.600000023841858, -0.800000011920929, 0.0],
+            "GrainColor": 0.15000000596046448,
+            "GrainIntensity": 0.07999999821186066,
+            "GrainSize": 1.25,
+            "LensDistortion": 0.11999999731779099,
+            "LensFOV": 90.0
+        }
+    },
+    "Color Grading and Tone Mapping": {
+        "enabled": true,
+        "settings": {
+            "ODRT1": {
+                "clamp": 1,
+                "cwp": 2,
+                "cwp_lm": 0.25,
+                "input_color_space": 0,
+                "output_encoding": 0,
+                "pt_enable": 1,
+                "pt_hdr": 0.5,
+                "pt_lmh": 0.15000000596046448,
+                "pt_lmh_b": 0.15000000596046448,
+                "pt_lmh_r": 0.15000000596046448,
+                "pt_lml": 0.5,
+                "pt_lml_b": 0.5,
+                "pt_lml_g": 0.0,
+                "pt_lml_r": 1.0,
+                "ptl_c": 0.05000000074505806,
+                "ptl_enable": 1,
+                "ptl_m": 0.05999999865889549,
+                "ptl_y": 0.05000000074505806,
+                "ptm_enable": 1,
+                "ptm_high": -0.800000011920929,
+                "ptm_high_rng": 0.4000000059604645,
+                "ptm_high_st": 0.4000000059604645,
+                "ptm_low": 0.800000011920929,
+                "ptm_low_rng": 0.5,
+                "ptm_low_st": 0.4000000059604645,
+                "rs_bw": 0.550000011920929,
+                "rs_rw": 0.25,
+                "rs_sa": 0.3499999940395355,
+                "tn_Lg": 10.0,
+                "tn_Lp": 100.0,
+                "tn_con": 1.5,
+                "tn_gb": 0.12999999523162842,
+                "tn_hcon": 0.0,
+                "tn_hcon_enable": 0,
+                "tn_hcon_pv": 1.0,
+                "tn_hcon_st": 4.0,
+                "tn_lcon": 0.4000000059604645,
+                "tn_lcon_enable": 1,
+                "tn_lcon_w": 0.5,
+                "tn_off": 0.003000000026077032,
+                "tn_sh": 0.5,
+                "tn_su": 1,
+                "tn_toe": 0.003000000026077032
+            },
+            "ODRT2": {
+                "brl": 0.0,
+                "brl_b": -0.25,
+                "brl_enable": 1,
+                "brl_g": -1.25,
+                "brl_r": -1.25,
+                "brl_rng": 0.30000001192092896,
+                "brl_st": 0.5,
+                "brlp": -0.5,
+                "brlp_b": -0.5,
+                "brlp_enable": 1,
+                "brlp_g": -1.25,
+                "brlp_r": -1.25,
+                "hc_enable": 1,
+                "hc_r": 1.0,
+                "hc_r_rng": 0.4000000059604645,
+                "hs_b": 0.5,
+                "hs_b_rng": 1.0,
+                "hs_c": 0.25,
+                "hs_c_rng": 1.0,
+                "hs_cmy_enable": 1,
+                "hs_g": 0.3499999940395355,
+                "hs_g_rng": 1.0,
+                "hs_m": 0.0,
+                "hs_m_rng": 1.0,
+                "hs_r": 0.5,
+                "hs_r_rng": 0.800000011920929,
+                "hs_rgb_enable": 1,
+                "hs_y": 0.25,
+                "hs_y_rng": 1.0
+            },
+            "cdlOffset": [0.0, 0.0, 0.0, 0.0],
+            "contrast": [1.0, 1.0, 1.0, 0.0],
+            "currentTonemapper": "PsychoV",
+            "enableAutoHDR": true,
+            "enableTonemap": true,
+            "exposureTemperatureTint": [1.0, 65.0, 0.0, 0.0],
+            "gain": [1.0, 1.0, 1.0, 1.0],
+            "gameCinematicBlend": [0.0, 0.0, 0.0],
+            "gameFadeBlend": 1.0,
+            "gameTintBlend": 0.0,
+            "gamma": [0.0, 0.0, 0.0, 0.0],
+            "highlightsGain": [1.0, 1.0, 1.0, 0.0],
+            "highlightsOffset": [0.0, 0.0, 0.0, 0.0],
+            "inOutGamma": [1.0, 1.0, 1.0, 1.0],
+            "invertLog": true,
+            "lift": [0.0, 0.0, 0.0, 0.0],
+            "logType": 0,
+            "midtonesGain": [1.0, 1.0, 1.0, 0.0],
+            "midtonesOffset": [0.0, 0.0, 0.0, 0.0],
+            "oklchColorMixer": [
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0]
+            ],
+            "oklchSaturation": [1.0, 1.0, 0.0, 0.0],
+            "pivot": [0.18000000715255737, 0.18000000715255737, 0.18000000715255737, 0.0],
+            "power": [1.0, 1.0, 1.0, 0.0],
+            "processColorSpace": 5,
+            "shadowsGain": [1.0, 1.0, 1.0, 0.0],
+            "shadowsHighlightsRange": [0.0, 0.30000001192092896, 0.550000011920929, 1.0],
+            "shadowsOffset": [0.0, 0.0, 0.0, 0.0],
+            "skipLDR": false,
+            "skipLUT": false,
+            "slope": [1.0, 1.0, 1.0, 0.0],
+            "tonemapParams": [
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0]
+            ],
+            "useLog": true,
+            "useOpenDrt": true
+        }
+    },
+    "Composite": {
+        "enabled": true,
+        "settings": null
+    },
+    "Depth of Field": {
+        "enabled": false,
+        "settings": {
+            "AutoFocus": true,
+            "BlurQuality": 7.0,
+            "BokehBladeCount": 6,
+            "BokehBladeRoundness": 1.0,
+            "BokehBusyFactor": 0.5,
+            "BokehMode": 0,
+            "FNumber": 5.599999904632568,
+            "FarPlaneMaxBlur": 1.0,
+            "FocalLength": 50.0,
+            "FocusCoord": [0.5, 0.5],
+            "GatherQuality": 0,
+            "HighlightBoost": 0.0,
+            "HighlightShape": 0,
+            "HighlightShapeRotationAngle": 0.0,
+            "ManualFocusPlane": 0.4000000059604645,
+            "MaxFarCoCRadius": 0.02500000037252903,
+            "MaxNearCoCRadius": 0.02500000037252903,
+            "NearFarDistanceCompensation": 1.0,
+            "NearPlaneMaxBlur": 0.20000000298023224,
+            "PetzvalStrength": 0.0,
+            "PostBlurSmoothing": 0.0,
+            "SensorWidthMM": 36.0,
+            "TransitionSpeed": 0.5,
+            "UseAdaptiveGather": true,
+            "consoleSelection": true,
+            "targetFocus": false,
+            "targetFocusFocalLength": 50.0
+        }
+    },
+    "Histogram Auto Exposure": {
+        "enabled": true,
+        "settings": {
+            "AdaptArea": [0.6000000238418579, 0.6000000238418579],
+            "AdaptSpeed": 1.5,
+            "AdaptationRange": [-3.0, 0.0],
+            "ExposureCompensation": 0.0,
+            "PurkinjeMaxEV": -1.0,
+            "PurkinjeStartEV": 1.5,
+            "PurkinjeStrength": 0.0
+        }
+    },
+    "LUT": {
+        "enabled": false,
+        "settings": {
+            "InputMax": [1.0, 1.0, 1.0],
+            "InputMin": [0.0, 0.0, 0.0],
+            "LutPath": ""
+        }
+    },
+    "Lens Flare": {
+        "enabled": true,
+        "settings": {
+            "ApertureBlades": 6,
+            "ApertureRotation": 0.0,
+            "FFTResolution": 512,
+            "FStop": 14.300000190734863,
+            "GLocalMask": true,
+            "GhostChromaShift": 0.014999999664723873,
+            "GhostModeInt": 1,
+            "GhostStrength": 0.30000001192092896,
+            "Ghosts": [
+                {
+                    "Color": [1.0, 0.800000011920929, 0.4000000059604645, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": -1.5
+                },
+                {
+                    "Color": [1.0, 1.0, 0.6000000238418579, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": 2.5
+                },
+                {
+                    "Color": [0.800000011920929, 0.800000011920929, 1.0, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": -5.0
+                },
+                {
+                    "Color": [0.5, 1.0, 0.4000000059604645, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": 10.0
+                },
+                {
+                    "Color": [0.5, 0.800000011920929, 1.0, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": 0.699999988079071
+                },
+                {
+                    "Color": [0.8999999761581421, 1.0, 0.800000011920929, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": -0.4000000059604645
+                },
+                {
+                    "Color": [1.0, 0.800000011920929, 0.4000000059604645, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": -0.20000000298023224
+                },
+                {
+                    "Color": [0.8999999761581421, 0.699999988079071, 0.699999988079071, 1.0],
+                    "Enabled": true,
+                    "KernelScale": 1.0,
+                    "Scale": -0.10000000149011612
+                }
+            ],
+            "HaloChromaShift": 0.014999999664723873,
+            "HaloCompression": 0.6499999761581421,
+            "HaloRadius": 0.5,
+            "HaloStrength": 0.20000000298023224,
+            "HaloWidth": 0.5,
+            "Intensity": 1.0,
+            "KernelScale": 0.10000000149011612,
+            "ThresholdEV": 5.0,
+            "ThresholdRange": 1.0,
+            "Tint": [1.0, 0.8500000238418579, 0.699999988079071]
+        }
+    },
+    "Local Exposure": {
+        "enabled": true,
+        "settings": {
+            "BaseBlend": 0.6000000238418579,
+            "BlurredLuminanceKernelSize": 50.0,
+            "DetailStrength": 1.0,
+            "Exposure": 0.699999988079071,
+            "HighlightContrast": 0.75,
+            "HighlightThreshold": 1.0,
+            "HighlightThresholdStrength": 1.0,
+            "MiddleGreyBias": 0.0,
+            "ShadowContrast": 0.800000011920929,
+            "ShadowThreshold": 1.0,
+            "ShadowThresholdStrength": 1.0,
+            "Strength": 1.0
+        }
+    },
+    "Motion Blur": {
+        "enabled": false,
+        "settings": {
+            "SampleCount": 8,
+            "ScalePreset": 4,
+            "VelocityScale": 300.0
+        }
+    },
+    "Physical Glare": {
+        "enabled": false,
+        "settings": {
+            "AdaptSpeed": 3.0,
+            "ApertureBlades": 6,
+            "ApertureMode": 0,
+            "ApertureRotation": 0.0,
+            "BladeRoughnessAmp": 0.30000001192092896,
+            "BladeRoughnessFreq": 20,
+            "ChromaticSpread": 1.0,
+            "DustCount": 295,
+            "DustSize": 2.4000000953674316,
+            "EnableEyelashes": true,
+            "EyelashCount": 40,
+            "EyelashCurvature": 0.30000001192092896,
+            "EyelashLength": 0.4000000059604645,
+            "FFTResolution": 1024,
+            "FStop": 2.799999952316284,
+            "FresnelExponent": 0.0,
+            "GratingCount": 200,
+            "GratingStrength": 0.5,
+            "Intensity": 0.10000000149011612,
+            "KernelScale": 1.0,
+            "PSFNoiseFloor": 0.0010000000474974513,
+            "PSFSharpness": 0.49000000953674316,
+            "PaddingRatio": 0.25,
+            "ParticleCount": 200,
+            "ParticleSize": 1.5,
+            "ScatterStrength": 1.0,
+            "ScratchCount": 4,
+            "ScratchLength": 0.7900000214576721,
+            "ScratchOpacity": 0.3100000023841858,
+            "ScratchWidth": 2.0,
+            "SphericalAberration": 0.0,
+            "StarburstCount": 48,
+            "StarburstIrregularity": 0.30000001192092896,
+            "StarburstStrength": 0.800000011920929,
+            "SutureBranches": 3,
+            "SutureStrength": 0.5,
+            "SutureWidth": 2.0,
+            "TearFilmComplexity": 8,
+            "TearFilmSpeed": 2.0,
+            "TearFilmStrength": 0.7799999713897705,
+            "ThresholdEV": 8.0
+        }
+    },
+    "Physical Lens": {
+        "enabled": false,
+        "settings": {
+            "AlignmentVariation": 0.20000000298023224,
+            "ApertureBlades": 0,
+            "ApertureRotation": 0.0,
+            "Coating": 1.0,
+            "Diffraction": true,
+            "DirtDensity": 1.0,
+            "DirtOpacity": 1.0,
+            "DirtSize": 1.0,
+            "FNumber": 5.599999904632568,
+            "FocusDistanceM": 0.0,
+            "GhostDiffraction": 0.6000000238418579,
+            "ImageEffects": true,
+            "Intensity": 1.0,
+            "LensPreset": 0,
+            "MaxSources": 8,
+            "ScratchLength": 1.0,
+            "ScratchSpread": 180.0,
+            "StarburstIntensity": 0.019999999552965164,
+            "StarburstSize": 10.0,
+            "SurfaceScatter": 0.25,
+            "ThresholdEV": 3.0,
+            "ZoomPosition": 0.0
+        }
+    },
+    "Vignette": {
+        "enabled": true,
+        "settings": {
+            "FocalLength": 1.0,
+            "Power": 3.0
+        }
+    },
+    "cinematic_camera": {
+        "Enabled": false,
+        "Exposure": {
+            "ExposureCompensationEV": 0.0,
+            "FrameRate": 24.0,
+            "ISO": 100.0,
+            "MaxISO": 12800.0,
+            "MinISO": 25.0,
+            "Mode": 0,
+            "ShutterAngleDeg": 180.0
+        },
+        "Filmback": {
+            "GateFit": 0,
+            "Preset": 0,
+            "SensorHeightMM": 24.0,
+            "SensorWidthMM": 36.0
+        },
+        "Focus": {
+            "ManualDistanceM": 10.0,
+            "Mode": 1,
+            "ScreenPointUV": [0.5, 0.5],
+            "TransitionSpeed": 0.5
+        },
+        "Lens": {
+            "ApertureBladeCount": 6,
+            "ApertureBladeRotationDeg": 0.0,
+            "ApertureRoundness": 0.5,
+            "FNumber": 2.799999952316284,
+            "FocalLengthMM": 50.0
+        }
+    }
+}

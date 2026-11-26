@@ -242,8 +242,8 @@ private:
 		void operator()(const CategoryHeader&);
 		void operator()(Feature* feat);
 
-		/** @brief Draws a feature's header and settings, without the frame operator() wraps them in. */
-		void DrawFeatureContent(Feature* feat);
+		/** @brief Draws a feature's header (unless `showHeader` is false) and settings, without the frame operator() wraps them in. */
+		void DrawFeatureContent(Feature* feat, bool showHeader = true);
 
 	private:
 		std::string& pendingFeatureSelection;

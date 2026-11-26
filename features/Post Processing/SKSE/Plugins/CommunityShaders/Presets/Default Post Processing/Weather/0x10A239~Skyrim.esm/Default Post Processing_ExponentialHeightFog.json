@@ -1,0 +1,9 @@
+{
+    "_feature": "ExponentialHeightFog",
+    "_metadata": {
+        "description": "Exponential Height Fog scene settings overwrite (Weather)",
+        "timeOfDayEnabled": false
+    },
+    "fogDensity": 0.20000000298023224,
+    "fogHeightFalloff": 0.05000000074505806
+}

@@ -25,6 +25,7 @@
 #include "State.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
+#include "Utils/UIAnim.h"
 
 static ImU32 HslToImU32(float h, float s, float l)
 {
@@ -69,6 +70,7 @@ static constexpr float kFeatureGraphMinFrameTimeSec = 0.00001f;
 static constexpr float kTimingTableMetricColumnWidth = 55.0f;
 static constexpr float kTimingTablePercentColumnWidth = 45.0f;
 static constexpr float kStatsRefreshSeconds = 1.0f;
+static constexpr float kTimingSmoothRate = 4.0f;  // Pass Timings card totals: approach speed per second (Util::Anim::Approach)
 
 // Comparators for a timing table's columns: Pass by name (case-insensitive), then
 // Avg / P95 / P99 by value, and % by the average's share, which orders like the
@@ -171,17 +173,16 @@ void ProfilingRenderer::TextHeat(const char* fmt, float value, float maxValue)
 
 void ProfilingRenderer::RenderTimingModeToggle()
 {
-	int mode = static_cast<int>(timingMode);
-
-	ImGui::PushID("ProfilingTimingMode");
-	ImGui::RadioButton(T("menu.profiling.gpu", "GPU"), &mode, static_cast<int>(TimingMode::GPU));
-	ImGui::SameLine();
-	ImGui::RadioButton(T("menu.profiling.cpu", "CPU"), &mode, static_cast<int>(TimingMode::CPU));
-	ImGui::PopID();
-
-	const auto newMode = static_cast<TimingMode>(mode);
-	if (newMode != timingMode) {
-		timingMode = newMode;
+	// Skinny track sized to its labels, sitting straight on top of the graph
+	const std::array<Util::Segment, 2> segments{ {
+		{ .label = T("menu.profiling.gpu", "GPU") },
+		{ .label = T("menu.profiling.cpu", "CPU") },
+	} };
+	Util::SegmentedOptions options;
+	options.height = ImGui::GetFontSize() * 1.4f;
+	const int clicked = Util::SegmentedControl("##ProfilingTimingMode", segments, static_cast<int>(timingMode), options);
+	if (clicked >= 0 && static_cast<TimingMode>(clicked) != timingMode) {
+		timingMode = static_cast<TimingMode>(clicked);
 		timeSinceLastUpdate = kStatsRefreshSeconds;
 	}
 }
@@ -276,20 +277,31 @@ void ProfilingRenderer::RenderPage()
 	timingsCard.icon = ICON_TI_CLOCK;
 	timingsCard.title = T("menu.profiling.timings_tab", "Pass Timings");
 	timingsCard.description = T("menu.profiling.timings_blurb", "GPU and CPU time of every Community Shaders render pass.");
-	std::string timingsStatus;
+	std::string timingsGpu;
+	std::string timingsCpu;
 	if (profiler.GetResults().empty()) {
 		timingsCard.status = T("menu.profiling.timings_no_data", "No data yet (enter the game world)");
 		timingsCard.statusColor = palette.Disable;
 	} else {
-		const auto gpuMs = std::format("{:.2f}", profiler.GetTotalTimeMs());
-		timingsStatus = std::vformat(T("menu.profiling.timings_gpu_total", "{} ms GPU per frame"), std::make_format_args(gpuMs));
-		timingsCard.status = timingsStatus.c_str();
+		float cpuTotalMs = 0.0f;
+		for (const auto& result : profiler.GetResults())
+			if (result.valid)
+				cpuTotalMs += result.cpuTimeMs;
+		const float gpuSmooth = Util::Anim::Approach(ImGui::GetID("##TimingsGpu"), profiler.GetTotalTimeMs(), kTimingSmoothRate);
+		const float cpuSmooth = Util::Anim::Approach(ImGui::GetID("##TimingsCpu"), cpuTotalMs, kTimingSmoothRate);
+		const auto gpuMs = std::format("{:.1f}", gpuSmooth);
+		const auto cpuMs = std::format("{:.1f}", cpuSmooth);
+		timingsGpu = std::vformat(T("menu.profiling.timings_gpu_total", "{} ms GPU"), std::make_format_args(gpuMs));
+		timingsCpu = std::vformat(T("menu.profiling.timings_cpu_total", "{} ms CPU"), std::make_format_args(cpuMs));
+		timingsCard.status = timingsGpu.c_str();
 		timingsCard.statusColor = palette.SuccessColor;
+		timingsCard.status2 = timingsCpu.c_str();
+		timingsCard.status2Color = palette.InfoColor;
 	}
 
-	// Performance Overlay: the status line's action turns the overlay window on or off
+	// Performance Overlay: the corner power button turns the overlay window on or off
 	auto& overlayCard = cards[static_cast<size_t>(Tab::PerformanceOverlay)];
-	overlayCard.icon = ICON_TI_EYE;
+	overlayCard.icon = MenuIcons::kProfiling;
 	overlayCard.title = T("menu.profiling.overlay_tab", "Performance Overlay");
 	overlayCard.description = T("menu.profiling.overlay_blurb", "FPS, frame time graphs, draw calls, VRAM and A/B testing in an in-game window.");
 	std::string overlayStatus;
@@ -305,21 +317,15 @@ void ProfilingRenderer::RenderPage()
 			overlayCard.status = T("menu.profiling.overlay_not_installed", "Not installed");
 			overlayCard.statusColor = palette.Disable;
 		}
-	} else if (!overlay.settings.ShowInOverlay) {
-		overlayCard.status = T("menu.profiling.overlay_off", "Off");
-		overlayCard.statusColor = palette.Disable;
-		overlayCard.action = T("menu.profiling.overlay_turn_on", "Turn on");
 	} else {
-		if (menu->overlayVisible) {
-			overlayCard.status = T("menu.profiling.overlay_showing", "Showing");
-			overlayCard.statusColor = palette.SuccessColor;
-		} else {
-			const auto hotkey = Util::Input::KeyIdToString(menu->GetSettings().OverlayToggleKey);
-			overlayStatus = std::vformat(T("menu.profiling.overlay_hidden", "Hidden: press {} to show"), std::make_format_args(hotkey));
-			overlayCard.status = overlayStatus.c_str();
-			overlayCard.statusColor = palette.Warning;
-		}
-		overlayCard.action = T("menu.profiling.overlay_turn_off", "Turn off");
+		const bool on = overlay.settings.ShowInOverlay;
+		const auto hotkey = Util::Input::KeyIdToString(menu->GetSettings().OverlayToggleKey);
+		overlayStatus = std::vformat(on ? T("menu.profiling.overlay_turn_off", "Turn off ({})") : T("menu.profiling.overlay_turn_on", "Turn on ({})"), std::make_format_args(hotkey));
+		overlayCard.status = on ? T("menu.profiling.overlay_showing", "Showing") : T("menu.profiling.overlay_off", "Off");
+		overlayCard.statusColor = on ? palette.SuccessColor : palette.Disable;
+		overlayCard.cornerIcon = ICON_TI_POWER;
+		overlayCard.cornerActive = on;
+		overlayCard.cornerTooltip = overlayStatus.c_str();
 	}
 
 	// Every card takes the tallest one's height so the row lines up
@@ -368,7 +374,6 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 	if (showModeToggle) {
 		RenderTimingModeToggle();
 		cpuMode = (timingMode == TimingMode::CPU);
-		ImGui::Separator();
 	}
 
 	float currentTime = static_cast<float>(ImGui::GetTime());

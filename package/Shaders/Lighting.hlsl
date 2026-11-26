@@ -625,10 +625,10 @@ float GetSoftLightMultiplier(float angle)
 	return softLigtMul;
 }
 
-float GetRimLightMultiplier(float3 L, float3 V, float3 N)
+float GetRimLightMultiplier(float3 V, float3 N, float backlight)
 {
 	float NdotV = saturate(dot(N, V));
-	return exp2(LightingEffectParams.y * log2(1 - NdotV)) * saturate(dot(V, -L));
+	return exp2(LightingEffectParams.y * log2(1 - NdotV)) * backlight;
 }
 
 #	if !defined(TRUE_PBR)
@@ -2577,7 +2577,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	DirectLightingOutput dirLightOutput;
 #	if defined(TRUE_PBR)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
-	dirLightContext.lightDisk = LightDisk::DirectionalSource();
 	float directNdotV = dot(dirLightContext.worldNormal, dirLightContext.viewDir);
 	if (!isThinSurface)
 		material.DirectSpecularEnergyCompensation = BRDF::GGXEnergyCompensation(material.Roughness, PBR::GetDirectSpecularNdotV(directNdotV), material.F0);
@@ -2603,6 +2602,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 #	endif
+	dirLightContext.lightDisk = LightDisk::DirectionalSource();
 
 	float2 uvOriginal_ddx = ddx(uvOriginal);
 	float2 uvOriginal_ddy = ddy(uvOriginal);
@@ -2619,7 +2619,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(TRUE_PBR)
 	coatLightsDiffuseColor += dirLightOutput.coatDiffuse;
 #		if defined(LOD_LAND_BLEND)
-	lodLandDiffuseColor += dirLightColor / Math::PI * saturate(dirLightAngle) * dirDetailedShadow;
+	lodLandDiffuseColor += dirLightColor / Math::PI * LightDisk::DiffuseCosine(dirLightAngle, dirLightContext.lightDisk) * dirDetailedShadow;
 #		endif
 #	endif
 	transmissionColor += dirLightOutput.transmission;
@@ -2825,7 +2825,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
 		float charLightMul = saturate(dot(viewDirection, worldNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldNormal.yz));
-		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
+		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z));
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
 #	endif
@@ -3124,16 +3124,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	)
 #		if defined(DYNAMIC_CUBEMAPS)
 #			if defined(SKYLIGHTING)
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(specularNormal, viewDirection, material.Roughness, skylightingSpecularSH, skylightingSpecularFadeOut);
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(specularNormal, viewDirection, material.Roughness, input.WorldPosition.xyz, skylightingSpecularSH, skylightingSpecularFadeOut);
 #				if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1)
-		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular, skylightingSpecularSH, skylightingSpecularFadeOut);
+		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular, input.WorldPosition.xyz, skylightingSpecularSH, skylightingSpecularFadeOut);
 #				endif
 #			else
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(specularNormal, viewDirection, material.Roughness);
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(specularNormal, viewDirection, material.Roughness, input.WorldPosition.xyz);
 #				if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1)
-		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular);
+		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular, input.WorldPosition.xyz);
 #				endif
 #			endif
 #		else
@@ -3363,8 +3363,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(WETNESS_EFFECTS)
 	indirectLobeWeights.specular += wetnessReflectance;
-	if (waterRoughnessSpecular < 1) {
-		// Reflection is from the water film surface; wetnessReflectance scales intensity by wetness amount.
+	// The G-buffer holds one reflection lobe, so only let the water film take over when it is the smoother surface.
+	if (waterRoughnessSpecular < material.Roughness) {
 		screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false));
 		material.Roughness = waterRoughnessSpecular;
 	}

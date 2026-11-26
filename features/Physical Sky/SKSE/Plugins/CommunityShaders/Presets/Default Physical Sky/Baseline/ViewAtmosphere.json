@@ -1,0 +1,17 @@
+{
+    "depthDistribution": 8.0,
+    "distantPixelSize": 32,
+    "distantSlices": 64,
+    "enabled": 1,
+    "historyMissSamples": 4,
+    "historyWeight": 0.9599999785423279,
+    "localRange": 60000.0,
+    "lookupJitter": 1.0,
+    "middlePixelSize": 64,
+    "middleSlices": 32,
+    "nearPixelSize": 16,
+    "nearRange": 8000.0,
+    "nearSlices": 64,
+    "sampleJitter": 0.0,
+    "shadowBias": 0.0020000000949949026
+}

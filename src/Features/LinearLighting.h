@@ -32,7 +32,6 @@ struct LinearLighting : Feature
 
 	struct Settings
 	{
-		uint enableLinearLighting = true;
 		uint enableACEScg = false;
 		float gameGamma = 1.6f;
 		float diffuseGamma = 2.2f;

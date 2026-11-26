@@ -621,6 +621,8 @@ namespace SIE
 		 */
 		uint64_t GetCurrentFailedCount();
 		uint64_t GetTotalTasks();
+		/** @brief Standalone compiles queued or running, which IsCompiling() does not count. */
+		uint32_t GetStandalonePending() const { return standalonePending.load(std::memory_order_relaxed); }
 		uint64_t GetDiskHitTasks();
 		uint64_t GetContentDedupeTasks();
 		void IncCacheHitTasks();
@@ -691,6 +693,7 @@ namespace SIE
 		/** @brief Switches compilation mode, dropping unstarted precompiles when entering background mode, and wakes the dispatcher. */
 		void SetBackgroundCompilation(bool value);
 		std::atomic_bool backgroundCompilation{ false };
+		std::atomic<uint32_t> standalonePending{ 0 };  ///< EnqueueStandaloneShaderCompile calls whose callback has not returned.
 		bool menuLoaded = false;
 
 		enum class LightingShaderTechniques

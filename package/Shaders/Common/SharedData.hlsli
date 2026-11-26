@@ -9,6 +9,7 @@ namespace SharedData
 	static const uint TonemapOwnerVanilla = 0;
 	static const uint TonemapOwnerPostProcessing = 1;
 	static const uint TonemapOwnerEffects11 = 2;
+	static const uint TonemapOwnerPostProcessingFallback = 3;
 
 	cbuffer SharedData : register(b5)
 	{
@@ -589,6 +590,7 @@ namespace SharedData
 		uint dirLightDiskIndex;
 		float4 dirLightDisc;
 		float4 diskBillboardScale;
+		float4 moonDiscRadiance[2];  // Masser, Secunda; w = 0: rgb is radiance per texture colour, 1: rgb is mean * solid angle / light Y for the glare tint, -1: vanilla
 	};
 
 	struct RainRefractionSettings

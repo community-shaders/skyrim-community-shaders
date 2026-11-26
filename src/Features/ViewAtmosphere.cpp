@@ -546,7 +546,6 @@ void ViewAtmosphere::ClearShaderCache()
 	integrateCS = nullptr;
 	prepared = ready = false;
 	lastFrame = UINT32_MAX;
-	Unbind();
 }
 
 bool ViewAtmosphere::CompositeEnabled()

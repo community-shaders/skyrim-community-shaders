@@ -35,9 +35,12 @@ public:
 		/// `_metadata.enabled`; a disabled file is skipped at discovery.
 		bool enabled = true;
 
-		// Keys the feature does not serialize; while non-empty the file is not applied
+		// Keys the feature does not serialize; dropped from values when the file is applied
 		std::vector<std::string> unknownKeys;
 	};
+
+	static constexpr std::string_view kFailedToLoad = "failed to load";
+	static constexpr std::string_view kLoadedWithIgnoredKeys = "loaded with some settings ignored";
 
 	/** @brief Gets the singleton instance */
 	static BaselineManager* GetSingleton()
@@ -62,7 +65,7 @@ public:
 	 * @brief Applies the enabled Baseline files to a feature's settings JSON
 	 * @param featureName The short name of the feature
 	 * @param featureJson The feature's JSON settings to modify; when non-empty it is taken as the
-	 *        canonical shape, and files naming keys absent from it are skipped and reported
+	 *        canonical shape, and keys of files absent from it are dropped and reported
 	 * @return Number of files applied
 	 */
 	size_t ApplyBaselines(const std::string& featureName, json& featureJson);
@@ -101,9 +104,10 @@ public:
 	 * @param featureName Feature the file targets
 	 * @param errorMessage Description of the failure
 	 * @param filePath The file, for the issue's file details; may be empty
+	 * @param outcome What became of the file, worded into the issue message
 	 */
 	void ReportFailure(const std::string& packId, const std::string& featureName, const std::string& errorMessage,
-		const std::filesystem::path& filePath = {});
+		const std::filesystem::path& filePath = {}, std::string_view outcome = kFailedToLoad);
 
 	/**
 	 * @brief The Baseline file ExportSettings writes: `Presets/<packName>/Baseline/<Feature>.json`
@@ -187,12 +191,11 @@ private:
 	json SanitizeJsonData(const json& jsonData);
 
 	/**
-	 * @brief Reports whether a file names keys the feature does not serialize.
-	 * @param file The file to check; its unknownKeys verdict is refreshed when featureJson has a shape
-	 * @param featureJson Canonical settings blob, or an empty object to reuse the last verdict
-	 * @return True if the file must not be applied
+	 * @brief Drops from a file the keys the feature does not serialize, warning about them, so the rest still applies.
+	 * @param file The file to prune; the dropped keys are added to its unknownKeys
+	 * @param featureJson Canonical settings blob; an empty object has no shape and prunes nothing
 	 */
-	bool RejectsUnknownKeys(BaselineFile& file, const json& featureJson);
+	void PruneUnknownKeys(BaselineFile& file, const json& featureJson);
 
 	std::vector<BaselineFile> files;
 	std::unordered_map<std::string, std::vector<size_t>> featureFileMap;  // Maps feature name to file indices

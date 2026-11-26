@@ -202,14 +202,22 @@ float CloudScatteringSeries(float opticalDepth, float albedo)
 float CloudMaterialAlbedo(NDFInfo ndf)
 {
 	const float weather = VolumetricCloudBuffer[0].msAlbedo;
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+	return ndf.stormVolume ? lerp(weather, ndf.stormAlbedo, ndf.stormBlend) : weather;
+#else
 	return ndf.stormVolume ? lerp(weather, CloudStorms[ndf.stormIndex].driftDensity.w, ndf.stormBlend) : weather;
+#endif
 }
 
 float2 CloudMaterialAmbient(NDFInfo ndf)
 {
 	float2 result = CloudAmbientPhase.xy;
 	if (ndf.stormVolume) {
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+		const float2 storm = ndf.stormAmbientPhase;
+#else
 		const float2 storm = CloudStorms[ndf.stormIndex].ambientPhase.xy;
+#endif
 		const float scattering = lerp(result.x * result.y, storm.x * storm.y, ndf.stormBlend);
 		result.x = lerp(result.x, storm.x, ndf.stormBlend);
 		result.y = scattering / max(result.x, 1e-6);
@@ -224,14 +232,11 @@ struct CloudMsProfile
 	float4 coefficients;
 };
 
-CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
+/** @brief Multiple-scattering calibration for a layer whose extinction is normalized by densityScale. */
+CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf, float densityScale)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
 	const float width = min(info.msBoundaryWidth, max(ndf.altitude.y - ndf.altitude.x, 0.0) * (0.25 * GAME_UNIT_TO_M));
-	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z, ndf.stormBlend) : info.lowDensityScale;
-#ifdef CLOUD_VOXELS
-	densityScale += ndf.voxelBlend * (ndf.voxelDensityScale - info.lowDensityScale);
-#endif
 	const float referenceDepth = densityScale * width;
 	CloudMsProfile result = (CloudMsProfile)0;
 	result.densityScale = densityScale;
@@ -242,6 +247,13 @@ CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
 	const uint index = min((uint)coordinate, 47u);
 	float4 low = ndf.stormVolume ? CloudStorms[ndf.stormIndex].msCalibration[index] : CloudMsCalibration[index];
 	float4 high = ndf.stormVolume ? CloudStorms[ndf.stormIndex].msCalibration[index + 1u] : CloudMsCalibration[index + 1u];
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+	[branch] if (ndf.stormVolume && ndf.stormSecondaryBlend > 0.0)
+	{
+		low = lerp(low, CloudStorms[ndf.stormSecondaryIndex].msCalibration[index], ndf.stormSecondaryBlend);
+		high = lerp(high, CloudStorms[ndf.stormSecondaryIndex].msCalibration[index + 1u], ndf.stormSecondaryBlend);
+	}
+#endif
 	[branch] if (ndf.stormVolume && ndf.stormBlend < 1.0)
 	{
 		low = lerp(CloudMsCalibration[index], low, ndf.stormBlend);
@@ -249,6 +261,21 @@ CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
 	}
 	result.coefficients = lerp(low, high, coordinate - float(index));
 	return result;
+}
+
+/** @brief Low-cloud calibration, with the storm and voxel density scales blended in. */
+CloudMsProfile PrepareCloudMsProfile(NDFInfo ndf)
+{
+	const VolumetricCloudData info = VolumetricCloudBuffer[0];
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, ndf.stormDensity, ndf.stormBlend) : info.lowDensityScale;
+#else
+	float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z, ndf.stormBlend) : info.lowDensityScale;
+#endif
+#ifdef CLOUD_VOXELS
+	densityScale += ndf.voxelBlend * (ndf.voxelDensityScale - info.lowDensityScale);
+#endif
+	return PrepareCloudMsProfile(ndf, densityScale);
 }
 
 float CloudMultipleScattering(float extinction, NDFInfo ndf, CloudMsProfile calibration)
@@ -317,7 +344,7 @@ float3 ShadeCloudLighting(float3 pos, NDFInfo ndf, float extinction, float viewD
 		// Cloud-space z is relative to bottomZ; the heightmap is in world z.
 		const float3 worldPos = pos + float3(0, 0, VolumetricCloudBuffer[0].bottomZ);
 		sunTransmission *= TerrainShadows::GetTerrainShadow(worldPos, TransmittanceSampler);
-		[branch] if (sunTransmission > 0.0)
+		[branch] if (CloudCascadeShadows != 0u && sunTransmission > 0.0)
 			sunTransmission *= AtmosphereShadow::SampleCascadeShadow(worldPos - FrameBuffer::CameraPosAdjust.xyz);
 	}
 #endif
