@@ -651,8 +651,8 @@ private:
 	nlohmann::json BuildFeatureBase(Feature* feature);
 	/** @brief The part of a feature's settings that differs from its base: the user's edits. */
 	nlohmann::json DiffFromFeatureBase(const std::string& featureName, const nlohmann::json& current) const;
-	/** @brief Replaces each feature's full settings in a config with only the user's edits to it. */
-	void KeepOnlyUserEdits(nlohmann::json& settings);
+	/** @brief Strips a config to user edits; returns them for Save to commit. */
+	std::unordered_map<std::string, nlohmann::json> KeepOnlyUserEdits(nlohmann::json& settings) const;
 
 	/** @brief Writes the sections that are not feature settings; the caller holds m_mutex. */
 	void SaveCoreToJson(nlohmann::json& settings);
