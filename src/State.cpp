@@ -549,6 +549,9 @@ void State::Load(bool a_allowReload)
 		logger::info("No usable user config at: {}", userConfigFilePath.string());
 	}
 
+	// Before the layering below, so a newly applied default pack's Baseline and boot toggles take effect this launch.
+	const auto defaultPackBootToggles = UnifiedPresetCatalog::GetSingleton().ApplyDefaultPackIfNew();
+
 	// Step 3: Layer each feature's settings; the user's edits win over Baseline packs
 	BaselineManager::GetSingleton()->DiscoverFiles();
 	featureBases.clear();
@@ -594,6 +597,8 @@ void State::Load(bool a_allowReload)
 		}
 
 		json& disabledFeaturesJson = settings["Disable at Boot"];
+		if (defaultPackBootToggles)
+			disabledFeaturesJson.update(*defaultPackBootToggles);
 		logger::info("Loading 'Disable at Boot' settings");
 
 		// Load runs again on config switches; stale entries would otherwise outlive the config that set them.
@@ -643,6 +648,9 @@ void State::Load(bool a_allowReload)
 
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
 			logger::info("Found older config for version {}; upgrading to {}", (std::string)settings["Version"], Plugin::VERSION.string());
+			Save();
+		} else if (defaultPackBootToggles) {
+			// Unsaved, the pack's boot toggles would fall back to the feature defaults next launch.
 			Save();
 		}
 

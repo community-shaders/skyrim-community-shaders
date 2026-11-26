@@ -1,0 +1,24 @@
+{
+    "author": "Jiaye",
+    "csVersion": "2.0.0",
+    "description": "Default preset using the Beta Physical Sky feature and experimental Volumetric Clouds. Relies on vanilla weathers.",
+    "disableAtBoot": {
+        "ExponentialHeightFog": false,
+        "ImageBasedLighting": false,
+        "LinearLighting": false,
+        "PhysicalSky": false,
+        "PostProcessing": false,
+        "RainRefraction": false,
+        "SkySync": false,
+        "Skylighting": false,
+        "VolumetricLighting": false
+    },
+    "locationTransitionSeconds": 5.0,
+    "name": "Default Physical Sky",
+    "periodTransitionHours": 2.0,
+    "requiredFeatures": ["ExponentialHeightFog", "PhysicalSky", "Skylighting", "PostProcessing"],
+    "transitionEase": 1.0,
+    "type": "CS",
+    "version": "1.0.0",
+    "weatherTransitionScale": 1.0
+}

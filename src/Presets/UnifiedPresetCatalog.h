@@ -160,6 +160,11 @@ public:
 	 *  and the scene layer and form edits fall back to the user's own. */
 	void DisableActivePack();
 
+	/** @brief Makes the best shipped default pack active and enables its Baseline the first time it becomes available
+	 *  (every required feature installed) while no other preset is in use. Runs once per session, before features load.
+	 *  @return The applied pack's disableAtBoot object for the caller to merge, or nullopt when none was applied. */
+	std::optional<nlohmann::json> ApplyDefaultPackIfNew();
+
 	/** @brief Ids of packs whose Baseline overwrites are enabled, in layering order (a later pack wins conflicts). */
 	const std::vector<std::string>& GetBaselinePackIds() const { return baselinePackIds; }
 	/** @brief Whether a pack's Baseline overwrites are enabled. */
@@ -243,6 +248,8 @@ private:
 	std::vector<PackInfo> packs;
 	std::string activePackId;
 	std::vector<std::string> baselinePackIds;
+	/// Shipped default packs already available at a past boot, so each is applied at most once.
+	std::vector<std::string> defaultPacksSeen;
 	std::optional<PostProcessingMode::Mode> activePipeline;
 	uint32_t pipelineRevision = 0;
 	/// Pack id → the user's Effects 11 handoff choices for it, over the pack's own sceneControl.
