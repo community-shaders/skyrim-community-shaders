@@ -213,9 +213,17 @@ namespace
 		{
 			Util::HoverTip(T(TKEY("ndf_exponent_tooltip"), "Power applied after the remap. Above 1 thins out low values for sparser, more broken features; below 1 fills them in."));
 		}
+		void ExponentBeforeRemap()
+		{
+			Util::HoverTip(T(TKEY("ndf_exponent_before_remap_tooltip"), "Power applied before the remap; negative values become 0. Above 1 thins out low values; below 1 fills them in."));
+		}
 		void InputInterval()
 		{
 			Util::HoverTip(T(TKEY("ndf_input_interval_tooltip"), "Part of the signed noise range (-1 to 1) stretched onto the output interval. Values outside are clamped, so a narrower interval gives harder edges."));
+		}
+		void InputIntervalAfterPower()
+		{
+			Util::HoverTip(T(TKEY("ndf_input_interval_after_power_tooltip"), "Part of the 0 to 1 range left after the power, stretched onto the output interval. Values outside are clamped, so a narrower interval gives harder edges."));
 		}
 		void OutputInterval()
 		{
@@ -224,7 +232,15 @@ namespace
 	}
 }
 
-static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, bool power, const NdfNoiseLayer* defaults = nullptr)
+/// Where a layer applies its exponent, matching NdfGenerate.cs.hlsl.
+enum class NdfPower
+{
+	None,
+	AfterRemap,
+	BeforeRemap
+};
+
+static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, NdfPower power, const NdfNoiseLayer* defaults = nullptr)
 {
 	if (!ImGui::TreeNode(label))
 		return;
@@ -243,13 +259,19 @@ static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, bool power, co
 	NdfLayerTips::Frequency();
 	ImGui::DragFloat2(T(TKEY("ndf_offset"), "Offset"), &layer.offset.x, 0.005f);
 	NdfLayerTips::Offset();
-	if (power) {
+	if (power != NdfPower::None) {
 		ImGui::SliderFloat(T(TKEY("ndf_exponent"), "Exponent"), &layer.exponent, 0.01f, 8.f);
-		NdfLayerTips::Exponent();
+		if (power == NdfPower::BeforeRemap)
+			NdfLayerTips::ExponentBeforeRemap();
+		else
+			NdfLayerTips::Exponent();
 	}
 	ImGui::TextUnformatted(T(TKEY("ndf_remap"), "Remap"));
 	ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &layer.range.x, 0.01f, -16.f, 16.f);
-	NdfLayerTips::InputInterval();
+	if (power == NdfPower::BeforeRemap)
+		NdfLayerTips::InputIntervalAfterPower();
+	else
+		NdfLayerTips::InputInterval();
 	ImGui::DragFloat2(T(TKEY("ndf_output_interval"), "Output interval"), &layer.range.z, 0.01f, -16.f, 16.f);
 	NdfLayerTips::OutputInterval();
 	ImGui::TreePop();
@@ -257,11 +279,11 @@ static void DrawNdfLayer(const char* label, NdfNoiseLayer& layer, bool power, co
 
 static void DrawNdfParameters(NdfGenerationParameters& parameters)
 {
-	DrawNdfLayer(T(TKEY("ndf_primary_coverage"), "Primary coverage"), parameters.primary, true);
-	DrawNdfLayer(T(TKEY("ndf_secondary_coverage"), "Secondary coverage"), parameters.secondary, true);
-	DrawNdfLayer(T(TKEY("ndf_coverage_gain"), "Coverage gain"), parameters.coverageGain, false);
+	DrawNdfLayer(T(TKEY("ndf_primary_coverage"), "Primary coverage"), parameters.primary, NdfPower::AfterRemap);
+	DrawNdfLayer(T(TKEY("ndf_secondary_coverage"), "Secondary coverage"), parameters.secondary, NdfPower::AfterRemap);
+	DrawNdfLayer(T(TKEY("ndf_coverage_gain"), "Coverage gain"), parameters.coverageGain, NdfPower::None);
 	const auto defaultType = NdfGenerationParameters{}.modeling;
-	DrawNdfLayer(T(TKEY("ndf_top_type_noise"), "Top type / shared type noise"), parameters.modeling, true, &defaultType);
+	DrawNdfLayer(T(TKEY("ndf_top_type_noise"), "Top type / shared type noise"), parameters.modeling, NdfPower::AfterRemap, &defaultType);
 	if (ImGui::TreeNode(T(TKEY("ndf_bottom_type"), "Bottom type"))) {
 		ImGui::DragFloat2(T(TKEY("ndf_input_interval"), "Input interval"), &parameters.bottomTypeRange.x, 0.01f, -16.f, 16.f);
 		NdfLayerTips::InputInterval();
@@ -271,7 +293,7 @@ static void DrawNdfParameters(NdfGenerationParameters& parameters)
 		NdfLayerTips::Exponent();
 		ImGui::TreePop();
 	}
-	DrawNdfLayer(T(TKEY("ndf_type_gain"), "Type gain"), parameters.modelingGain, false);
+	DrawNdfLayer(T(TKEY("ndf_type_gain"), "Type gain"), parameters.modelingGain, NdfPower::None);
 	ImGui::PushID("heightAuxiliaryRange");
 	ImGui::TextUnformatted(T(TKEY("ndf_height_auxiliary"), "Bottom shaping start from top type"));
 	const auto shapingStartTip = [] {
@@ -290,7 +312,7 @@ static void DrawNdfParameters(NdfGenerationParameters& parameters)
 			parameters.heightFromCoverage = fromCoverage ? 1u : 0u;
 		Util::HoverTip(T(TKEY("ndf_height_from_coverage_tooltip"), "Drives bottom height variation from the final coverage instead of its own noise, so base height follows cloud density rather than an independent pattern."));
 	}
-	DrawNdfLayer(T(TKEY("ndf_bottom_height_variation"), "Bottom height variation"), parameters.heightVariation, true);
+	DrawNdfLayer(T(TKEY("ndf_bottom_height_variation"), "Bottom height variation"), parameters.heightVariation, NdfPower::BeforeRemap);
 	ImGui::DragFloat2(T(TKEY("ndf_weather_offset"), "Weather offset (m)"), &parameters.windOffset.x, 1.f);
 	Util::HoverTip(T(TKEY("ndf_weather_offset_tooltip"), "Static shift of the whole generated weather map. Use it to slide a different part of the pattern overhead without changing its shape."));
 }
@@ -392,7 +414,7 @@ void NdfManager::DrawNdfNoise(NdfSettings& settings, TextureManager& textures)
 			Util::HoverTip(T(TKEY("ndf_tile_repetitions_tooltip"), "How many times the generated pattern repeats inside the noise texture. Higher values make the repetition more visible."));
 			const uint32_t maxFrequency = std::min(128u, kNdfDim / (2u * std::clamp(noise.repetitions, 1u, maxRepetitions)));
 			ImGui::SliderScalar(T(TKEY("ndf_base_frequency"), "Base frequency"), ImGuiDataType_U32, &noise.frequency, &one, &maxFrequency);
-			Util::HoverTip(T(TKEY("ndf_base_frequency_tooltip"), "Number of noise cells across the texture for the first octave. Higher values give smaller features."));
+			Util::HoverTip(T(TKEY("ndf_base_frequency_tooltip"), "Number of noise cells across one tile repetition for the first octave. Higher values give smaller features."));
 			ImGui::SliderScalar(T(TKEY("ndf_octaves"), "Octaves"), ImGuiDataType_U32, &noise.octaves, &one, &maxOctaves);
 			Util::HoverTip(T(TKEY("ndf_octaves_tooltip"), "Number of progressively finer noise layers summed together. Octaves finer than the texture can resolve are skipped."));
 			ImGui::SliderScalar(T(TKEY("ndf_lacunarity"), "Lacunarity"), ImGuiDataType_U32, &noise.lacunarity, &one, &maxLacunarity);

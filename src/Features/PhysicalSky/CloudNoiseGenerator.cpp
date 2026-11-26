@@ -222,7 +222,7 @@ void CloudNoiseGenerator::DrawSettings(CloudNoiseSettings& settings)
 				auto& band = i < 4 ? settings.shape[i] : settings.warp[i - 4];
 				const uint32_t one = 1, maxFrequency = i < 4 ? 64 : 32, maxOctaves = 6;
 				ImGui::SliderScalar(T(TKEY("cloud_noise_frequency"), "Cells Per Tile"), ImGuiDataType_U32, &band.frequency, &one, &maxFrequency);
-				Util::HoverTip(T(TKEY("cloud_noise_frequency_tooltip"), "Number of noise cells across one tile of the shape texture. Higher values give smaller cloud features."));
+				Util::HoverTip(T(TKEY("cloud_noise_frequency_tooltip"), "Number of noise cells across one tile of the generated texture. Higher values give smaller features."));
 				ImGui::SliderScalar(T(TKEY("cloud_noise_octaves"), "Octaves"), ImGuiDataType_U32, &band.octaves, &one, &maxOctaves);
 				Util::HoverTip(T(TKEY("cloud_noise_octaves_tooltip"), "Number of progressively finer noise layers summed together."));
 				ImGui::SliderFloat(T(TKEY("cloud_noise_persistence"), "Detail Weight"), &band.persistence, 0.f, 1.f);
