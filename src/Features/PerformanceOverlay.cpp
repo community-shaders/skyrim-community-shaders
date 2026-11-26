@@ -115,7 +115,6 @@ static std::tuple<float, float, float> CalculateSummaryData(float smoothedFrameT
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PerformanceOverlay::Settings,
-	ShowInOverlay,
 	ShowWeatherPicker,
 	ShowDrawCalls,
 	ShowVRAM,
@@ -160,7 +159,7 @@ void PerformanceOverlay::DrawSettings()
 		}
 	};
 
-	if (!this->settings.ShowInOverlay) {
+	if (!IsOverlayVisible()) {
 		weatherPicker();
 		return;
 	}
@@ -221,7 +220,6 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::SameLine();
 		if (Util::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
 			RestoreDefaultSettings();
-			this->settings.ShowInOverlay = true;  // resets how the overlay looks, not whether it is shown
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("restore_defaults_tooltip"), "Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals."));
@@ -250,16 +248,19 @@ void PerformanceOverlay::SetProfilerGroupShown(std::string_view group, bool show
 	globals::state->InvalidateEditsUnderBaselines(this);
 }
 
+bool PerformanceOverlay::IsOverlayVisible() const
+{
+	return globals::menu->GetSettings().ShowPerformanceOverlay;
+}
+
 void PerformanceOverlay::SetShowInOverlay(bool shown)
 {
-	if (this->settings.ShowInOverlay == shown)
+	auto& menuSettings = globals::menu->GetSettings();
+	if (menuSettings.ShowPerformanceOverlay == shown)
 		return;
-	this->settings.ShowInOverlay = shown;
-
-	// Reached from the Profiling page's card, where nothing tracks this feature's edits.
-	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
-	globals::state->CheckFeatureSettingsChanged(this);
-	globals::state->InvalidateEditsUnderBaselines(this);
+	menuSettings.ShowPerformanceOverlay = shown;
+	// The hotkey works with the menu closed, so don't wait for it to close.
+	globals::state->SaveCoreSettings(::State::SELF_SAVING_SETTINGS);
 }
 
 void PerformanceOverlay::DrawProfilerGroupFilter()
@@ -375,7 +376,7 @@ void PerformanceOverlay::DrawOverlay()
 	if (!ImGui::GetCurrentContext()) {
 		return;
 	}
-	if (!this->settings.ShowInOverlay) {
+	if (!IsOverlayVisible()) {
 		return;
 	}
 

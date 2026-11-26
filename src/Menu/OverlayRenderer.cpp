@@ -351,7 +351,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
 			 effectFailed ||
-			 globals::features::performanceOverlay.settings.ShowInOverlay ||
+			 globals::features::performanceOverlay.IsOverlayVisible() ||
 			 globals::features::performanceOverlay.settings.ShowWeatherPicker ||
 			 renderDoc->ShouldShowOverlay());
 }

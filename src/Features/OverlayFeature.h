@@ -20,9 +20,8 @@ struct OverlayFeature : Feature
 	virtual void DrawOverlay() = 0;
 
 	/**
-     * @brief Whether this overlay should be visible when the global overlay is enabled.
+     * @brief Whether this overlay is currently shown.
      *
-     * Typically, this should return the value of a per-feature setting (e.g., ShowInOverlay).
      * If false, the overlay will not be drawn even if the global overlay is enabled.
      */
 	virtual bool IsOverlayVisible() const = 0;

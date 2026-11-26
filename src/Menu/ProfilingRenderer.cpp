@@ -318,7 +318,7 @@ void ProfilingRenderer::RenderPage()
 			overlayCard.statusColor = palette.Disable;
 		}
 	} else {
-		const bool on = overlay.settings.ShowInOverlay;
+		const bool on = overlay.IsOverlayVisible();
 		const auto hotkey = Util::Input::KeyIdToString(menu->GetSettings().OverlayToggleKey);
 		overlayStatus = std::vformat(on ? T("menu.profiling.overlay_turn_off", "Turn off ({})") : T("menu.profiling.overlay_turn_on", "Turn on ({})"), std::make_format_args(hotkey));
 		overlayCard.status = on ? T("menu.profiling.overlay_showing", "Showing") : T("menu.profiling.overlay_off", "Off");
@@ -341,10 +341,8 @@ void ProfilingRenderer::RenderPage()
 			const auto click = Util::OptionCard("##ToolCard", cards[i], selectedTab == tab, ImVec2(0.0f, height));
 			if (click != Util::OptionCardClick::None)
 				selectedTab = tab;
-			if (click == Util::OptionCardClick::Action && tab == Tab::PerformanceOverlay) {
-				const bool shown = !overlay.settings.ShowInOverlay;
-				FeatureListRenderer::RunFeatureCommand(&overlay, [&overlay, shown] { overlay.SetShowInOverlay(shown); });
-			}
+			if (click == Util::OptionCardClick::Action && tab == Tab::PerformanceOverlay)
+				overlay.SetShowInOverlay(!overlay.IsOverlayVisible());
 			ImGui::PopID();
 		}
 		ImGui::EndTable();
