@@ -318,6 +318,9 @@ std::string ColorTimeLabel(const int i);
  */
 std::string ColorTypeLabel(const int i);
 
+/** @brief Get a language-independent id for a weather colour type index, for persisted keys. */
+const char* ColorTypeId(const int i);
+
 enum ControlType
 {
 	INT8_SLIDER = 0,
