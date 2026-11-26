@@ -524,6 +524,8 @@ void UnifiedPresetCatalog::Discover()
 	PostProcessingPresets::MigrateLegacyPresets();
 	DiscoverUnifiedPacks();
 	DiscoverEffects11Presets();
+	// Not persisted here, so a pack hidden for one session (e.g. by MO2) keeps its place until the next save.
+	std::erase_if(baselinePackIds, [this](const std::string& id) { return !FindPack(id); });
 
 	// With nothing saved, the Legacy install still runs by default; show it as the active pack without persisting.
 	if (activePackId.empty() && !activePipeline && PresetManager::GetSingleton().IsLegacyActive() &&
