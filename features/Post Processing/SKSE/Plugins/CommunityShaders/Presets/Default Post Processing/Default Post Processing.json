@@ -1,0 +1,24 @@
+{
+    "author": "Jiaye",
+    "csVersion": "2.0.0",
+    "description": "Default preset using the Post Processing feature, Exponential Height fog and Procedural Sun. Relies on vanilla weathers.",
+    "disableAtBoot": {
+        "ExponentialHeightFog": false,
+        "ImageBasedLighting": false,
+        "LinearLighting": false,
+        "PostProcessing": false,
+        "ProceduralSun": false,
+        "RainRefraction": false,
+        "SkySync": false,
+        "Skylighting": false,
+        "VolumetricLighting": false
+    },
+    "locationTransitionSeconds": 5.0,
+    "name": "Default Post Processing",
+    "periodTransitionHours": 2.0,
+    "requiredFeatures": ["ExponentialHeightFog", "PostProcessing", "Skylighting"],
+    "transitionEase": 1.0,
+    "type": "CS",
+    "version": "1.0.0",
+    "weatherTransitionScale": 1.0
+}

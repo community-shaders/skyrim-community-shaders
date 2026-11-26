@@ -1,0 +1,11 @@
+{
+    "cloudOcclusionStrength": 3.0,
+    "diskIntensity": 800.0,
+    "edgeSoftness": 1.0,
+    "enabled": 1,
+    "haloAngularWidth": 0.0872664675116539,
+    "haloEnabled": 1,
+    "haloFalloff": 9.300000190734863,
+    "haloIntensity": 20.0,
+    "sunDiskAngularRadius": 0.009250245057046413
+}

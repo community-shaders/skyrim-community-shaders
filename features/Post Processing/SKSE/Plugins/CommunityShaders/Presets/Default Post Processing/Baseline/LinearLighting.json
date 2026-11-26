@@ -1,0 +1,22 @@
+{
+    "ambientMult": 1.0,
+    "bloodEffectMult": 1.0,
+    "deferredEffectMult": 1.0,
+    "diffuseGamma": 2.200000047683716,
+    "diffuseMidReflectance": 0.28717461228370667,
+    "diffuseWhiteReflectance": 1.0,
+    "directionalLightMult": 1.0,
+    "effectLightingMult": 0.3199999928474426,
+    "emitColorMult": 1.0,
+    "enableACEScg": 0,
+    "fireEffectCurve": 1.0,
+    "fireEffectMult": 1.0,
+    "gameGamma": 1.600000023841858,
+    "glowmapMult": 0.6600000262260437,
+    "lightSpriteEffectMult": 1.0,
+    "membraneEffectMult": 1.0,
+    "otherEffectMult": 1.0,
+    "particleEffectMult": 1.0,
+    "pointLightMult": 1.0,
+    "projectedEffectMult": 1.0
+}
