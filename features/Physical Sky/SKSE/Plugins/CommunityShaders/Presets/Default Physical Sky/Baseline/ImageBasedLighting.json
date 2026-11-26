@@ -1,0 +1,16 @@
+{
+    "DALCAmount": 1.0,
+    "DALCMode": 3,
+    "DisableInLoadingScreen": true,
+    "DisableInWorldMap": true,
+    "EnableIBL": 1,
+    "EnableReflectionFallback": 1,
+    "EnvIBLSaturation": 1.0,
+    "EnvIBLScale": 1.0,
+    "FogAmount": 0.0,
+    "PreserveFogLuminance": 0,
+    "ReflectionFallbackDistance": 4096.0,
+    "SkyIBLSaturation": 1.0,
+    "SkyIBLScale": 1.0,
+    "UseStaticIBL": 1
+}

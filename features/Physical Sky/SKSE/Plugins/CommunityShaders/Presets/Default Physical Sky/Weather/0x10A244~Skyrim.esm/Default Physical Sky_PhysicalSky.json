@@ -1,0 +1,77 @@
+{
+    "_feature": "PhysicalSky",
+    "_metadata": {
+        "description": "Physical Sky scene settings overwrite (Weather)",
+        "timeOfDayEnabled": true
+    },
+    "cloudLayer": {
+        "cirrus": {
+            "weather": {
+                "states": [
+                    {
+                        "value": {
+                            "layers": [
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 1,
+                                    "offset": [0.0, 0.0],
+                                    "range": [
+                                        -0.699999988079071, 0.8799999952316284, 0.0,
+                                        0.3700000047683716
+                                    ]
+                                },
+                                {
+                                    "frequency": 1.0,
+                                    "noise": 2,
+                                    "offset": [0.0, 0.0],
+                                    "range": [-1.0, 1.0, 1.0, 1.0]
+                                }
+                            ],
+                            "localBlendMode": 0,
+                            "localMap": "",
+                            "localWeight": 0.0,
+                            "localWindScale": 1.0
+                        },
+                        "weight": 1.0
+                    }
+                ]
+            }
+        }
+    },
+    "cloudMap": {
+        "procedural": {
+            "parameters": {
+                "coverageGain": {
+                    "offset": {
+                        "x": -0.27000001072883606,
+                        "y": 0.3149999976158142
+                    },
+                    "range": {
+                        "w": 1.7300000190734863,
+                        "x": -0.6499999761581421,
+                        "y": 0.8100000023841858,
+                        "z": -1.5099999904632568
+                    }
+                },
+                "modeling": {
+                    "range": {
+                        "w": 0.10000000149011612,
+                        "z": 0.0
+                    }
+                },
+                "primary": {
+                    "range": {
+                        "x": 0.27000001072883606,
+                        "y": 0.9100000262260437
+                    }
+                },
+                "secondary": {
+                    "range": {
+                        "w": 0.0,
+                        "z": 0.0
+                    }
+                }
+            }
+        }
+    }
+}

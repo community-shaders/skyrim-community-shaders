@@ -1,0 +1,11 @@
+{
+    "EnableIBL": 0,
+    "_feature": "ImageBasedLighting",
+    "_metadata": {
+        "coc": "",
+        "description": "Image Based Lighting scene settings overwrite (Worldspace)",
+        "targetName": "The Karthspire",
+        "targetType": "Worldspace",
+        "timeOfDayEnabled": false
+    }
+}

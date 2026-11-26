@@ -28,6 +28,9 @@
 
 namespace SunDisc
 {
+	// Below the FP16 and R11G11B10 maxima, so the disc never writes infinity
+	static const float MaxRadiance = 60000.0f;
+
 	// Disc-area mean of the Hestroffer profile, 2 * sum(a_k / (k + 2)); dividing by it keeps the disc's irradiance unchanged
 	static const float3 LimbDarkeningDiscMean = float3(0.83599f, 0.80015f, 0.75960f);
 

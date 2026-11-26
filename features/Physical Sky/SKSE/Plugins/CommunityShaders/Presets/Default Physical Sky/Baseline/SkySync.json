@@ -1,0 +1,25 @@
+{
+    "CrescentMoonIntensity": 0.25,
+    "CustomAngle": -35.0,
+    "DimSunlightUnderHorizon": true,
+    "DimVolumetricLighting": true,
+    "DisabledWorldspaces": [
+        "Blackreach",
+        "AlftandWorld",
+        "Sovngarde",
+        "DLC01SoulCairn",
+        "DLC01Boneyard",
+        "DLC2ApocryphaWorld"
+    ],
+    "Enabled": true,
+    "FullMoonIntensity": 1.0,
+    "HorizonElevation": -1.0,
+    "HorizonFadeElevation": 7.0,
+    "HorizonFadeHours": 0.699999988079071,
+    "MinShadowElevation": 7.0,
+    "MoonLightSource": 0,
+    "NewMoonIntensity": 0.05000000074505806,
+    "ShadowTransitionDuration": 300.0,
+    "SunPath": 1,
+    "UseAlternateSunPath": true
+}

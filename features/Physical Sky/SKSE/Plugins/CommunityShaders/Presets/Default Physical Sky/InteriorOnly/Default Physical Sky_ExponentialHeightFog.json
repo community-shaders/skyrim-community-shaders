@@ -1,0 +1,7 @@
+{
+    "_feature": "ExponentialHeightFog",
+    "_metadata": {
+        "description": "Exponential Height Fog scene settings overwrite (Interior Only)"
+    },
+    "enabled": 0
+}

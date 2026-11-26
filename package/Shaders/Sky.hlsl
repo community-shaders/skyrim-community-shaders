@@ -637,6 +637,12 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = vertexColor * baseColor.xyz + skyScale;
 
+#			if defined(PROCEDURAL_SUN) && defined(TEX)
+	// The disc intensity and HDR gain can multiply past the render target's range
+	if (standaloneSunActive)
+		psout.Color.xyz = clamp(psout.Color.xyz, 0.0f, SunDisc::MaxRadiance);
+#			endif
+
 #			if defined(EFFECTS11_PROCEDURAL_SUN)
 	[branch] if (proceduralSunActive)
 		psout.Color = ProceduralSun::ToAdditiveBlend(psout.Color, SharedData::enbSettings.ProceduralSunRadianceLimit);
