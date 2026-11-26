@@ -24,7 +24,8 @@ namespace TerrainShadows
 		return float2(GetTerrainZ(norm_z.x), GetTerrainZ(norm_z.y));
 	}
 
-	float GetTerrainShadow(const float3 worldPos, SamplerState samp)
+	/** @brief Terrain shadow whose z transition is at least minBlur wide, so a volume sample can span its cell. */
+	float GetTerrainShadow(const float3 worldPos, SamplerState samp, float minBlur)
 	{
 		if (!SharedData::terraOccSettings.EnableTerrainShadow)
 			return 1.0;
@@ -33,11 +34,16 @@ namespace TerrainShadows
 			return 1.0;
 		float2 shadowHeight = GetTerrainZ(ShadowHeightTexture.SampleLevel(samp, uv, 0));
 		// Blurring in z hides the heightmap's xy resolution; capped by the bias so lit flat terrain stays lit.
-		float zBlur = min(SharedData::terraOccSettings.ZBlur, SelfShadowBias);
+		float zBlur = max(min(SharedData::terraOccSettings.ZBlur, SelfShadowBias), minBlur);
 		float lowerHeight = shadowHeight.y - zBlur;
 		float transitionHeight = shadowHeight.x + zBlur - lowerHeight;
 		if (transitionHeight <= 0.0)
 			return worldPos.z >= shadowHeight.x ? 1.0 : 0.0;
 		return saturate((worldPos.z - lowerHeight) / transitionHeight);
+	}
+
+	float GetTerrainShadow(const float3 worldPos, SamplerState samp)
+	{
+		return GetTerrainShadow(worldPos, samp, 0.0);
 	}
 }

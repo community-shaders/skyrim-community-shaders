@@ -101,7 +101,11 @@ private:
 	winrt::com_ptr<ID3D11SamplerState> linearSampler, shadowSampler;
 	winrt::com_ptr<ID3D11ComputeShader> mediumCompositeCS;
 	std::unique_ptr<StructuredBuffer> reflectionParameters;
-	std::unique_ptr<Texture3D> reflectionLum, reflectionTr;
+	// Ping-pong: one pair is written while the other holds the previous result as history.
+	std::unique_ptr<Texture3D> reflectionLum[2], reflectionTr[2];
+	uint32_t reflectionIndex = 0;
+	uint32_t reflectionFrame = UINT32_MAX;
+	DirectX::XMUINT4 reflectionFlags{};
 	std::unique_ptr<Texture2D> reflectionSkySH;
 	winrt::com_ptr<ID3D11ComputeShader> reflectionCS, reflectionSkyCS;
 	winrt::com_ptr<ID3D11SamplerState> reflectionSampler;
