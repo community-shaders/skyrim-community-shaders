@@ -333,6 +333,9 @@ Compatibility is **group-aware**: members of one logical control (a colour, a ve
 `CopyGroupKey`, and one unusable member disqualifies the whole group, so a copy can never leave half a
 colour behind.
 
+**Tombstones copy too**, but only into a destination with an `Overwrite` at the same address and no tombstone
+there yet; elsewhere there is nothing for them to suppress, so they are left out of the candidates.
+
 **Conflicts** are compatible settings the destination already holds as a `User` entry.
 `CopyConflictPolicy::SkipExisting` leaves the whole conflicting group alone, `OverwriteExisting` replaces
 the value in place (keeping the existing `originalValue`), and `Cancel` aborts the entire operation and
