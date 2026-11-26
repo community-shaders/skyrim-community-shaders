@@ -1044,10 +1044,23 @@ void PhysicalSky::SettingsClouds()
 void PhysicalSky::DrawCloudStatus()
 {
 	const bool scene = SceneWidgetInterceptor::IsArmed();
+	static Util::ConfirmationPopup redesignWarning;
 
-	ImGui::Checkbox(T(TKEY("enable_volumetric_clouds"), "Enable Volumetric Clouds"), &settings.enableVolumetricClouds);
+	// Stays off until the warning is accepted; scene replicas bind the checkbox, so they skip it
+	if (ImGui::Checkbox(T(TKEY("enable_volumetric_clouds"), "Enable Volumetric Clouds"), &settings.enableVolumetricClouds) && settings.enableVolumetricClouds && !scene) {
+		settings.enableVolumetricClouds = false;
+		redesignWarning.title = std::format("{}###VolumetricCloudsRedesignWarning", T(TKEY("volumetric_clouds_warning_title"), "Experimental Volumetric Clouds"));
+		redesignWarning.message = T(TKEY("volumetric_clouds_warning"),
+			"Volumetric clouds are experimental and will be redesigned in upcoming updates. Their settings may be reset or lost after an update.");
+		redesignWarning.confirmLabel = T(TKEY("volumetric_clouds_warning_confirm"), "Enable Anyway");
+		redesignWarning.Request();
+	}
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("%s", T(TKEY("enable_volumetric_clouds_tooltip"), "Enable ray-marched volumetric clouds with NDF-based cloud shapes."));
+	ImGui::SameLine();
+	Util::Badge(T("feature.post_processing.experimental_badge", "Experimental"), Util::Colors::GetWarning());
+	if (redesignWarning.Draw())
+		settings.enableVolumetricClouds = true;
 
 	if (settings.enableVolumetricClouds) {
 		const bool ready = VolumetricCloudsEnabled() && ShadersOK();
