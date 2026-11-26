@@ -9,7 +9,6 @@
 
 namespace
 {
-	constexpr uint32_t LightingTechniqueStart = 0x4800002D;
 	constexpr uint32_t SeamsFlag = static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::LandscapeSeams);
 
 	constexpr uint32_t FlagPbr = 1u << 0;
@@ -683,8 +682,8 @@ struct LandscapeSeamsFix::Hooks
 				if (pass->shader->shaderType.get() != RE::BSShader::Type::Lighting)
 					continue;
 
-				auto technique = pass->passEnum - LightingTechniqueStart;
-				const auto type = static_cast<SIE::ShaderCache::LightingShaderTechniques>((technique >> 24) & 0x3F);
+				auto technique = pass->passEnum - SIE::ShaderCache::LightingTechniqueStart;
+				const auto type = SIE::ShaderCache::GetLightingTechnique(technique);
 				const bool landscape = type == SIE::ShaderCache::LightingShaderTechniques::MTLand || type == SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend;
 
 				// Vanilla packs a light count into the seams bit, so it is cleared on every other lighting pass.
@@ -694,7 +693,7 @@ struct LandscapeSeamsFix::Hooks
 					technique |= SeamsFlag;
 				else
 					technique &= ~SeamsFlag;
-				pass->passEnum = technique + LightingTechniqueStart;
+				pass->passEnum = technique + SIE::ShaderCache::LightingTechniqueStart;
 			}
 
 			return renderPasses;
@@ -706,7 +705,7 @@ struct LandscapeSeamsFix::Hooks
 	{
 		static void thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags)
 		{
-			if (a_pass != nullptr && ((a_pass->passEnum - LightingTechniqueStart) & SeamsFlag) != 0)
+			if (a_pass != nullptr && ((a_pass->passEnum - SIE::ShaderCache::LightingTechniqueStart) & SeamsFlag) != 0)
 				GetInstance().Bind(a_pass->geometry);
 			func(a_shader, a_pass, a_renderFlags);
 		}
@@ -745,7 +744,7 @@ void LandscapeSeamsFix::GenerateShaderPermutations(RE::BSShader* a_shader)
 	auto state = globals::state;
 	auto shaderCache = globals::shaderCache;
 	for (const auto& entry : a_shader->pixelShaders) {
-		const auto type = static_cast<SIE::ShaderCache::LightingShaderTechniques>((entry->id >> 24) & 0x3F);
+		const auto type = SIE::ShaderCache::GetLightingTechnique(entry->id);
 		if (type != SIE::ShaderCache::LightingShaderTechniques::MTLand && type != SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend)
 			continue;
 

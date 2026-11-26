@@ -1392,11 +1392,11 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 									   (uint32_t)SIE::ShaderCache::LightingShaderFlags::BaseObjectIsSnow);
 
 				{
-					uint32_t technique = 0x3F & (a_pixelDescriptor >> 24);
-					if (technique != (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODLand &&
-						technique != (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODLandNoise &&
-						technique != (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODObjects &&
-						technique != (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODObjectHD)
+					const auto technique = SIE::ShaderCache::GetLightingTechnique(a_pixelDescriptor);
+					if (technique != SIE::ShaderCache::LightingShaderTechniques::LODLand &&
+						technique != SIE::ShaderCache::LightingShaderTechniques::LODLandNoise &&
+						technique != SIE::ShaderCache::LightingShaderTechniques::LODObjects &&
+						technique != SIE::ShaderCache::LightingShaderTechniques::LODObjectHD)
 						a_pixelDescriptor &= ~((uint32_t)SIE::ShaderCache::LightingShaderFlags::Specular |
 											   (uint32_t)SIE::ShaderCache::LightingShaderFlags::SoftLighting |
 											   (uint32_t)SIE::ShaderCache::LightingShaderFlags::RimLighting |
@@ -1414,21 +1414,21 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 					a_pixelDescriptor |= (uint32_t)SIE::ShaderCache::LightingShaderFlags::Deferred;
 
 				{
-					uint32_t technique = 0x3F & (a_vertexDescriptor >> 24);
-					if (technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::Glowmap ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::Parallax ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::Facegen ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::FacegenRGBTint ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODObjects ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::LODObjectHD ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::MultiIndexSparkle ||
-						technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::Hair)
+					const auto technique = SIE::ShaderCache::GetLightingTechnique(a_vertexDescriptor);
+					if (technique == SIE::ShaderCache::LightingShaderTechniques::Glowmap ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::Parallax ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::Facegen ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::FacegenRGBTint ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::LODObjects ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::LODObjectHD ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::MultiIndexSparkle ||
+						technique == SIE::ShaderCache::LightingShaderTechniques::Hair)
 						a_vertexDescriptor &= ~(0x3F << 24);
 				}
 
 				{
-					uint32_t technique = 0x3F & (a_pixelDescriptor >> 24);
-					if (technique == (uint32_t)SIE::ShaderCache::LightingShaderTechniques::Glowmap)
+					const auto technique = SIE::ShaderCache::GetLightingTechnique(a_pixelDescriptor);
+					if (technique == SIE::ShaderCache::LightingShaderTechniques::Glowmap)
 						a_pixelDescriptor &= ~(0x3F << 24);
 				}
 			}
