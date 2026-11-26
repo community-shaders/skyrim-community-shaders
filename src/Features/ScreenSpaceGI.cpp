@@ -855,7 +855,7 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(7) = texIlY[inputGITexIdx]->srv.get();
 		srvs.at(8) = texIlCoCg[inputGITexIdx]->srv.get();
 		srvs.at(9) = texGiSpecular[inputAoTexIdx]->srv.get();
-		srvs.at(10) = nullptr;
+		srvs.at(10) = Util::GetCurrentSceneDepthSRV();
 
 		uavs.at(0) = texRadianceTemp->uav.get();
 		uavs.at(1) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
