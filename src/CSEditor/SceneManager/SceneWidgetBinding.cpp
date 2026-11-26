@@ -1539,13 +1539,13 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 				manager->RecordBaselineEdit(ComponentIdentity(component), ReadEditedValue(component));
 		}
 		if (const auto tooltip = ResolveBaselineTooltip(); !tooltip.empty())
-			Util::AddTooltip(tooltip.c_str(), Util::kTooltipWhenDisabled);
+			Util::HoverTip(tooltip.c_str());
 		return a_changed;
 	}
 	// Both were greyed, so neither took input: no gutter to own and nothing to commit. Words are all a
 	// greyed control has left, and without them it reads as broken rather than barred.
 	if (state == State::Unbound || state == State::Unavailable) {
-		Util::AddTooltip(ResolveStatusTooltip().c_str(), Util::kTooltipWhenDisabled);
+		Util::HoverTip(ResolveStatusTooltip().c_str());
 		if (ImGui::IsItemHovered(Util::kTooltipWhenDisabled)) {
 			const bool ctrlClick = ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 			                       (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl));
@@ -1585,9 +1585,10 @@ bool SceneWidgetBinding::Guard::Finish(bool a_changed)
 	ImGui::GetCurrentContext()->LastItemData = controlItem;
 
 	// The tint says only that something else holds this value; the gutter's words say what. Drawn
-	// before the feature's own tooltip, which appends to the same window once the call returns.
+	// before the feature's own tooltip, which appends to the same window once the call returns, so
+	// HoverTip leaves placement to ImGui: a position fitted to this line alone would clip the rest.
 	if (ResolveProvenanceColor())
-		Util::AddTooltip(ResolveStatusTooltip().c_str(), Util::kTooltipWhenDisabled);
+		Util::HoverTip(ResolveStatusTooltip().c_str());
 
 	// A paused control must never report a change: nothing behind it moved.
 	return state == State::Paused ? false : a_changed;

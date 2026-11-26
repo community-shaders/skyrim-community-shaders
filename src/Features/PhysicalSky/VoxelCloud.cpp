@@ -462,10 +462,14 @@ void VoxelCloudManager::DrawSettings(SceneBlend& selection, const std::string& w
 			changed |= ImGui::Checkbox(T(TKEY("voxel_enabled"), "Enable placement"), &placement.enabled);
 			changed |= ImGui::InputText(T(TKEY("voxel_worldspace"), "Worldspace Editor ID"), &placement.worldspace);
 			changed |= ImGui::DragFloat3(T(TKEY("voxel_center"), "Center X / Y / Z (m)"), &placement.center.x, 1.f);
+			Util::HoverTip(T(TKEY("voxel_center_tooltip"), "World position of the volume's center in metres. Z is measured from the worldspace ground level."));
 			changed |= ImGui::DragFloat3(T(TKEY("voxel_rotation"), "Rotation X / Y / Z (degrees)"), &placement.rotation.x, 1.f);
 			changed |= ImGui::DragFloat(T(TKEY("voxel_scale"), "Uniform scale"), &placement.scale, .01f, .001f, 100.f);
+			Util::HoverTip(T(TKEY("voxel_scale_tooltip"), "Scales the whole volume evenly, applied after the bounding box size."));
 			changed |= ImGui::SliderFloat(T(TKEY("voxel_strength"), "Height reveal"), &placement.strength, 0.f, 1.f);
+			Util::HoverTip(T(TKEY("voxel_strength_tooltip"), "Reveals the cloud from its top down along its local height. 1 shows the whole volume; lower values keep only the upper part; 0 hides it."));
 			changed |= ImGui::DragFloat(T(TKEY("voxel_density"), "Density multiplier"), &placement.density, .01f, 0.f, 10.f);
+			Util::HoverTip(T(TKEY("voxel_density_tooltip"), "Multiplies the volume's extinction. Higher values make the cloud more opaque and darker inside."));
 			if (const auto found = assets.find(placement.asset); found != assets.end()) {
 				const auto& asset = found->second;
 				float boxSize = placement.boxSize > 0.f ? placement.boxSize : std::max({ asset.size.x, asset.size.y, asset.size.z });
@@ -473,16 +477,19 @@ void VoxelCloudManager::DrawSettings(SceneBlend& selection, const std::string& w
 					placement.boxSize = boxSize;
 					changed = true;
 				}
+				Util::HoverTip(T(TKEY("voxel_box_size_tooltip"), "Length of the volume's longest side. The other sides keep the asset's proportions."));
 				float frequency = placement.noiseFrequency > 0.f ? placement.noiseFrequency : asset.noiseFrequency;
 				if (ImGui::DragFloat(T(TKEY("voxel_noise_frequency"), "Noise frequency multiplier"), &frequency, .01f, .001f, 100.f)) {
 					placement.noiseFrequency = frequency;
 					changed = true;
 				}
+				Util::HoverTip(T(TKEY("voxel_noise_frequency_tooltip"), "Scales the detail noise that erodes the volume. Higher values give smaller, busier detail."));
 				float adjustment = placement.noiseFrequencyAdjustmentDistance >= 0.f ? placement.noiseFrequencyAdjustmentDistance : asset.noiseFrequencyAdjustmentDistance;
 				if (ImGui::DragFloat(T(TKEY("voxel_noise_adjustment"), "Noise frequency adjustment distance (m)"), &adjustment, 1.f, 0.f, 100000.f)) {
 					placement.noiseFrequencyAdjustmentDistance = adjustment;
 					changed = true;
 				}
+				Util::HoverTip(T(TKEY("voxel_noise_adjustment_tooltip"), "Kept from the source asset for reference. The current voxel shader does not use it."));
 				bool mips = placement.noiseMipsEnabled >= 0 ? placement.noiseMipsEnabled != 0 : asset.noiseMipsEnabled;
 				if (ImGui::Checkbox(T(TKEY("voxel_noise_mips"), "Adjust noise detail with distance"), &mips)) {
 					placement.noiseMipsEnabled = mips ? 1 : 0;
@@ -495,6 +502,7 @@ void VoxelCloudManager::DrawSettings(SceneBlend& selection, const std::string& w
 					changed = true;
 				}
 				ImGui::EndDisabled();
+				Util::HoverTip(T(TKEY("voxel_noise_mip_distance_tooltip"), "Distance at which noise detail drops by one level. Larger values keep fine detail farther away."));
 				if (ImGui::Button(T(TKEY("voxel_asset_defaults"), "Restore default size and noise settings"))) {
 					placement.boxSize = placement.noiseFrequency = placement.noiseMipDistance = 0.f;
 					placement.noiseFrequencyAdjustmentDistance = -1.f;

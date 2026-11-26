@@ -203,6 +203,7 @@ void CloudNoiseGenerator::DrawSettings(CloudNoiseSettings& settings)
 	if (!ImGui::TreeNode(T(TKEY("cloud_noise_inputs"), "Cloud Noise Inputs")))
 		return;
 	ImGui::Checkbox(T(TKEY("procedural_cloud_noise"), "Procedural Noise"), &settings.procedural);
+	Util::HoverTip(T(TKEY("procedural_cloud_noise_tooltip"), "Generates the cloud shape noise on the GPU from the settings below instead of loading it from DDS textures."));
 	if (settings.procedural) {
 		if (ImGui::Button(T(TKEY("reset_cloud_noise"), "Reset Noise Defaults")))
 			settings = {};
@@ -221,13 +222,21 @@ void CloudNoiseGenerator::DrawSettings(CloudNoiseSettings& settings)
 				auto& band = i < 4 ? settings.shape[i] : settings.warp[i - 4];
 				const uint32_t one = 1, maxFrequency = i < 4 ? 64 : 32, maxOctaves = 6;
 				ImGui::SliderScalar(T(TKEY("cloud_noise_frequency"), "Cells Per Tile"), ImGuiDataType_U32, &band.frequency, &one, &maxFrequency);
+				Util::HoverTip(T(TKEY("cloud_noise_frequency_tooltip"), "Number of noise cells across one tile of the shape texture. Higher values give smaller cloud features."));
 				ImGui::SliderScalar(T(TKEY("cloud_noise_octaves"), "Octaves"), ImGuiDataType_U32, &band.octaves, &one, &maxOctaves);
+				Util::HoverTip(T(TKEY("cloud_noise_octaves_tooltip"), "Number of progressively finer noise layers summed together."));
 				ImGui::SliderFloat(T(TKEY("cloud_noise_persistence"), "Detail Weight"), &band.persistence, 0.f, 1.f);
+				Util::HoverTip(T(TKEY("cloud_noise_persistence_tooltip"), "Weight of each finer octave relative to the previous one. Higher values keep more small-scale detail."));
 				ImGui::SliderFloat(T(TKEY("cloud_noise_response"), "Response Exponent"), &band.exponent, 0.1f, 6.f);
+				Util::HoverTip(T(TKEY("cloud_noise_response_tooltip"), "Power applied to the noise. Above 1 darkens its low values; below 1 brightens them."));
 				ImGui::SliderFloat(T(TKEY("cloud_noise_contrast"), "Contrast"), &band.contrast, 0.f, 6.f);
+				Util::HoverTip(T(TKEY("cloud_noise_contrast_tooltip"), "Stretches the noise around its midpoint. Higher values push more of it toward black or white."));
 				ImGui::SliderFloat(T(TKEY("cloud_noise_bias"), "Bias"), &band.bias, -1.f, 1.f);
-				if (i == 0)
+				Util::HoverTip(T(TKEY("cloud_noise_bias_tooltip"), "Value added to the noise, shifting the whole channel brighter or darker."));
+				if (i == 0) {
 					ImGui::SliderFloat(T(TKEY("cloud_noise_perlin_mix"), "Perlin Blend"), &band.perlinMix, 0.f, 1.f);
+					Util::HoverTip(T(TKEY("cloud_noise_perlin_mix_tooltip"), "Blends Perlin noise into the Worley billows, filling the gaps between round cells where the Perlin noise is high."));
+				}
 				if (i > 0 && i < 4)
 					ImGui::TextUnformatted(T(TKEY("cloud_noise_alligator"), "Alligator Noise"));
 				ImGui::TreePop();
@@ -235,6 +244,7 @@ void CloudNoiseGenerator::DrawSettings(CloudNoiseSettings& settings)
 			ImGui::PopID();
 		}
 		ImGui::SliderFloat(T(TKEY("cloud_noise_warp_correlation"), "Warp Correlation"), &settings.warpCorrelation, -1.f, 1.f);
+		Util::HoverTip(T(TKEY("cloud_noise_warp_correlation_tooltip"), "Correlation between the X and Y warp noises. 0 warps the axes independently; 1 moves them together and -1 in opposite directions."));
 		if (pending)
 			ImGui::ProgressBar(static_cast<float>(nextSlice) / kShapeSize, { -1, 0 }, T(TKEY("cloud_noise_generating"), "Generating noise"));
 		if (!shapeProgram || !adjustmentProgram || !adjustmentMipProgram)
