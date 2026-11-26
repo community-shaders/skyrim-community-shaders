@@ -53,6 +53,12 @@ float3 CirrusBoundaryRadiance(float3 position, float3 direction, float3 incoming
 	return radiance + transmission * incoming;
 }
 
+/** @brief Shared low-cloud calibration, normalized by the middle deck's own density so a fading low layer cannot saturate it. */
+CloudMsProfile PrepareMiddleMsProfile(NDFInfo material)
+{
+	return PrepareCloudMsProfile(material, VolumetricCloudBuffer[0].middleLayer.z);
+}
+
 // Lighting consumes optical properties, not weather textures or shape noises.
 // Keep the phase, solar spectrum and scattering calibration shared with low cloud.
 float3 MiddleDirectSource(float3 position, float3 direction, float extinction, float height, float lightDepth, float viewDepth, float opacity)
@@ -62,7 +68,7 @@ float3 MiddleDirectSource(float3 position, float3 direction, float extinction, f
 	material.height_fraction = height;
 	material.altitude = VolumetricCloudBuffer[0].middleLayer.xy;
 	return ShadeCloudLighting(position, material, extinction, viewDepth, opacity,
-		CloudLowPhase(direction), lightDepth, CloudMultipleScattering(extinction, material),
+		CloudLowPhase(direction), lightDepth, CloudMultipleScattering(extinction, material, PrepareMiddleMsProfile(material)),
 		exp(-CirrusSunDepth(position) * VolumetricCloudBuffer[0].sunExtinction));
 }
 
@@ -72,7 +78,7 @@ float3 MiddleDirectSource(float3 position, float3 direction, float4 materialSamp
 	NDFInfo material;
 	initNDFInfo(material);
 	material.altitude = info.middleLayer.xy;
-	const CloudMsProfile calibration = PrepareCloudMsProfile(material);
+	const CloudMsProfile calibration = PrepareMiddleMsProfile(material);
 	const float phase = CloudLowPhase(direction);
 	const float cirrus = exp(-CirrusSunDepth(position) * info.sunExtinction);
 	float3 source = 0.0;
