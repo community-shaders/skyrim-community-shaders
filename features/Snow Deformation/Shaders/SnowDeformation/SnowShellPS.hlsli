@@ -5,11 +5,13 @@ SamplerState ShellLinearSampler : register(s1);
 #define LinearSampler ShellLinearSampler
 #include "Common/ShadowSampling.hlsli"
 #include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
-#include "Skylighting/Skylighting.hlsli"
+#if defined(SNOW_SKYLIGHTING)
+#	include "Skylighting/Skylighting.hlsli"
+#endif
 #include "SnowDeformation/SnowShadow.hlsli"
 #define EM_PARALLAX_CUSTOM_HEIGHT
 float EMParallaxCustomHeight(float2 uv, float mip);
-#ifndef TERRAIN_VARIATION
+#if defined(SNOW_TERRAIN_VARIATION) && !defined(TERRAIN_VARIATION)
 #	define TERRAIN_VARIATION
 #	define SNOW_EM_TERRAIN_VARIATION
 #endif

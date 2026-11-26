@@ -23,5 +23,6 @@ struct CloudStormData
 	CloudStormParcel parcels[8];
 	float4 plumeLower;
 	float4 plumeUpper;
+	float4 lifecycle;
 };
 #endif

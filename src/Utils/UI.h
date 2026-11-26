@@ -722,6 +722,11 @@ namespace Util
 		const char* title = "";              /**< @brief Heading-sized title. */
 		const char* status = nullptr;        /**< @brief Short status line under the title, or null. */
 		ImVec4 statusColor{ 1, 1, 1, 1 };    /**< @brief Colour of the status line. */
+		const char* status2 = nullptr;       /**< @brief Second status segment after a divider, in its own colour, or null. */
+		ImVec4 status2Color{ 1, 1, 1, 1 };   /**< @brief Colour of the second status segment. */
+		const char* cornerIcon = nullptr;    /**< @brief Tabler glyph of a small button on the top right corner (e.g. a power toggle), or null. */
+		const char* cornerTooltip = nullptr; /**< @brief Hover text of the corner button, or null. */
+		bool cornerActive = false;           /**< @brief Tints the corner button with the accent while the option is on. */
 		const char* description = nullptr;   /**< @brief Wrapped secondary text, or null. */
 		const char* action = nullptr;        /**< @brief Label of a button along the card's bottom edge, or null for none. */
 		const char* actionTooltip = nullptr; /**< @brief Hover text of the action button, or null. */
@@ -733,7 +738,7 @@ namespace Util
 	{
 		None,
 		Card,  /**< @brief The card itself: select it. */
-		Action /**< @brief The action button. */
+		Action /**< @brief The action or corner button. */
 	};
 
 	/** @brief Height an OptionCard needs to show its content at a given width; take the max to line up a row of cards. */
@@ -943,6 +948,12 @@ namespace Util
 
 	/** @brief Slider that shows a 0..1 member as a percentage (lb..ub) and writes back only on edit. */
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%", ImGuiSliderFlags flags = 0);
+
+	/**
+	 * @brief Drop-in for ImGui::ColorEdit3 that keeps HDR HSV inputs bounded: H and S in [0, 1], V from 0 up.
+	 * ImGui leaves all three unbounded under ImGuiColorEditFlags_HDR, and its HSV conversion breaks outside [0, 1].
+	 */
+	bool ColorEdit3(const char* label, float col[3], ImGuiColorEditFlags flags = 0);
 
 	/**
 	 * Draws a 2-4 component float slider. Holding Shift edits all components from the first component.

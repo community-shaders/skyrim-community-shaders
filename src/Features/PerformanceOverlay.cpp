@@ -26,6 +26,7 @@
 #include "Features/Upscaling.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "IconsTabler.h"
 #include "Menu.h"
 #include "Menu/ProfilingRenderer.h"
 #include "State.h"
@@ -149,43 +150,30 @@ static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTool
 
 void PerformanceOverlay::DrawSettings()
 {
-	auto menu = Menu::GetSingleton();
-	const auto& themeSettings = menu->GetTheme();
-	const auto& menuSettings = menu->GetSettings();
-	ImGui::Checkbox(T(TKEY("show_in_overlay"), "Enable Performance Overlay"), &this->settings.ShowInOverlay);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("show_in_overlay_tooltip"), "Opens performance overlay in a separate window that stays open\neven when the main menu is closed. "));
-		ImGui::Text("%s", T(TKEY("toggle_with"), "Toggle with "));
-		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
-			Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
+	// The overlay itself is switched on and off by the power button on the Profiling page's card
+
+	const auto weatherPicker = [&] {
+		// Independent of the performance overlay: works with the overlay switched off.
+		ImGui::Checkbox(T(TKEY("show_weather_picker"), "Enable Weather Picker Widget"), &this->settings.ShowWeatherPicker);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T(TKEY("show_weather_picker_tooltip"), "Opens the weather picker, with weather details and rain & wetness analysis,\nin a separate window that stays open even when the main menu is closed."));
+		}
+	};
+
+	if (!this->settings.ShowInOverlay) {
+		weatherPicker();
+		return;
 	}
 
-	// Independent of the performance overlay: works with the overlay above switched off.
-	ImGui::SameLine();
-	ImGui::Checkbox(T(TKEY("show_weather_picker"), "Enable Weather Picker Widget"), &this->settings.ShowWeatherPicker);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("show_weather_picker_tooltip"), "Opens the weather picker, with weather details and rain & wetness analysis,\nin a separate window that stays open even when the main menu is closed."));
-		ImGui::Text("%s", T(TKEY("toggle_with"), "Toggle with "));
-		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
-			Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
-	}
-
-	if (this->settings.ShowInOverlay) {
-		ImGui::Indent();
-
-		// Display options
-		ImGui::TextUnformatted(T(TKEY("display_options"), "Display Options"));
-		ImGui::Separator();
-
+	{
+		Util::SectionCard card("##OverlayDisplay", ICON_TI_EYE, T(TKEY("display_options"), "Display Options"));
+		Util::SettingColumns columns("##OverlayDisplayColumns", 3, 9.0f);
 		ImGui::Checkbox(T(TKEY("show_fps"), "Show FPS Counter"), &this->settings.ShowFPS);
 		ImGui::Checkbox(T(TKEY("show_draw_calls"), "Show Draw Calls"), &this->settings.ShowDrawCalls);
+		columns.Next();
 		ImGui::Checkbox(T(TKEY("show_vram"), "Show VRAM Usage"), &this->settings.ShowVRAM);
 		ImGui::Checkbox(T(TKEY("show_cs_passes"), "Show CS Render Passes"), &this->settings.ShowCSPasses);
-		if (this->settings.ShowCSPasses)
-			DrawProfilerGroupFilter();
-
+		columns.Next();
 		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
 			ImGui::Checkbox(T(TKEY("show_pre_fg_graph"), "Show Pre-FG Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
@@ -199,25 +187,34 @@ void PerformanceOverlay::DrawSettings()
 		} else if (this->settings.ShowFPS) {
 			ImGui::Checkbox(T(TKEY("show_frametime_graph"), "Show Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
 		}
+		weatherPicker();
+	}
 
-		ImGui::Spacing();
-		ImGui::Spacing();
+	// Collapsed by default: a chip per feature takes several rows
+	if (this->settings.ShowCSPasses && ImGui::CollapsingHeader(T(TKEY("pass_filter"), "Pass Filter")))
+		DrawProfilerGroupFilter();
 
-		// Appearance settings
-		ImGui::TextUnformatted(T(TKEY("appearance"), "Appearance"));
-		ImGui::Separator();
+	{
+		Util::SectionCard card("##OverlayAppearance", ICON_TI_PALETTE, T(TKEY("appearance"), "Appearance"));
+		{
+			Util::SettingColumns columns("##OverlayAppearanceColumns", 2, 14.0f);
+			Util::FitNextItemWithLabel(T(TKEY("text_size"), "Text Size"));
+			ImGui::SliderFloat(T(TKEY("text_size"), "Text Size"), &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
+			Util::FitNextItemWithLabel(T(TKEY("bg_opacity"), "Background Opacity"));
+			ImGui::SliderFloat(T(TKEY("bg_opacity"), "Background Opacity"), &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+			columns.Next();
+			Util::FitNextItemWithLabel(T(TKEY("update_interval"), "FPS Smoothing"));
+			ImGui::SliderFloat(T(TKEY("update_interval"), "FPS Smoothing"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f s");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::TextUnformatted(T(TKEY("update_interval_tooltip"), "How long the FPS readout averages over. It updates every frame; higher values steady it, lower values follow changes faster. Avg and 1% low refresh at this rate too (at most 4 times a second)."));
+			Util::FitNextItemWithLabel(T(TKEY("frame_history_size"), "Frame History Size"));
+			ImGui::SliderInt(T(TKEY("frame_history_size"), "Frame History Size"), &this->settings.FrameHistorySize,
+				this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize, "%d", ImGuiSliderFlags_AlwaysClamp);
+		}
 
-		ImGui::SliderFloat(T(TKEY("text_size"), "Text Size"), &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
-		ImGui::SliderFloat(T(TKEY("bg_opacity"), "Background Opacity"), &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+		// Position is part of the appearance: the buttons share a line with the border toggle
 		ImGui::Checkbox(T(TKEY("show_border"), "Show Border"), &this->settings.ShowBorder);
-		ImGui::SliderFloat(T(TKEY("update_interval"), "FPS Smoothing"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::TextUnformatted(T(TKEY("update_interval_tooltip"), "How long the FPS readout averages over. It updates every frame; higher values steady it, lower values follow changes faster. Avg and 1% low refresh at this rate too (at most 4 times a second)."));
-		ImGui::SliderInt(T(TKEY("frame_history_size"), "Frame History Size"), &this->settings.FrameHistorySize,
-			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize, "%d", ImGuiSliderFlags_AlwaysClamp);
-
-		ImGui::Separator();
-		ImGui::Text("%s", T(TKEY("position"), "Position:"));
+		ImGui::SameLine();
 		if (Util::Button(T(TKEY("reset_position"), "Reset Position"))) {
 			this->settings.PositionSet = false;
 		}
@@ -228,8 +225,6 @@ void PerformanceOverlay::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("restore_defaults_tooltip"), "Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals."));
 		}
-
-		ImGui::Unindent();
 	}
 }
 
@@ -275,11 +270,9 @@ void PerformanceOverlay::DrawProfilerGroupFilter()
 			groups.push_back(group);
 	}
 
-	ImGui::Indent();
 	Util::SettingHint(T(TKEY("pass_filter_hint"), "Pick which features' passes the graph shows. Right-click a group on the Profiling page, or use a feature's cost chip, to do the same."), false);
 	if (groups.empty()) {
 		ImGui::TextDisabled("%s", T("menu.profiling.no_timing_data_world", "No timing data available (enter game world)"));
-		ImGui::Unindent();
 		return;
 	}
 
@@ -316,7 +309,6 @@ void PerformanceOverlay::DrawProfilerGroupFilter()
 		if (Util::Button(T(TKEY("hide_all_passes"), "Hide All")))
 			this->settings.HiddenProfilerGroups = groups;
 	}
-	ImGui::Unindent();
 }
 
 void PerformanceOverlay::SaveSettings(json& j)
@@ -377,9 +369,6 @@ void PerformanceOverlay::DrawOverlay()
 	auto* menu = Menu::GetSingleton();
 
 	if (!globals::state || !menu) {
-		return;
-	}
-	if (!menu->overlayVisible) {
 		return;
 	}
 	if (!ImGui::GetCurrentContext()) {

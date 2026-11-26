@@ -479,6 +479,14 @@ bool SceneWidgetInterceptor::InterceptFloat3(const char* a_label, float* a_value
 	return guard.Finish(a_draw(guard.Float()));
 }
 
+bool SceneWidgetInterceptor::InterceptColor3(const char* a_label, float* a_value, const std::function<bool(float*)>& a_draw)
+{
+	if (!ShouldIntercept())
+		return a_draw(a_value);
+	const auto draw = [&a_draw](const char*, float* a_bound, ImGuiColorEditFlags) { return a_draw(a_bound); };
+	return InterceptColorEdit(draw, a_label, a_value, 3, ImGuiColorEditFlags_None);
+}
+
 const SceneWidgetInterceptor::Context* SceneWidgetInterceptor::GetArmedContext()
 {
 	return armed ? &armedContext : nullptr;

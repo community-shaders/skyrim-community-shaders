@@ -375,12 +375,7 @@ groupshared uint gSnapRows[SNAPSHOT_SIDE * 8];
 	EvolveSnapshot[texel] = PreviousDeformation[texel];
 }
 
-[numthreads(8, 8, 1)] void SnapshotFullCS(uint3 DTid : SV_DispatchThreadID) {
-	EvolveSnapshot[DTid.xy] = PreviousDeformation[DTid.xy];
-}
-
-	[numthreads(8, 8, 1)] void ScanBermCS(uint3 DTid : SV_DispatchThreadID, uint GIdx : SV_GroupIndex)
-{
+[numthreads(8, 8, 1)] void ScanBermCS(uint3 DTid : SV_DispatchThreadID, uint GIdx : SV_GroupIndex) {
 	uint2 dims;
 	BermDirtyIn.GetDimensions(dims.x, dims.y);
 

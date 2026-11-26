@@ -265,7 +265,6 @@ void SnowDeformation::SetupResources()
 	shellCB = new ConstantBuffer(ConstantBufferDesc<ShellCB>(), "SnowDeformation::ShellCB");
 	staticsCB = new ConstantBuffer(ConstantBufferDesc<StaticsCB>(), "SnowDeformation::StaticsCB");
 	heightProcessCB = new ConstantBuffer(ConstantBufferDesc<HeightProcessCB>(), "SnowDeformation::HeightProcessCB");
-	heightGhostCB = new ConstantBuffer(ConstantBufferDesc<HeightGhostCB>(), "SnowDeformation::HeightGhostCB");
 	doorsCB = new ConstantBuffer(ConstantBufferDesc<ExclusionsCB>(), "SnowDeformation::ExclusionsCB");
 	exclusionListBuffer = new StructuredBuffer(StructuredBufferDesc<float4>(kMaxExclusions * 2), kMaxExclusions * 2, "SnowDeformation::ExclusionList");
 	exclusionListBuffer->CreateSRV();
@@ -915,16 +914,6 @@ void SnowDeformation::PrepassSimulation()
 					context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
 					ID3D11ShaderResourceView* nullSRV = nullptr;
 					context->CSSetShaderResources(0, 1, &nullSRV);
-				} else if (auto* fullSnapshotCS = GetSnowCS(kDeformationSnapshotFullCS)) {
-					ID3D11ShaderResourceView* mapSRV = map->srv.get();
-					ID3D11UnorderedAccessView* scratchUAV = scratch->uav.get();
-					context->CSSetShaderResources(0, 1, &mapSRV);
-					context->CSSetUnorderedAccessViews(0, 1, &scratchUAV, nullptr);
-					context->CSSetShader(fullSnapshotCS, nullptr, 0);
-					context->Dispatch(tilesPerAxis, tilesPerAxis, 1);
-					context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
-					ID3D11ShaderResourceView* nullSRV = nullptr;
-					context->CSSetShaderResources(0, 1, &nullSRV);
 				}
 				globals::profiler->EndPass();
 
@@ -1113,7 +1102,6 @@ ID3D11ComputeShader* SnowDeformation::GetSnowCS(SnowCS a_which)
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "ScanEvolveCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "ScanSnapshotCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "SnapshotCS", nullptr },
-		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "SnapshotFullCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\DeformationUpdateCS.hlsl", "ScanBermCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\BermFieldCS.hlsl", "UntouchedCS", nullptr },
 		{ L"Data\\Shaders\\SnowDeformation\\BermFieldCS.hlsl", "BermTiledCS", nullptr },
@@ -1132,6 +1120,7 @@ ID3D11ComputeShader* SnowDeformation::GetSnowCS(SnowCS a_which)
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (shader.define)
 			defines.emplace_back(shader.define, "");
+		AddShellFeatureDefines(defines);
 		slot.attach(static_cast<ID3D11ComputeShader*>(Util::CompileShader(shader.path, defines, "cs_5_0", shader.entry)));
 	}
 	return slot.get();

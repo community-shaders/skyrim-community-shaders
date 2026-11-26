@@ -171,6 +171,7 @@ namespace
 		std::vector<std::pair<const char*, const char*>> defs;
 		for (const auto& [k, v] : parsed)
 			defs.emplace_back(k.c_str(), v.c_str());
+		SnowDeformation::AddShellFeatureDefines(defs);
 		const wchar_t* path = L"Data\\Shaders\\SnowDeformation\\LandscapeSnow.hlsl";
 		out.vsRaise.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(path, defs, "vs_5_0", "LS_VSRaise")));
 		out.vs.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(path, defs, "vs_5_0", "LS_VS")));
@@ -186,6 +187,7 @@ namespace
 		const auto t0 = std::chrono::steady_clock::now();
 		const wchar_t* path = L"Data\\Shaders\\SnowDeformation\\LandscapeSnowShell.hlsl";
 		std::vector<std::pair<const char*, const char*>> defs;
+		SnowDeformation::AddShellFeatureDefines(defs);
 		out.vs.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(path, defs, "vs_5_0")));
 		out.hs.attach(static_cast<ID3D11HullShader*>(Util::CompileShader(path, defs, "hs_5_0")));
 		out.ds.attach(static_cast<ID3D11DomainShader*>(Util::CompileShader(path, defs, "ds_5_0")));

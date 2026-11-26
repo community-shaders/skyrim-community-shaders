@@ -1049,6 +1049,9 @@ void SnowDeformation::RenderObjectHeightMap()
 	processData.TerrainWindowOrigin = { shellWindowCellX * shellCellSize, shellWindowCellY * shellCellSize };
 	processData.TerrainTexelSize = kShellVertexSpacing;
 	processData.TerrainDim = kShellWindowDim;
+	auto& fb = globals::game::frameBufferCached;
+	processData.GhostViewProj = fb.GetCameraViewProj();
+	processData.GhostCameraPosAdjust = fb.GetCameraPosAdjust();
 	heightProcessCB->Update(processData);
 	heightWindowCenter = newCenter;
 	heightMapValid = true;
@@ -1113,14 +1116,6 @@ void SnowDeformation::RenderObjectHeightMap()
 	ID3D11ShaderResourceView* nullCsSRVs[2] = { nullptr, nullptr };
 	ID3D11UnorderedAccessView* nullCsUAVs[2] = { nullptr, nullptr };
 
-	{
-		auto& fb = globals::game::frameBufferCached;
-		HeightGhostCB ghostData{};
-		ghostData.GhostViewProj = fb.GetCameraViewProj();
-		ghostData.GhostCameraPosAdjust = fb.GetCameraPosAdjust();
-		heightGhostCB->Update(ghostData);
-	}
-	ID3D11Buffer* ghostCB = heightGhostCB->CB();
 	auto mergeGhost = [&](Texture2D* a_prevTop, Texture2D* a_curTop, Texture2D* a_prevBottom, Texture2D* a_curBottom, Texture2D* a_tiles, Texture2D* a_raster) {
 		if (!a_prevTop || !a_curTop || !a_prevBottom || !a_curBottom || !a_raster)
 			return;
@@ -1128,7 +1123,6 @@ void SnowDeformation::RenderObjectHeightMap()
 		ID3D11UnorderedAccessView* mergeUAVs[2] = { a_curTop->uav.get(), a_curBottom->uav.get() };
 		ID3D11UnorderedAccessView* tileUAV = a_tiles ? a_tiles->uav.get() : nullptr;
 		context->CSSetConstantBuffers(0, 1, &processCB);
-		context->CSSetConstantBuffers(2, 1, &ghostCB);
 		context->CSSetShaderResources(0, 2, mergeSRVs);
 		ID3D11ShaderResourceView* rasterSRV = a_raster->srv.get();
 		context->CSSetShaderResources(6, 1, &rasterSRV);
@@ -1143,7 +1137,6 @@ void SnowDeformation::RenderObjectHeightMap()
 		context->CSSetShader(nullptr, nullptr, 0);
 		ID3D11Buffer* nullMergeCB = nullptr;
 		context->CSSetConstantBuffers(0, 1, &nullMergeCB);
-		context->CSSetConstantBuffers(2, 1, &nullMergeCB);
 	};
 
 	const float rasterClear[4] = { kHeightMapEmptyTop, -kHeightMapEmptyBottom, 0.0f, 0.0f };

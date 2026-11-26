@@ -251,7 +251,7 @@ void TreeWind::BeginDraw(RE::BSRenderPass* a_pass)
 	if (!swayActive)
 		return;
 	const auto kind = TreeShapes::Classify(a_pass, settings.TreeModSupport);
-	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, globals::state->frameCount, settings.TreeModSupport);
+	drawBendWeights = kind == TreeShapes::Kind::None ? nullptr : bendWeights.Get(a_pass->geometry, kind, settings.TreeModSupport);
 }
 
 void TreeWind::EndDraw()
@@ -334,11 +334,12 @@ void TreeWind::Reset()
 	data.Params.z = 0.0f;
 	windOffCB->Update(data);
 
+	bendWeights.Commit();
 	if (bendWeightsTreeModSupport != settings.TreeModSupport) {
 		bendWeights.Clear();
 		bendWeightsTreeModSupport = settings.TreeModSupport;
 	} else if (globals::state->frameCount % 300 == 0) {
-		bendWeights.Evict(globals::state->frameCount);
+		bendWeights.Evict();
 	}
 }
 

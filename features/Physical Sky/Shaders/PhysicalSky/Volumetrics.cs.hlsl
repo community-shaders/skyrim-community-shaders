@@ -685,9 +685,18 @@ struct NDFInfo
 	float voxelDensityScale;
 #endif
 #ifndef NO_CLOUD_STORMS
+	float stormActivation;
 	float plumeCoordinate;
 	float plumeDensity;
 	float2 plumeEnvelope;
+#	ifndef VOLCANIC_STORMS_ONLY
+	float stormDensity;
+	float stormAlbedo;
+	float2 stormAmbientPhase;
+	float3 stormEmission;
+	uint stormSecondaryIndex;
+	float stormSecondaryBlend;
+#	endif
 #endif
 };
 
@@ -729,6 +738,40 @@ float CloudNdfProfile(inout NDFInfo ndf)
 	return verticalProfile * coverageProfile;
 }
 
+float SampleCloudShapingStart(float2 worldXY, float2 anchoredXY, float shapingStart, VolumetricCloudData info)
+{
+	float result = shapingStart;
+	const float4 range = info.localNdfAuxiliary;
+	[branch] if (range.z != range.w && InLocalNdf(LocalNdfUV(anchoredXY, info), info))
+	{
+		const LocalNdfModelSample local = SampleLocalNdfModel(anchoredXY, info);
+		if (HasLocalNdfInfluence(local)) {
+			const float3 baseModel = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(worldXY, info), 0));
+			const float topType = ApplyLocalNdfModel(baseModel, local).g;
+			result = saturate(lerp(range.z, range.w, saturate((topType - range.x) / (range.y - range.x))));
+		}
+	}
+	return result;
+}
+
+float3 SampleWeatherCloudModel(float2 worldXY, float2 anchoredXY, float height, VolumetricCloudData info)
+{
+	const float shearBlend = smoothstep(0.0, 1.0, saturate((height - 0.1) * 1.5384616));
+	const bool sampleUpstream = shearBlend > 0.0 && any(info.cloudShapeShear != 0.0);
+	const float2 shear = info.cloudShapeShear * smoothstep(0.0, 1.0, height);
+	const float2 modelingXY = worldXY - shear;
+	float3 model = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(modelingXY, info), 0));
+	float3 upstream = model;
+	[branch] if (sampleUpstream)
+		upstream = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(modelingXY - info.cloudShapeShear * 60.0, info), 0));
+	const float2 anchoredModelXY = anchoredXY - shear;
+	model = ApplyLocalNdfModel(model, SampleLocalNdfModel(anchoredModelXY, info));
+	[branch] if (sampleUpstream)
+		upstream = ApplyLocalNdfModel(upstream, SampleLocalNdfModel(anchoredModelXY - info.cloudShapeShear * 60.0, info));
+	else upstream = model;
+	return lerp(model, float3(max(model.r, upstream.r), upstream.gb), shearBlend);
+}
+
 NDFInfo sampleNDF(float2 worldXY, float2 anchoredXY, float profileAltitude)
 {
 	const VolumetricCloudData info = VolumetricCloudBuffer[0];
@@ -739,37 +782,16 @@ NDFInfo sampleNDF(float2 worldXY, float2 anchoredXY, float profileAltitude)
 	const float maxAltitude = heights.g;
 	if (maxAltitude <= minAltitude || profileAltitude <= minAltitude || profileAltitude >= maxAltitude)
 		return ndf;
-	ndf.shaping_start = heights.b;
+	ndf.shaping_start = SampleCloudShapingStart(worldXY, anchoredXY, heights.b, info);
 	ndf.altitude = heights.rg;
-	const float4 range = info.localNdfAuxiliary;
-	[branch] if (range.z != range.w && InLocalNdf(LocalNdfUV(anchoredXY, info), info))
-	{
-		const LocalNdfModelSample local = SampleLocalNdfModel(anchoredXY, info);
-		if (HasLocalNdfInfluence(local)) {
-			const float3 baseModel = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(worldXY, info), 0));
-			const float topType = ApplyLocalNdfModel(baseModel, local).g;
-			ndf.shaping_start = saturate(lerp(range.z, range.w, saturate((topType - range.x) / (range.y - range.x))));
-		}
-	}
 	ndf.height_fraction = saturate((profileAltitude - minAltitude) / (maxAltitude - minAltitude));
-	const float shearBlend = smoothstep(0.0, 1.0, saturate((ndf.height_fraction - 0.1) * 1.5384616));
-	const bool sampleUpstream = shearBlend > 0.0 && any(info.cloudShapeShear != 0.0);
-	const float2 modelingXY = worldXY - info.cloudShapeShear * smoothstep(0.0, 1.0, ndf.height_fraction);
-	float3 model = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(modelingXY, info), 0));
-	float3 upstream = model;
-	[branch] if (sampleUpstream)
-		upstream = saturate(TexCloudModeling.SampleLevel(TileableSampler, LowNdfUV(modelingXY - info.cloudShapeShear * 60.0, info), 0));
-	const float2 anchoredModelXY = anchoredXY - info.cloudShapeShear * smoothstep(0.0, 1.0, ndf.height_fraction);
-	model = ApplyLocalNdfModel(model, SampleLocalNdfModel(anchoredModelXY, info));
-	[branch] if (sampleUpstream)
-		upstream = ApplyLocalNdfModel(upstream, SampleLocalNdfModel(anchoredModelXY - info.cloudShapeShear * 60.0, info));
-	else upstream = model;
-	ndf.coverage = lerp(model.r, max(model.r, upstream.r), shearBlend);
+	const float3 model = SampleWeatherCloudModel(worldXY, anchoredXY, ndf.height_fraction, info);
+	ndf.coverage = model.r;
 	if (ndf.coverage < 1e-8)
 		return ndf;
 	ndf.in_layer = true;
-	ndf.top_type = lerp(model.g, upstream.g, shearBlend) * saturate(ndf.coverage * 10.0);
-	ndf.bottom_type = lerp(model.b, upstream.b, shearBlend);
+	ndf.top_type = model.g * saturate(ndf.coverage * 10.0);
+	ndf.bottom_type = model.b;
 	ndf.dimension_profile = CloudNdfProfile(ndf);
 	return ndf;
 }
@@ -785,6 +807,19 @@ struct CloudDensityContext
 };
 
 float4 SampleCloudStormNoise(float3 positionMeters, float height, float mip, uint index, NDFInfo ndf);
+
+float3 WeatherCloudNoisePosition(float zMeters, float2 fieldMeters, float height, VolumetricCloudData info)
+{
+	const float bottomFade = saturate((height - 0.02) * 33.333332);
+	float2 noiseXY = fieldMeters * 0.0043545123;
+	[branch] if (info.skipShapeNoise == 0u && bottomFade < 1.0)
+	{
+		const float2 displacement = TexCloudAdjustmentLUT.SampleLevel(TileableSampler, fieldMeters * 0.004, 0).gb;
+		noiseXY += (displacement * 2.0 - 1.0) * (0.125 - bottomFade * 0.125);
+	}
+	return float3(noiseXY, (zMeters - 20.0 + bottomFade * 10.0) * 0.0034834063 -
+							   info.cloudEvolution.x * (1.0 / 6.283185307179586));
+}
 
 float sampleCloudDensityFromContext(
 	inout CloudDensityContext density_context, float mipBias, float minimumMip)
@@ -845,11 +880,33 @@ float sampleCloudDensityFromContext(
 		[branch] if (voxelNoise)
 			eroded = ReconstructNdfVoxelNoiseDensity(noise, profile, ndf.top_type, ndf.height_fraction);
 		else eroded = ReconstructCloudNoiseDensity(noise, profile, ndf.top_type, ndf.height_fraction, density_context.eye_distance, ndf.storm, risingBillows);
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+		// Keep the ordinary weather erosion as the vortex loses influence.
+		[branch] if (ndf.stormVolume && !risingBillows && ndf.stormActivation < 1.0)
+		{
+			const float3 pos = density_context.noise_coordinates;
+			const float2 field = CloudFieldPosition(pos.xy - info.noiseWindOffset * GAME_UNIT_TO_M, info.cloudEvolution.xy);
+			const float3 coordinates = WeatherCloudNoisePosition(pos.z, field, ndf.height_fraction, info);
+			const float weatherBias = floor(profileMip) + mipBias;
+			const float weatherMip = max(weatherBias, min(minimumMip, weatherBias + 1.0));
+			float weatherErosion;
+			if (info.useVoxelNoise != 0u) {
+				const float4 weatherNoise = NoiseVoxel.SampleLevel(TileableSampler, coordinates, weatherMip);
+				weatherErosion = ReconstructNdfVoxelNoiseDensity(weatherNoise, profile, ndf.top_type, ndf.height_fraction);
+			} else {
+				const float4 weatherNoise = TexCloudShapeNoise.SampleLevel(TileableSampler, coordinates, weatherMip);
+				weatherErosion = ReconstructCloudNoiseDensity(weatherNoise, profile, ndf.top_type, ndf.height_fraction, density_context.eye_distance, 0.0, false);
+			}
+			eroded = lerp(weatherErosion, eroded, ndf.stormActivation);
+		}
+#endif
 	}
 #ifdef NO_CLOUD_STORMS
 	const float densityScale = info.lowDensityScale;
-#else
+#elif defined(VOLCANIC_STORMS_ONLY)
 	const float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, CloudStorms[ndf.stormIndex].driftDensity.z * ndf.plumeDensity, ndf.stormBlend) : info.lowDensityScale;
+#else
+	const float densityScale = ndf.stormVolume ? lerp(info.lowDensityScale, ndf.stormDensity * ndf.plumeDensity, ndf.stormBlend) : info.lowDensityScale;
 #endif
 	float lightDensity;
 	const float density = ShapeCloudBaseDensity(eroded, ndf.height_fraction, info.bottomDensityWidth, info.bottomDensityPower, ndf.shaping_start, ndf.rawStorm, lightDensity, risingBillows) * densityScale;
@@ -858,7 +915,9 @@ float sampleCloudDensityFromContext(
 #ifdef NO_CLOUD_STORMS
 	density_context.light_density = density;
 #else
-	density_context.light_density = ndf.stormVolume && !risingBillows ? lightDensity * densityScale : density;
+	density_context.light_density = ndf.stormVolume && !risingBillows ?
+	                                    lerp(density, lightDensity * densityScale, ndf.stormActivation) :
+	                                    density;
 #endif
 	return density;
 }
@@ -885,16 +944,7 @@ float sampleWeatherCloudDensity(
 	if (!density_context.ndf.in_layer || density_context.ndf.dimension_profile <= 0.0)
 		return 0;
 
-	const float bottomFade = saturate((density_context.ndf.height_fraction - 0.02) * 33.333332);
-	const float2 xy = fieldMeters;
-	float2 noiseXY = xy * 0.0043545123;
-	[branch] if (info.skipShapeNoise == 0u && bottomFade < 1.0)
-	{
-		const float2 displacement = TexCloudAdjustmentLUT.SampleLevel(TileableSampler, xy * 0.004, 0).gb;
-		noiseXY += (displacement * 2.0 - 1.0) * (0.125 - bottomFade * 0.125);
-	}
-	density_context.noise_coordinates = float3(noiseXY,
-		(pos.z * GAME_UNIT_TO_M - 20.0 + bottomFade * 10.0) * 0.0034834063 - info.cloudEvolution.x * (1.0 / 6.283185307179586));
+	density_context.noise_coordinates = WeatherCloudNoisePosition(pos.z * GAME_UNIT_TO_M, fieldMeters, density_context.ndf.height_fraction, info);
 	density_context.eye_distance = viewDistance;
 	return sampleCloudDensityFromContext(density_context, mipBias, minimumMip);
 }
@@ -1407,9 +1457,13 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 #endif
 				result.lum += transmittance * source;
 				if (densityContext.ndf.stormVolume) {
+#if !defined(NO_CLOUD_STORMS) && !defined(VOLCANIC_STORMS_ONLY)
+					result.lum += transmittance * opacity * densityContext.ndf.stormEmission * saturate(densityContext.ndf.coverage) * densityContext.ndf.stormBlend;
+#else
 					const float height = StormHeight(pos.z * GAME_UNIT_TO_M, CloudStorms[densityContext.ndf.stormIndex]);
 					const float glow = exp(-height / CloudStorms[densityContext.ndf.stormIndex].emission.w) * saturate(densityContext.ndf.coverage);
 					result.lum += transmittance * opacity * CloudStorms[densityContext.ndf.stormIndex].emission.rgb * glow * densityContext.ndf.stormBlend;
+#endif
 				}
 			}
 			[branch] if (ambientEnabled)

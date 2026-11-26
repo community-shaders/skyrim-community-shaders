@@ -514,8 +514,6 @@ public:
 	const std::vector<MenuShortcuts::Shortcut>& GetShortcuts() const { return shortcuts; }
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
 
-	bool overlayVisible = false;
-
 public:
 	// Move KeyEvent struct here
 	class CharEvent : public RE::InputEvent

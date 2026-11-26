@@ -1,7 +1,6 @@
 #include "Features/SnowDeformation.h"
 
 #include "Deferred.h"
-#include "Features/CloudShadows.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/IBL.h"
 #include "Features/LightLimitFix.h"
@@ -9,6 +8,7 @@
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
+#include "Features/TerrainVariation.h"
 #include "Globals.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -244,6 +244,25 @@ std::vector<std::pair<const char*, const char*>> SnowDeformation::ShellPSDefines
 		defines.emplace_back("SNOW_EXP_HEIGHT_FOG", "");
 	if (globals::features::ibl.loaded)
 		defines.emplace_back("SNOW_IBL", "");
+	AddShellFeatureDefines(defines);
+	return defines;
+}
+
+void SnowDeformation::AddShellFeatureDefines(std::vector<std::pair<const char*, const char*>>& a_defines)
+{
+	// Optional downloads: without them the shell compiles its fallbacks
+	if (globals::features::terrainVariation.loaded)
+		a_defines.emplace_back("SNOW_TERRAIN_VARIATION", "");
+	if (globals::features::skylighting.loaded)
+		a_defines.emplace_back("SNOW_SKYLIGHTING", "");
+}
+
+std::vector<std::pair<const char*, const char*>> SnowDeformation::ShellDefines(const char* a_extra)
+{
+	std::vector<std::pair<const char*, const char*>> defines;
+	if (a_extra)
+		defines.emplace_back(a_extra, "");
+	AddShellFeatureDefines(defines);
 	return defines;
 }
 
@@ -409,7 +428,7 @@ ID3D11PixelShader* SnowDeformation::GetShellPSDeferred()
 ID3D11VertexShader* SnowDeformation::GetDriftCoatVS()
 {
 	if (!driftCoatVS)
-		driftCoatVS.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\SnowDeformation\\SnowShell.hlsl", { { "SNOW_DRIFT_COAT", "" } }, "vs_5_0")));
+		driftCoatVS.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\SnowDeformation\\SnowShell.hlsl", ShellDefines("SNOW_DRIFT_COAT"), "vs_5_0")));
 	return driftCoatVS.get();
 }
 

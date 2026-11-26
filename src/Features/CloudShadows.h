@@ -39,9 +39,6 @@ public:
 	bool overrideSky = false;
 	/** @brief Set for a cloud layer drawn outside the reflections capture, which binds that layer's occlusion at t26. */
 	bool bindLayerSelfShadow = false;
-	/** @brief Set for a main-view cloud layer while the reflections camera has not captured this frame; the layer is redrawn into the capture faces. */
-	bool captureLayerFromView = false;
-	RE::BSGeometry* captureGeometry = nullptr;
 	/**
 	 * @brief Applies sky shader render state overrides for cloud shadow capture.
 	 *
@@ -66,21 +63,17 @@ public:
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
-	/** @brief Faces captured per frame and frames per full cube, matching the reflections camera's cadence. */
+	/** @brief Faces the reflections camera captures per frame and frames per full cube. */
 	static constexpr uint32_t kCaptureFacesPerFrame = 2;
 	static constexpr uint32_t kCaptureFramesPerCube = 6 / kCaptureFacesPerFrame;
-	/** @brief Vertex constant buffer slot of the capture face index, CloudShadowsCapture in CloudShadows.hlsli. */
-	static constexpr UINT kCaptureFaceSlot = 7;
 
-	/** @brief Frame of the last capture from either source; the occlusion is bound only while it is at most one cube old. */
-	uint32_t lastCaptureFrame = 0;
-	uint32_t lastReflectionsCaptureFrame = UINT32_MAX;
-	uint32_t viewCaptureFrame = UINT32_MAX;
-	uint32_t viewCaptureFaces[kCaptureFacesPerFrame] = {};
-	bool viewCapturePending = false;
-
-	winrt::com_ptr<ID3D11RasterizerState> captureRasterizerState;
-	winrt::com_ptr<ID3D11Buffer> captureFaceCBs[6];
+	static constexpr uint32_t kNeverCaptured = UINT32_MAX;
+	/** @brief Frame of the last capture; the occlusion is bound only while it is at most one cube old. */
+	uint32_t lastCaptureFrame = kNeverCaptured;
+	/** @brief Frame the capture resumed after a gap; the occlusion is bound again once a full cube has been redrawn since. */
+	uint32_t captureResumeFrame = kNeverCaptured;
+	/** @brief Set when a face of the layer chain was written since the occlusion was last copied for binding. */
+	bool occlusionChanged = true;
 
 private:
 	Util::FrameChecker frameChecker;
@@ -111,11 +104,6 @@ public:
 	 */
 	int FindCloudLayer(RE::BSRenderPass* Pass);
 	void ModifySky(RE::BSRenderPass* Pass);
-
-	/** @brief Redraws the current main-view cloud layer into this frame's capture faces with the engine's bound state, then restores that state. */
-	void CaptureLayerFromView();
-	/** @brief Completes the faces captured from the main view before another capture reuses the layer chain. */
-	void PropagateViewCapture();
 
 	/** @brief Copies the cloud occlusion cubemap and binds it as a shader resource for the reflections prepass. */
 	virtual void ReflectionsPrepass() override;

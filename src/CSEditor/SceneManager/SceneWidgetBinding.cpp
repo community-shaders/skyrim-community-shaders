@@ -444,9 +444,6 @@ namespace
 
 		const auto featureFiles = baselines->GetFeatureFiles(featureShortName);
 		for (auto info = featureFiles.rbegin(); info != featureFiles.rend(); ++info) {
-			// A file naming keys the feature lacks is never applied.
-			if (!(*info)->unknownKeys.empty())
-				continue;
 			if (const auto* value = SceneSettingsInternal::GetCatalogSerializedValue((*info)->values, a_setting)) {
 				a_packId = (*info)->packId;
 				return value;

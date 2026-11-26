@@ -423,7 +423,6 @@ public:
 		kDeformationScanEvolveCS,
 		kDeformationScanSnapshotCS,
 		kDeformationSnapshotCS,
-		kDeformationSnapshotFullCS,
 		kDeformationScanBermCS,
 		kUntouchedTilesCS,
 		kBermFieldTiledCS,
@@ -802,8 +801,12 @@ public:
 
 	/** @brief Lazy-loads the shell snow texture set (and its authored PBR parameters) from the user-configured path. Implemented in SnowDeformation/Shell.cpp. */
 	void EnsureShellSnowTextures();
-	/** @brief PS define list for the shell shaders: PSHADER, optional extra, plus SNOW_EXP_HEIGHT_FOG when the EHF addon is loaded. Implemented in SnowDeformation/Shell.cpp. */
+	/** @brief PS define list for the shell shaders: PSHADER, optional extra, SNOW_EXP_HEIGHT_FOG and SNOW_IBL when those features are loaded, and the shell feature defines. Implemented in SnowDeformation/Shell.cpp. */
 	static std::vector<std::pair<const char*, const char*>> ShellPSDefines(const char* a_extra = nullptr);
+	/** @brief Adds SNOW_TERRAIN_VARIATION and SNOW_SKYLIGHTING when those optional features are loaded; every shader that includes SnowShell.hlsl takes them. Implemented in SnowDeformation/Shell.cpp. */
+	static void AddShellFeatureDefines(std::vector<std::pair<const char*, const char*>>& a_defines);
+	/** @brief Define list for a non-PS shader that includes SnowShell.hlsl: an optional extra plus the shell feature defines. Implemented in SnowDeformation/Shell.cpp. */
+	static std::vector<std::pair<const char*, const char*>> ShellDefines(const char* a_extra = nullptr);
 	/** @brief Re-reads the matched TruePBR texture set's values (per frame: follows ReloadTextureSetData and live menu edits). Implemented in SnowDeformation/Shell.cpp. */
 	void RefreshSnowPBRParams();
 
@@ -1057,7 +1060,7 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> heightCombineCS;
 	winrt::com_ptr<ID3D11ComputeShader> heightWaterCoverCS;
 
-	/** @brief Per-dispatch constants for the height-window processing and the height capture PS. Layout must match HeightProcessFields.hlsli. */
+	/** @brief Per-update constants for the height-window processing and the height capture PS. Layout must match HeightProcessFields.hlsli. */
 	struct alignas(16) HeightProcessCB
 	{
 		DirectX::XMINT2 ScrollDelta;
@@ -1071,20 +1074,15 @@ public:
 		float2 TerrainWindowOrigin;
 		float TerrainTexelSize;
 		uint TerrainDim;
-	};
-	STATIC_ASSERT_ALIGNAS_16(HeightProcessCB);
-	static_assert(sizeof(HeightProcessCB) == 48, "HeightProcessCB must match the fxc-reflected layout of HeightProcessFields.hlsli");
 
-	ConstantBuffer* heightProcessCB = nullptr;
-
-	/** @brief ScrollCS only: the camera clip transform, so the ghost merge can ask whether the surface that wrote a stale texel would still have been submitted this frame. Layout must match GhostCB in HeightMapProcessCS.hlsl. */
-	struct alignas(16) HeightGhostCB
-	{
+		/** @brief ScrollCS's ghost merge: the camera clip transform, to ask whether the surface that wrote a stale texel was still submitted this frame. */
 		Matrix GhostViewProj;
 		float4 GhostCameraPosAdjust;
 	};
-	STATIC_ASSERT_ALIGNAS_16(HeightGhostCB);
-	ConstantBuffer* heightGhostCB = nullptr;
+	STATIC_ASSERT_ALIGNAS_16(HeightProcessCB);
+	static_assert(sizeof(HeightProcessCB) == 128, "HeightProcessCB must match the fxc-reflected layout of HeightProcessFields.hlsli");
+
+	ConstantBuffer* heightProcessCB = nullptr;
 
 	static constexpr uint kMaxExclusions = 256;
 	static constexpr float kTorchClearRadius = 40.0f;

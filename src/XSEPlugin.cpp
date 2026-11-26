@@ -5,10 +5,12 @@
 #include "Hooks.h"
 #include "I18n/I18n.h"
 #include "Menu.h"
+#include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "NativeMenu/NativeMenu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/EditorIDCache.h"
 
 #define DLLEXPORT __declspec(dllexport)
 
@@ -84,6 +86,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kPreLoadGame:
 	case SKSE::MessagingInterface::kNewGame:
 		{
+			AdvancedSettingsRenderer::ResetDevelopmentConditionsState();
 			if (errors.empty())
 				Feature::ForEachLoadedFeature("GameReset", [](Feature* feature) { feature->GameReset(); });
 			break;
@@ -93,6 +96,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 			if (errors.empty()) {
 				Deferred::Hooks::Install();
 				Hooks::Install();
+				Util::EditorIDCache::Install();
 				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
 
@@ -151,6 +155,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 		}
 	case SKSE::MessagingInterface::kPostLoadGame:
 		{
+			AdvancedSettingsRenderer::ResetDevelopmentConditionsState();
 			if (errors.empty())
 				Feature::ForEachLoadedFeature("GameLoaded", [](Feature* feature) { feature->GameLoaded(); });
 			break;
@@ -199,7 +204,10 @@ bool Load()
 		L"Data/SKSE/Plugins/MARA.dll",
 		L"Data/SKSE/Plugins/NativeWaterLightStabilizer.dll",
 		L"Data/SKSE/Plugins/DynamicWetness.dll",
-		L"Data/SKSE/Plugins/NMN_DeformableTerrain.dll"
+		L"Data/SKSE/Plugins/NMN_DeformableTerrain.dll",
+		L"Data/SKSE/Plugins/NativeMeshLightFlickerFix.dll",
+		L"Data/SKSE/Plugins/DripSim.dll",
+		L"Data/SKSE/Plugins/DripSimRain.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {

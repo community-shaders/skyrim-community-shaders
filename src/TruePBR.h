@@ -167,8 +167,6 @@ public:
 	void SetupGlintsTexture();
 	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
 
-	std::unordered_map<uint32_t, std::string> editorIDs;
-
 	struct PBRTextureSetData
 	{
 		float roughnessScale = 1.f;

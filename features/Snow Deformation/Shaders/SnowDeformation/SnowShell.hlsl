@@ -5,7 +5,9 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "SnowDeformation/SnowColor.hlsli"
-#include "TerrainVariation/TerrainVariation.hlsli"
+#if defined(SNOW_TERRAIN_VARIATION)
+#	include "TerrainVariation/TerrainVariation.hlsli"
+#endif
 
 #ifdef PSHADER
 #	include "SnowDeformation/SnowShellPS.hlsli"
@@ -1150,7 +1152,7 @@ PS_PREPASS_OUTPUT main(VS_OUTPUT input)
 	[branch] if (pixelVertexAO < 0.0)
 		pixelVertexAO = SampleTerrainVertexAO(gridLocal);
 	float landVertexAO = ColorManagement::SRGBToWorking(pixelVertexAO);
-	SNOW_SKYLIGHTING(ambientPart, diffuseLobe, directDiffuse, directSpecular, landVertexAO, shadePos, normalWS);
+	SNOW_APPLY_SKYLIGHTING(ambientPart, diffuseLobe, directDiffuse, directSpecular, landVertexAO, shadePos, normalWS);
 	float3 preLit = ambientPart + directDiffuse;
 
 	float alpha = coverageAlpha;

@@ -59,10 +59,10 @@ namespace
 }
 
 bool MenuHeaderRenderer::GlyphIconButton(const char* id, Icons::GlyphRef glyph, float glyphBox, const char* tooltip, bool active,
-	const char* caption)
+	const char* caption, float padding)
 {
 	// Square like the nav buttons: the vertical padding on both axes
-	const float pad = ImGui::GetStyle().FramePadding.y;
+	const float pad = padding >= 0.0f ? padding : ImGui::GetStyle().FramePadding.y;
 	const ImVec2 buttonSize(glyphBox + pad * 2.0f, glyphBox + pad * 2.0f);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);

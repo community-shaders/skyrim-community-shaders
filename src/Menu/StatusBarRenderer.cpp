@@ -112,8 +112,9 @@ namespace
 	{
 		const float size = NavButtonSize();
 		row.Place(size);
-		// The help button's helper; it pads the glyph box by FramePadding.y each side
-		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - ImGui::GetStyle().FramePadding.y * 2.0f, tooltip, selected, caption);
+		// The help button's helper, with a thin pad so the glyph and key caption fill the button
+		const float pad = size * 0.06f;
+		const bool clicked = MenuHeaderRenderer::GlyphIconButton(id, glyph, size - pad * 2.0f, tooltip, selected, caption, pad);
 		row.Advance(0.0f);
 		return clicked;
 	}

@@ -265,6 +265,7 @@ float2 TrenchDetailRotate(float2 v, float2 cs)
 TrenchDetailTaps TrenchDetailTapsAt(float2 worldXY)
 {
 	const float2 uv = worldXY / kTrenchDetailTile;
+#if defined(SNOW_TERRAIN_VARIATION)
 	float2 cell1, cell2;
 	const StochasticOffsets o = ComputeStochasticOffsetsScaledPeriodic(uv, MESH_SCALE, kTrenchDetailLatticePeriod, cell1, cell2);
 	TrenchDetailTaps t;
@@ -272,6 +273,13 @@ TrenchDetailTaps TrenchDetailTapsAt(float2 worldXY)
 	t.uv = float4(TrenchDetailRotate(uv - StochasticCellUV(cell1, MESH_SCALE), t.turn.xy) + o.offset1,
 		TrenchDetailRotate(uv - StochasticCellUV(cell2, MESH_SCALE), t.turn.zw) + o.offset2);
 	t.w = o.tap1Weight;
+#else
+	// Without Terrain Variation installed, one plain tile: no turn, all weight on the first tap
+	TrenchDetailTaps t;
+	t.turn = float4(1.0, 0.0, 1.0, 0.0);
+	t.uv = uv.xyxy;
+	t.w = 1.0;
+#endif
 	return t;
 }
 

@@ -36,6 +36,7 @@ namespace
 	using SceneContextType = SceneSettingsManager::SceneContextType;
 	using CopyCandidate = SceneSettingsManager::CopyCandidate;
 	using CopyConflictPolicy = SceneSettingsManager::CopyConflictPolicy;
+	using CopyFeatureFilter = SceneSettingsManager::CopyFeatureFilter;
 	using CopyRejection = SceneSettingsManager::CopyRejection;
 	using CopySource = SceneSettingsManager::CopySource;
 	using LocationTargetType = SceneSettingsManager::LocationTargetType;
@@ -50,6 +51,7 @@ namespace
 	constexpr float kModalWidthEm = 50.0f;
 	constexpr float kPaneHeightEm = 17.0f;
 	constexpr float kSearchWidthEm = 10.0f;
+	constexpr float kFeatureComboWidthEm = 12.0f;
 	constexpr float kPeriodDotPitchEm = 0.5f;
 	constexpr float kPeriodDotRadiusEm = 0.16f;
 	/// Large fonts would otherwise push the modal past the screen edge.
@@ -102,6 +104,8 @@ namespace
 		TintedGlyph icon;
 		std::vector<CopySource> sets;
 		size_t settingCount = 0;
+		/// The most any one set holds per feature, as settingCount is across features.
+		std::map<std::string, size_t> featureCounts;
 		std::uint32_t weatherFlags = 0;
 		bool flat = false;
 		bool authored = false;
@@ -115,6 +119,16 @@ namespace
 			const auto it = std::ranges::find(sets, period, [](const auto& set) { return set.context.period; });
 			return it == sets.end() ? nullptr : &*it;
 		}
+	};
+
+	/** @brief A feature the feature combo offers: its display name, then its short name. */
+	using FeatureOption = std::pair<std::string, std::string>;
+
+	/** @brief The scenes the list offers, and every feature they hold for the feature combo. */
+	struct SceneList
+	{
+		std::vector<SceneRow> rows;
+		std::vector<FeatureOption> features;
 	};
 
 	/** @brief Filters outlive the modal, so reopening it lands where the user left off. */
@@ -142,6 +156,7 @@ namespace
 		SceneContextId source;
 		std::string sourceName;
 		std::vector<Destination> destinations;
+		CopyFeatureFilter features;
 
 		bool operator==(const CopyPlan&) const = default;
 	};
@@ -150,12 +165,15 @@ namespace
 	struct DetailRow
 	{
 		std::string feature;
+		std::string featureShortName;
 		std::string name;
 		std::string value;
 		/// The destination's current value, which Overwrite would replace.
 		std::optional<std::string> previous;
 		CopyRejection rejection = CopyRejection::None;
 		CopyOutcome outcome = CopyOutcome::Copy;
+		/// The user unticked its feature, so it is listed but neither counted nor copied.
+		bool excluded = false;
 		size_t destinationCount = 0;
 		/// Newline-joined, ready for the tooltip.
 		std::string destinationNames;
@@ -166,6 +184,8 @@ namespace
 	{
 		std::array<size_t, kOutcomes.size()> counts{};
 		std::map<CopyRejection, size_t> dropped;
+		/// Settings each unticked feature holds back, by short name.
+		std::map<std::string, size_t> excluded;
 		/// Sorted by feature, so the table can head each run of rows with its feature.
 		std::vector<DetailRow> details;
 
@@ -196,7 +216,9 @@ namespace
 		bool enterCommits = false;
 		/// The outcome chip narrowing the details table, if any.
 		std::optional<CopyOutcome> detailsFilter;
-		SceneSettingsManager::RevisionCache<std::vector<SceneRow>> rows;
+		/// The feature combo's pick and the review's unticked features; per opening, so a narrowed copy never lingers.
+		CopyFeatureFilter features;
+		SceneSettingsManager::RevisionCache<SceneList> scenes;
 		SceneSettingsManager::RevisionCache<CopySummary> summary;
 		CopyPlan summaryPlan;
 	};
@@ -415,6 +437,30 @@ namespace
 		return weather ? weather->data.flags.underlying() : 0;
 	}
 
+	/** @brief A set's or row's setting count, narrowed to the feature combo's pick. */
+	template <typename Counted>
+	size_t CountSettings(const Counted& counted)
+	{
+		if (!session.features.only)
+			return counted.settingCount;
+		const auto it = counted.featureCounts.find(*session.features.only);
+		return it == counted.featureCounts.end() ? 0 : it->second;
+	}
+
+	/** @brief Every feature the rows hold, sorted by display name. */
+	std::vector<FeatureOption> BuildFeatureOptions(const std::vector<SceneRow>& rows)
+	{
+		std::set<std::string> shortNames;
+		for (const auto& row : rows)
+			for (const auto& shortName : row.featureCounts | std::views::keys)
+				shortNames.insert(shortName);
+		auto options = shortNames | std::views::transform([](const std::string& shortName) {
+			return FeatureOption{ SceneSettingsManager::GetFeatureDisplayName(shortName), shortName };
+		}) | std::ranges::to<std::vector>();
+		std::ranges::sort(options);
+		return options;
+	}
+
 	/** @brief Groups the manager's per-period sets into one row per scene, keeping the manager's order. */
 	std::vector<SceneRow> BuildRows(const std::vector<CopySource>& sets)
 	{
@@ -432,6 +478,8 @@ namespace
 			auto& row = rows[indexIt->second];
 			row.sets.push_back(set);
 			row.settingCount = std::max(row.settingCount, set.settingCount);
+			for (const auto& [feature, count] : set.featureCounts)
+				row.featureCounts[feature] = std::max(row.featureCounts[feature], count);
 			row.authored |= set.authored;
 			row.current |= set.current;
 		}
@@ -450,6 +498,8 @@ namespace
 	/** @brief Whether a row passes the chips and the search. The authored filter is applied by the caller. */
 	bool MatchesFilters(const SceneRow& row, const std::string& query)
 	{
+		if (CountSettings(row) == 0)
+			return false;
 		if (filters.type && row.scene.type != *filters.type)
 			return false;
 		if (filters.type == SceneContextType::Weather && filters.weatherClass &&
@@ -560,13 +610,20 @@ namespace
 			session.periods.set();
 	}
 
-	/** @brief The period From copies out of: the ticked one if the row holds it, else the row's first set. */
+	/** @brief Whether From can copy out of a set: any set under "All features", else one holding the picked feature. */
+	bool IsSourceSet(const CopySource* set)
+	{
+		return set && (!session.features.only || CountSettings(*set) != 0);
+	}
+
+	/** @brief The period From copies out of: the ticked one if the row can source it, else the row's first usable set. */
 	TimeOfDayPeriod GetSourcePeriod(const SceneRow& row)
 	{
 		for (const auto period : SceneSettingsManager::kPeriods)
-			if (session.periods.test(static_cast<size_t>(period)) && row.FindSet(period))
+			if (session.periods.test(static_cast<size_t>(period)) && IsSourceSet(row.FindSet(period)))
 				return period;
-		return row.sets.front().context.period;
+		const auto it = std::ranges::find_if(row.sets, [](const CopySource& set) { return IsSourceSet(&set); });
+		return (it == row.sets.end() ? row.sets.front() : *it).context.period;
 	}
 
 	/** @brief The copy the current picks describe; no destinations when nothing is picked. */
@@ -578,10 +635,10 @@ namespace
 				return {};
 			const auto* set = row->FindSet(GetSourcePeriod(*row));
 			assert(set);
-			return { set->context, set->displayName, { { session.page, session.pageName } } };
+			return { set->context, set->displayName, { { session.page, session.pageName } }, session.features };
 		}
 
-		CopyPlan plan{ .source = session.page, .sourceName = session.pageName };
+		CopyPlan plan{ .source = session.page, .sourceName = session.pageName, .features = session.features };
 		// With nothing ticked the highlighted row is the target, so a single copy needs no tick.
 		const auto targets = session.ticked.empty() && session.cursor ? std::set{ *session.cursor } : session.ticked;
 		for (const auto& scene : targets) {
@@ -609,14 +666,18 @@ namespace
 			for (const auto& candidate : candidates)
 				groups[SceneSettingsContextRules::GetCopyGroupKey(candidate.setting)].push_back(&candidate);
 			for (const auto& [groupKey, group] : groups) {
+				const auto& featureShortName = std::get<0>(groupKey);
+				if (plan.features.only && *plan.features.only != featureShortName)
+					continue;
+				const bool excluded = plan.features.excluded.contains(featureShortName);
 				const auto outcome = std::ranges::any_of(group, std::logical_not{}, &CopyCandidate::compatible) ?
 				                         CopyOutcome::Dropped :
 				                     std::ranges::any_of(group, std::identity{}, &CopyCandidate::conflicts) ?
 				                         CopyOutcome::AlreadySet :
 				                         CopyOutcome::Copy;
-				summary.counts[std::to_underlying(outcome)] += group.size();
+				(excluded ? summary.excluded[featureShortName] : summary.counts[std::to_underlying(outcome)]) += group.size();
 				for (const auto* candidate : group) {
-					if (outcome == CopyOutcome::Dropped)
+					if (outcome == CopyOutcome::Dropped && !excluded)
 						++summary.dropped[candidate->rejection];
 					auto previous = outcome == CopyOutcome::AlreadySet && candidate->destinationValue ?
 					                    std::optional{ FormatValue(*candidate->destinationValue) } :
@@ -624,13 +685,14 @@ namespace
 					const auto [indexIt, inserted] = rowIndices.try_emplace(
 						RowKey{ candidate->setting, outcome, previous, candidate->rejection }, summary.details.size());
 					if (inserted)
-						summary.details.push_back({ .feature = SceneSettingsManager::GetFeatureDisplayName(
-														candidate->setting.featureShortName),
+						summary.details.push_back({ .feature = SceneSettingsManager::GetFeatureDisplayName(featureShortName),
+							.featureShortName = featureShortName,
 							.name = candidate->displayName,
 							.value = FormatValue(candidate->value),
 							.previous = std::move(previous),
 							.rejection = candidate->rejection,
-							.outcome = outcome });
+							.outcome = outcome,
+							.excluded = excluded });
 					auto& row = summary.details[indexIt->second];
 					++row.destinationCount;
 					if (!row.destinationNames.empty())
@@ -648,7 +710,7 @@ namespace
 	{
 		const auto destinations =
 			plan.destinations | std::views::transform(&Destination::context) | std::ranges::to<std::vector>();
-		const auto result = SceneSettingsManager::GetSingleton()->CopySettingsBatch(plan.source, destinations, policy);
+		const auto result = SceneSettingsManager::GetSingleton()->CopySettingsBatch(plan.source, destinations, policy, plan.features);
 		auto copied = result.copied;
 		auto overwritten = result.overwritten;
 		// Dropped rows count as skipped; the summary already said why they were dropped.
@@ -663,12 +725,35 @@ namespace
 	void SwapDirection()
 	{
 		filters.direction = filters.direction == CopyDirection::To ? CopyDirection::From : CopyDirection::To;
-		session.rows = {};
+		session.scenes = {};
 		ResetSelection();
 	}
 
-	/** @brief Search and the type chips. */
-	void DrawFilterRow()
+	/** @brief Narrows the list, the review and the copy to one feature, or lifts that. */
+	void DrawFeatureCombo(const std::vector<FeatureOption>& features)
+	{
+		const char* allLabel = T(TKEY("scene_copy_all_features"), "All features");
+		const auto preview =
+			session.features.only ? SceneSettingsManager::GetFeatureDisplayName(*session.features.only) : std::string(allLabel);
+		const float width = ImGui::GetFontSize() * kFeatureComboWidthEm;
+		BrowserUI::SameLineIfFits(width);
+		ImGui::SetNextItemWidth(width);
+		BrowserUI::SearchableFormCombo(
+			{ .label = "##feature",
+				.searchId = "SceneCopyFeatureSearch",
+				.preview = preview.c_str(),
+				.noneLabel = allLabel,
+				.noneIsCurrent = !session.features.only,
+				.noneAlwaysListed = true,
+				.noMatchText = T(TKEY("scene_copy_empty"), "Nothing matches.") },
+			features, [] { session.features.only.reset(); },
+			[](const std::string&, const std::string& shortName) { return session.features.only == shortName; },
+			[](const std::string&, const std::string& shortName) { session.features.only = shortName; });
+		Util::AddTooltip(T(TKEY("scene_copy_feature_tooltip"), "Copies only this feature's settings."));
+	}
+
+	/** @brief Search, the type chips and the feature combo. */
+	void DrawFilterRow(const std::vector<FeatureOption>& features)
 	{
 		if (std::exchange(session.focusSearch, false))
 			ImGui::SetKeyboardFocusHere();
@@ -678,6 +763,7 @@ namespace
 		session.enterCommits = ImGui::IsItemFocused();
 		ImGui::SameLine();
 		DrawFilterChips("type", filters.type, kContextTypes, DescribeContextType);
+		DrawFeatureCombo(features);
 	}
 
 	/** @brief The narrower chips the Weather and Location types offer and, in To, the authored-only toggle. */
@@ -747,7 +833,7 @@ namespace
 				continue;
 			}
 			const auto* set = row.FindSet(period);
-			Util::DrawIconCircle(center, radius, set && set->settingCount != 0 ? setColor : emptyColor, true);
+			Util::DrawIconCircle(center, radius, set && CountSettings(*set) != 0 ? setColor : emptyColor, true);
 		}
 		Util::AddTooltip(row.flat ? T(TKEY("scene_copy_dots_flat_tooltip"), "One set covers every period.") :
 									T(TKEY("scene_copy_dots_tooltip"), "Filled periods hold settings."));
@@ -791,7 +877,7 @@ namespace
 
 		ImGui::TableNextColumn();
 		ImGui::AlignTextToFramePadding();
-		Util::Text::Secondary("%zu", row.settingCount);
+		Util::Text::Secondary("%zu", CountSettings(row));
 		Util::AddTooltip(T(TKEY("scene_copy_count_tooltip"), "Settings this context holds."));
 		return doubleClicked;
 	}
@@ -890,7 +976,7 @@ namespace
 				if (bit != 0)
 					ImGui::SameLine();
 				ImGui::PushID(static_cast<int>(bit));
-				const Util::DisableGuard missingGuard(from && cursorRow && !cursorRow->FindSet(period));
+				const Util::DisableGuard missingGuard(from && cursorRow && !IsSourceSet(cursorRow->FindSet(period)));
 				const bool selected = sourcePeriod ? *sourcePeriod == period : session.periods.test(bit);
 				if (FilterChip("##period", { SceneSettingsContextRules::GetCopyPeriodName(period) }, selected)) {
 					if (from)
@@ -1070,6 +1156,33 @@ namespace
 		}
 	}
 
+	/** @brief A feature's heading, ticked while the copy carries it; unticked, it says how many settings it holds back. */
+	void DrawFeatureHeading(const DetailRow& head, const CopySummary& summary)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::PushID(head.featureShortName.c_str());
+		bool included = !head.excluded;
+		if (ImGui::Checkbox("##include", &included)) {
+			if (included)
+				session.features.excluded.erase(head.featureShortName);
+			else
+				session.features.excluded.insert(head.featureShortName);
+		}
+		Util::AddTooltip(T(TKEY("scene_copy_feature_tick_tooltip"), "Untick to leave this feature out of the copy."));
+		ImGui::PopID();
+		ImGui::SameLine();
+		ImGui::AlignTextToFramePadding();
+		BrowserUI::SectionLabel(head.feature.c_str());
+		if (!head.excluded)
+			return;
+		ImGui::TableNextColumn();
+		ImGui::AlignTextToFramePadding();
+		Util::TextUnformattedDisabled(
+			FormatCount(T(TKEY("scene_copy_feature_excluded"), "{} left out"), summary.excluded.at(head.featureShortName))
+				.c_str());
+	}
+
 	/** @brief The chip-filtered rows under a heading per feature, filling the rest of the review pane. */
 	void DrawDetails(const CopySummary& summary, size_t destinationCount)
 	{
@@ -1085,18 +1198,19 @@ namespace
 		ImGui::TableSetupScrollFreeze(0, 1);
 		ImGui::TableHeadersRow();
 
-		std::vector<const DetailRow*> rows;
-		for (const auto& row : summary.details)
-			if (!session.detailsFilter || row.outcome == *session.detailsFilter)
-				rows.push_back(&row);
-		for (const auto section : rows | std::views::chunk_by([](const DetailRow* lhs, const DetailRow* rhs) {
-				 return lhs->feature == rhs->feature;
+		const auto shown = [](const DetailRow& row) {
+			return !row.excluded && (!session.detailsFilter || row.outcome == *session.detailsFilter);
+		};
+		for (const auto section : summary.details | std::views::chunk_by([](const DetailRow& lhs, const DetailRow& rhs) {
+				 return lhs.featureShortName == rhs.featureShortName;
 			 })) {
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			BrowserUI::SectionLabel(section.front()->feature.c_str());
-			for (const auto* row : section)
-				DrawDetailRow(*row, destinationCount > 1);
+			const auto& head = section.front();
+			// An unticked feature keeps its heading, the only way to tick it back.
+			if (!head.excluded && std::ranges::none_of(section, shown))
+				continue;
+			DrawFeatureHeading(head, summary);
+			for (const auto& row : section | std::views::filter(shown))
+				DrawDetailRow(row, destinationCount > 1);
 		}
 		ImGui::EndTable();
 	}
@@ -1129,6 +1243,7 @@ namespace
 			"The arrows between From and To swap the direction: out of this page into the contexts you tick, or "
 			"into this page from the one you pick.\n"
 			"Search and type chips narrow the list. Authored only hides contexts that hold no settings yet.\n"
+			"The feature list copies a single feature; unticking a feature on the right leaves it out.\n"
 			"Periods: when copying out, the periods that receive the settings; when copying in, the period they are "
 			"read from.\n"
 			"The right side lists what happens to each setting before anything is written.\n"
@@ -1193,16 +1308,19 @@ namespace
 		auto* manager = SceneSettingsManager::GetSingleton();
 		const auto revision = manager->GetEntryPresentationRevision();
 		// Fetched after the swap, which drops the cached rows.
-		const auto& rows = session.rows.Get(revision, [&] {
-			return BuildRows(filters.direction == CopyDirection::From ? manager->GetCopySources(session.page) :
-																		manager->GetCopyDestinations(session.page));
+		const auto& scenes = session.scenes.Get(revision, [&] {
+			auto rows = BuildRows(filters.direction == CopyDirection::From ? manager->GetCopySources(session.page) :
+																			 manager->GetCopyDestinations(session.page));
+			auto features = BuildFeatureOptions(rows);
+			return SceneList{ std::move(rows), std::move(features) };
 		});
+		const auto& rows = scenes.rows;
 		// Built from the search as it stood before this frame's typing, which lands next frame.
 		const std::string query = session.search;
 		const auto list = BuildVisibleList(rows, query);
 		const int cursorLine = UpdateCursor(list);
 		DrawRoute(BuildPlan(rows), rows);
-		DrawFilterRow();
+		DrawFilterRow(scenes.features);
 
 		const bool to = filters.direction == CopyDirection::To;
 		const float paneHeight = ImGui::GetFontSize() * kPaneHeightEm;

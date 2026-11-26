@@ -29,7 +29,8 @@ namespace TreeWind
 		precise float p = dot(positionMS.xy, float2(0.00047, 0.00061)) + dot(positionMS.xy, float2(0.0013, -0.0011));
 		precise float gust = sin(phase * 1.10 + p) + 0.35 * sin(phase * 2.70 + p * 1.7);
 		precise float side = 0.30 * sin(phase * 1.90 + p * 1.3);
-		precise float2 dir = float2(sin(Wind.w), cos(Wind.w));
+		// Sky::windAngle is counter-clockwise from +X: the same direction the engine moves rain and snow
+		precise float2 dir = float2(cos(Wind.w), sin(Wind.w));
 		precise float2 perp = float2(-dir.y, dir.x);
 		precise float strength = Params.x * (0.35 + 0.65 * saturate(Wind.z));
 		precise float2 result = (dir * (0.5 + 0.5 * gust) + perp * side) * strength;

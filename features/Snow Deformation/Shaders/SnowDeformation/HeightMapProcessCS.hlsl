@@ -18,12 +18,6 @@ static const float kShelterConeTan = 0.577350259;
 // Height a carried-over texel loses each update, so ghosts of moved objects fade.
 static const float kGhostDecay = 0.5;
 
-cbuffer GhostCB : register(b2)
-{
-	row_major float4x4 GhostViewProj;
-	float4 GhostCameraPosAdjust;
-}
-
 #include "SnowDeformation/SnowCommon.hlsli"
 #include "SnowDeformation/SnowExclusions.hlsli"
 
