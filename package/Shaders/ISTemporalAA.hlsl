@@ -54,10 +54,7 @@ float3 ConvertRenderOutput(float3 pqColor)
 	return TransferFunctions::LinearToSignedGamma22(Color::BT2020ToBT709(DisplayMapping::PQtoLinear(pqColor, 10000.0)));
 }
 // Feedback luma round-trip: feedbackOut.x is read back as history.x next frame.
-// Storing raw PQ luma [0,1] in a low-precision RT causes quantization banding in highlights
-// because PQ encodes high nit values in the upper portion of the [0,1] range where
-// 8/10-bit steps are perceptible. Encoding as game-gamma spreads precision like SDR
-// and round-trips cleanly through whatever precision the feedback RT uses.
+// Game gamma exceeds 1.0 above paper white, so HDRDisplay makes the feedback RT float.
 float EncodeFeedbackLuma(float pqLuma)
 {
 	// PQ → linear (single channel: luma only, no colour transform needed)
@@ -515,10 +512,6 @@ PS_OUTPUT main(PS_INPUT input)
 	sampleUV.xyzw = motionReject.xxxx ? tapMin.xyzw : corner.xyzw;
 	colorOut.xyz = sampleUV.yzw;
 #	ifdef HDR_OUTPUT
-	// Encode PQ luma to game-gamma for feedback RT storage.
-	// Storing raw PQ [0,1] in a low-precision RT causes highlight banding because
-	// PQ packs high-nit values into the upper range where RT quantization is visible.
-	// Game-gamma encoding spreads precision evenly — symmetric with DecodeFeedbackLuma on read.
 	feedbackOut.x = EncodeFeedbackLuma(saturate(sampleUV.x * motionReject.z));
 #	else
 	feedbackOut.x = saturate(sampleUV.x * motionReject.z);
