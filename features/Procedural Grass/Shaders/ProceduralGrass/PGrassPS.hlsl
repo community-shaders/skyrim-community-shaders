@@ -139,13 +139,13 @@ float3 GetTierDebugColor()
 		// Canopy lighting follows the drawn height, including Mid's morph toward Low.
 		float bladeHeight = cameraRelativePosition.z - input.BladeTDepth.z;
 #	else
-		float along = input.BladeT;
-		uint lowBladeData = asuint(input.BladeParams.w);
-		float2 lowTip = input.BezierTipAndMid;
-		float lowRandBend = bladeType.stiffness * (0.25f + float((lowBladeData >> 16) & 0xFu) * (1.6f / 15.0f));
-		float2 lowMidPoint = lowTip * bladeType.mid + float2(-lowTip.y, lowTip.x) * lowRandBend;
-		float2 derivative = 2.0f * (1.0f - along) * lowMidPoint + 2.0f * along * (lowTip - lowMidPoint);
-		float bladeHeight = along * lowTip.y;
+	float along = input.BladeT;
+	uint lowBladeData = asuint(input.BladeParams.w);
+	float2 lowTip = input.BezierTipAndMid;
+	float lowRandBend = bladeType.stiffness * (0.25f + float((lowBladeData >> 16) & 0xFu) * (1.6f / 15.0f));
+	float2 lowMidPoint = lowTip * bladeType.mid + float2(-lowTip.y, lowTip.x) * lowRandBend;
+	float2 derivative = 2.0f * (1.0f - along) * lowMidPoint + 2.0f * along * (lowTip - lowMidPoint);
+	float bladeHeight = along * lowTip.y;
 #	endif
 
 		float3 sideAndBladeT = float3(input.CameraRelativePosition.w, along, bladeHeight);
@@ -214,7 +214,7 @@ float3 GetTierDebugColor()
 		float packedBladeColor = float(bladeRandBits & 0xFFFu);
 		float bladeRand = round(frac(packedBladeColor * 0.61803398875f + 0.17f) * 255.0f) * (1.0f / 255.0f);
 #	else
-		float bladeRand = f16tof32(bladeRandBits >> 16);
+	float bladeRand = f16tof32(bladeRandBits >> 16);
 #	endif
 #endif
 
@@ -299,7 +299,7 @@ float3 GetTierDebugColor()
 #	if defined(MID_LOD)
 		float bladeColorDetail = 1.0f - lowMaterialBlend;
 #	else
-		static const float bladeColorDetail = 1.0f;
+	static const float bladeColorDetail = 1.0f;
 #	endif
 		float mottle = sin(along * 5.0 + bladeRand * Math::TAU) * 0.5 + 0.5;
 		baseColor.rgb *= 1.0 + (mottle - 0.5) * 2.0 * bladeType.grassColorVar.w * bladeColorDetail;
@@ -407,10 +407,10 @@ float3 GetTierDebugColor()
 		}
 
 #	elif defined(MID_LOD)
-		SkylightingProbeFrame probes = GetSkylightingProbeFrame();
-		sh2 skylightingSH = Skylighting::SampleWithOrigin(ClampToSkylightingProbes(probes, input.SkylightingRoot), float3(0.0f, 0.0f, 1.0f), probes.offset, probes.arrayOrigin);
+	SkylightingProbeFrame probes = GetSkylightingProbeFrame();
+	sh2 skylightingSH = Skylighting::SampleWithOrigin(ClampToSkylightingProbes(probes, input.SkylightingRoot), float3(0.0f, 0.0f, 1.0f), probes.offset, probes.arrayOrigin);
 #	else
-		sh2 skylightingSH = input.SkylightingVertexSH;
+	sh2 skylightingSH = input.SkylightingVertexSH;
 #	endif
 #endif
 
@@ -430,7 +430,7 @@ float3 GetTierDebugColor()
 		float wetnessOcclusion = saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1)));
 		wetnessOcclusion *= wetnessOcclusion;
 #		else
-		float wetnessOcclusion = 1.0;
+	float wetnessOcclusion = 1.0;
 #		endif
 		wetness = max(wetness, SharedData::wetnessEffectsSettings.Wetness * SharedData::wetnessEffectsSettings.MaxRainWetness * wetnessOcclusion);
 #	endif
@@ -462,7 +462,7 @@ float3 GetTierDebugColor()
 #	if defined(ENABLE_LL)
 			baseColor.xyz = TransferFunctions::GameGammaToLinear(wetBaseColor);
 #	else
-			baseColor.xyz = wetBaseColor;
+		baseColor.xyz = wetBaseColor;
 #	endif
 		}
 #endif
@@ -513,7 +513,7 @@ float3 GetTierDebugColor()
 			// High blades carry no clump seed; their packed colour is as stable.
 			uint midShadowSeed = bladeRandBits & 0xFFFu;
 #		else
-			uint midShadowSeed = (input.MaterialData & 0xFFu) | ((bladeRandBits & 0xFu) << 8);
+		uint midShadowSeed = (input.MaterialData & 0xFFu) | ((bladeRandBits & 0xFu) << 8);
 #		endif
 
 			float midBladeShadow = GetBladeShadowPattern(worldSpaceViewDirection, dirLightDirection, midShadowSeed, along, 0.0f);
@@ -611,7 +611,7 @@ float3 GetTierDebugColor()
 #	if defined(MID_LOD)
 		[branch] if (detailedSpecularWeight > 0.0 && waterRoughnessSpecular < 1.0)
 #	else
-		[branch] if (waterRoughnessSpecular < 1.0)
+	[branch] if (waterRoughnessSpecular < 1.0)
 #	endif
 			EvaluateWetnessLighting(wetnessNormal, directContext, waterRoughnessSpecular, dirLighting);
 #endif
@@ -756,7 +756,7 @@ float3 GetTierDebugColor()
 #	if defined(PGRASS_DISTANT_LIGHTING)
 		specularSkyOcclusion *= skylightingDiffuse;
 #	else
-		specularSkyOcclusion *= Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, specularReflectDirection);
+	specularSkyOcclusion *= Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, specularReflectDirection);
 #	endif
 #endif
 
