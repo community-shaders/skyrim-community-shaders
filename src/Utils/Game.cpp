@@ -282,6 +282,8 @@ namespace Util
 		const auto camera = frameBuffer.GetCameraPosAdjust();
 		const auto matrix = frameBuffer.GetCameraViewProjUnjittered().Transpose();
 
+		// Planes sit one pixel outside the view so jitter cannot move a rejected box on screen.
+		const float marginX = 1.f + 2.f / a_size.x, marginY = 1.f + 2.f / a_size.y;
 		uint32_t outside = 31u;
 		bool crossesEye = false;
 		float2 lower{ 1.f, 1.f }, upper{};
@@ -299,8 +301,8 @@ namespace Util
 				upper = { std::max(upper.x, x), std::max(upper.y, y) };
 			}
 			// Corner flags by plane; a plane that every corner is beyond rejects the box.
-			outside &= (clip.x < -clip.w ? 1u : 0u) | (clip.x > clip.w ? 2u : 0u) |
-			           (clip.y < -clip.w ? 4u : 0u) | (clip.y > clip.w ? 8u : 0u) | (clip.w <= 0.f ? 16u : 0u);
+			outside &= (clip.x < -clip.w * marginX ? 1u : 0u) | (clip.x > clip.w * marginX ? 2u : 0u) |
+			           (clip.y < -clip.w * marginY ? 4u : 0u) | (clip.y > clip.w * marginY ? 8u : 0u) | (clip.w <= 0.f ? 16u : 0u);
 		}
 		if (outside)
 			return {};
