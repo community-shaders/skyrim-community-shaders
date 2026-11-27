@@ -12,6 +12,7 @@ Texture2D<float4> MaskTexture : register(t2);
 #include "SubsurfaceScattering/SSSCommon.hlsli"
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
+	DTid.xy += DispatchOrigin;
 	if (any(DTid.xy >= uint2(SharedData::BufferDim.xy)))
 		return;
 

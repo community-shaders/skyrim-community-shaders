@@ -21,6 +21,7 @@ SamplerState PointSampler : register(s0);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
+	DTid.xy += DispatchOrigin;
 	// Early exit if dispatch thread is outside screen bounds
 	if (any(DTid.xy >= uint2(SharedData::BufferDim.xy)))
 		return;

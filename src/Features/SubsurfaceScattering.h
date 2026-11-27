@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include "Utils/Game.h"
 
 #define SSSS_N_SAMPLES 21
 
@@ -58,15 +59,41 @@ public:
 		uint pad;
 		float4 MeanFreePathBase;
 		float4 MeanFreePathHuman;
+		uint DispatchOrigin[2]{};
+		uint padOrigin[2]{};
 	};
 	STATIC_ASSERT_ALIGNAS_16(BlurCB);
 
 	ConstantBuffer* blurCB = nullptr;
 	BlurCB blurCBData{};
 
+	/** @brief Kernel offset range of the separable blur, in kernel units. */
+	static constexpr float kKernelRange = SSSS_N_SAMPLES > 20 ? 3.0f : 2.0f;
+
+	/** @brief World-space bounding spheres of the faces drawn this frame. */
+	struct SkinBounds
+	{
+		std::vector<RE::NiBound> spheres;  ///< One bound per facegen pass.
+		bool fullScreen = false;
+
+		/** @brief Returns true when no face was drawn. */
+		[[nodiscard]] bool Empty() const { return !fullScreen && spheres.empty(); }
+		/** @brief Forgets the frame's faces, keeping the storage. */
+		void Clear()
+		{
+			spheres.clear();
+			fullScreen = false;
+		}
+		/**
+		 * @brief Records a geometry's world bound, or flags the frame full screen if the bound is unusable.
+		 * @param a_geometry The face geometry being drawn.
+		 */
+		void Add(RE::BSGeometry* a_geometry);
+	};
+
 	bool validMaterial = true;
 	bool updateKernels = true;
-	bool validMaterials = false;
+	SkinBounds skinBounds;
 
 	Texture2D* blurHorizontalTemp = nullptr;
 	Texture2D* diffuseNoAlbedoTex = nullptr;
@@ -130,6 +157,18 @@ public:
 	 * @param kernel Output kernel structure populated with sample offsets and weights.
 	 */
 	void CalculateKernel(DiffusionProfile& a_profile, Kernel& kernel);
+
+	/**
+	 * @brief Returns how far the separable blur can read from a skin pixel, as a world-space box padding.
+	 * @return Zero for Burley, whose reads are gated by the skin mask.
+	 */
+	float GetDispatchPadding() const;
+
+	/**
+	 * @brief Resolves the screen rectangle the compute passes must cover.
+	 * @return The padded union of the faces drawn this frame in render-area pixels, or the whole render area.
+	 */
+	Util::ScreenRect GetDispatchRect() const;
 
 	/** @brief Dispatches the SSS blur compute shaders (prepass, horizontal, vertical or Burley). */
 	void DrawSSS();

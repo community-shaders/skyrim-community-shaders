@@ -126,7 +126,8 @@ float4 SSSSBlurCS(
 
 	// Calculate the final step to fetch the surrounding pixels:
 	float2 finalStep = scale * dir;
-	finalStep *= sssAmount;
+	// The dispatch rect is padded for amounts up to 1
+	finalStep *= saturate(sssAmount);
 	finalStep *= profile.x;  // Modulate it using the profile
 	// Scale the step into DR-UV space so blur width in rendered pixels stays consistent.
 	finalStep *= FrameBuffer::DynamicResolutionParams1.xy;
