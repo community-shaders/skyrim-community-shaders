@@ -21,6 +21,15 @@ RWTexture3D<float> DensityRW : register(u0);
 
 #	include "Common/ShadowSampling.hlsli"
 
+#	if defined(PHYSICAL_SKY)
+#		include "PhysicalSky/Common.hlsli"
+#	endif
+
+#	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler ShadowmapSampler
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 cbuffer PerTechnique : register(b0)
 {
 	row_major float4x4 CameraViewProj : packoffset(c0);
@@ -95,6 +104,16 @@ cbuffer PerTechnique : register(b0)
 
 #	if defined(TERRAIN_SHADOWS) || defined(CLOUD_SHADOWS)
 	shadowContribution *= sqrt(ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust));
+#	endif
+
+#	if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled)
+		shadowContribution *= ExponentialHeightFog::GetSunlightFogAttenuation(positionWS.xyz, PosAdjust);
+#	endif
+
+#	if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		shadowContribution *= PhysSky::GetDirlightTransmittance(positionWS.xyz + PosAdjust, ShadowmapSampler, true).x;
 #	endif
 
 	float vl = shadowContribution * densityContribution * phaseContribution;

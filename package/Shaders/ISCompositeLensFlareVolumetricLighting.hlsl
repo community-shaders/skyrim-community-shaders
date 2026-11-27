@@ -4,6 +4,10 @@
 #include "Common/PreExposure.hlsli"
 #include "Common/SharedData.hlsli"
 
+#if defined(PSHADER) && defined(VOLUMETRIC_LIGHTING) && defined(PHYSICAL_SKY)
+#	include "PhysicalSky/Common.hlsli"
+#endif
+
 typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
@@ -43,6 +47,10 @@ PS_OUTPUT main(PS_INPUT input)
 		volumetricLightingColor = lerp(volumetricLightingColor, dot(volumetricLightingColor, 1.0 / 3.0), SharedData::enbSettings.VolumetricRaysDesaturation);
 		volumetricLightingColor *= SharedData::enbSettings.VolumetricRaysColorFilter;
 	}
+#		endif
+#		if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		volumetricLightingColor *= PhysSky::SampleDirLightTr(VLSourceSampler);
 #		endif
 	color += volumetricLightingColor * volumetricLightingPower;
 #	endif

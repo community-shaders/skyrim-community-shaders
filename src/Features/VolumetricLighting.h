@@ -95,6 +95,8 @@ public:
 	RE::BSImagespaceShader* GetOrCreateBlurVCS(RE::BSComputeShader* computeShader);
 	/** @brief Binds the screen dimensions constant buffer to compute shader slot 1. */
 	void SetDimensionsCB() const;
+	/** @brief Binds (or clears, when \p bind is false) the Physical Sky cloud shadow inputs of the generate pass. */
+	void SetGenerateResources(bool bind) const;
 	/**
 	 * @brief Calculates the thread group counts for the horizontal blur dispatch.
 	 *
@@ -177,6 +179,11 @@ private:
 	static constexpr int32_t BlurThreadGroupSizeX = 256;
 	static constexpr int32_t BlurThreadGroupSizeY = 256;
 	static constexpr int32_t BlurWindow = 12;
+
+	// Registers declared by FrameBuffer.hlsli and PhysicalSky/ShadowVolume.hlsli / Common.hlsli
+	static constexpr uint32_t PerFrameSlot = 12;
+	static constexpr uint32_t CloudShadowMeanSlot = 69;
+	static constexpr uint32_t CloudShadowVolumeSlot = 112;
 
 	RE::BSImagespaceShader* generateCS = nullptr;
 	RE::BSImagespaceShader* raymarchCS = nullptr;
