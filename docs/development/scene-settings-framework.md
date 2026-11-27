@@ -395,8 +395,8 @@ are **blocked** rather than clobbering it, and unknown fields on an entry are pr
     - `ScreenSpaceGI`'s `ResolutionMode`, `EnableGI`, `EnableTemporalDenoiser` and
       `EnableExperimentalSpecularGI`: each is a shader define, so a change recompiles every SSGI compute
       shader on the render thread and a location transition would hitch.
-- `kLocationFeatureWhitelist` (8) and `kTimeOfDayFeatureWhitelist` (11): which features those scene types
-  may target.
+- `kLocationFeatureWhitelist` (9) and `kTimeOfDayFeatureWhitelist` (13): which features those scene types
+  may target. Weather pages use the time-of-day list.
 
 `PostProcessing` defers its load: `LoadSettings` stores the JSON and `ProcessSettings` applies it in
 `Prepass`. Its per-load path must stay cheap because a blend reloads every frame, so sub-features reconcile
