@@ -416,7 +416,8 @@ void PerformanceOverlay::DrawOverlay()
 		defaultPlacement.reset();
 		ImGui::SetNextWindowPos(this->settings.Position, ImGuiCond_FirstUseEver);
 	} else if (!defaultPlacement) {
-		const float defaultPad = Settings::kDefaultWindowPadding * scale;
+		// Whole pixels, as ImGui truncates window positions.
+		const float defaultPad = std::floor(Settings::kDefaultWindowPadding * scale);
 		defaultPlacement = ImVec2(defaultPad, defaultPad);
 		ImGui::SetNextWindowPos(*defaultPlacement);
 	}
