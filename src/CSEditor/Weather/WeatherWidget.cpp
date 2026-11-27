@@ -665,7 +665,7 @@ void WeatherWidget::InitializeInheritFlags()
 	}
 
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
-		ensureFlag(std::format("Atmosphere_{}", ColorTypeLabel(i)));
+		ensureFlag(std::format("Atmosphere_{}", ColorTypeId(i)));
 	}
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
@@ -975,7 +975,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 							for (int j = 0; j < 4; j++)
 								parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
 
-							std::string inheritKey = "Atmosphere_" + colorTypeLabel;
+							std::string inheritKey = std::string("Atmosphere_") + ColorTypeId(i);
 							return TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors);
 						} else {
 							return TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes);
@@ -1353,7 +1353,7 @@ void WeatherWidget::SyncInheritedValuesFromParent()
 	syncFogPair(WeatherInherit::kFogMax, WeatherSetting::kDayMax, WeatherSetting::kNightMax);
 
 	for (int i = 0; i < ColorTypes::kTotal; i++)
-		if (inherited("Atmosphere_" + ColorTypeLabel(i)))
+		if (inherited(std::string("Atmosphere_") + ColorTypeId(i)))
 			settings.atmosphereColors[i] = parentWidget->settings.atmosphereColors[i];
 
 	syncDalcTOD(WeatherInherit::kDalcSpecular, [](DALC& d) -> auto& { return d.specular; });
@@ -1467,7 +1467,7 @@ void WeatherWidget::InheritAllFromParent()
 	// Atmosphere tab
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		settings.atmosphereColors[i] = parentWidget->settings.atmosphereColors[i];
-		settings.inheritFlags["Atmosphere_" + ColorTypeLabel(i)] = true;
+		settings.inheritFlags[std::string("Atmosphere_") + ColorTypeId(i)] = true;
 	}
 
 	// Clouds tab

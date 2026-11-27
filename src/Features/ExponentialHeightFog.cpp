@@ -179,7 +179,7 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::ColorEdit4(T(TKEY("inscattering_cubemap_tint"), "Inscattering Cubemap Tint"), (float*)&settings.inscatteringTint);
 	Util::HoverTip(T(TKEY("inscattering_cubemap_tint_tooltip"), "Tint applied to the sky IBL or dynamic cubemap light added to the fog. Alpha is its intensity."));
 	ImGui::SliderFloat(T(TKEY("cubemap_mip_level"), "Cubemap Mip Level"), &settings.cubemapMipLevel, 1.0f, 8.0f, "%.1f");
-	Util::HoverTip(T(TKEY("cubemap_mip_level_tooltip"), "Blur of the cubemap sampled for fog color. Higher values give a smoother color that leans toward the overhead sky."));
+	Util::HoverTip(T(TKEY("cubemap_mip_level_tooltip"), "Leans the color sample toward overhead, straight up at 8. In interiors with dynamic cubemaps it also blurs the color."));
 
 	ImGui::TextWrapped("%s", T("feature.view_atmosphere.quality_location", "Grid quality and temporal sampling are configured in Atmosphere and Fog."));
 	ImGui::SeparatorText(T(TKEY("volumetric_fog"), "Volumetric Fog"));

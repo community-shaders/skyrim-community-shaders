@@ -98,6 +98,7 @@ namespace SceneSettingsPolicy
 		{ "ImageBasedLighting" },
 		{ "PhysicalSky" },
 		{ "PostProcessing" },
+		{ "ProceduralAurora" },
 		{ "ProceduralSun" },
 		{ "ScreenSpaceGI" },
 		{ "ScreenSpaceShadows" },

@@ -305,7 +305,7 @@ namespace GoToIndex
 				addCommand("cs_editor", T("menu.palette.cmd_cs_editor", "Open CS Editor"), {}, hint(Ids::kOpenEditor), Ids::kOpenEditor);
 			if (globals::features::effects11.loaded)
 				addCommand("effects11_editor", T("menu.palette.cmd_effects11_editor", "Open Effects 11 editor"), [] { Effects11Editor::GetSingleton().Open(true); }, hotkey(menuSettings.Effects11EditorKey));
-			addCommand("overlay", T("menu.palette.cmd_overlay", "Toggle performance overlay"), [] { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.settings.ShowInOverlay); }, hotkey(menuSettings.OverlayToggleKey));
+			addCommand("overlay", T("menu.palette.cmd_overlay", "Toggle performance overlay"), [] { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.IsOverlayVisible()); }, hotkey(menuSettings.OverlayToggleKey));
 			if (globals::features::screenshotFeature.loaded)
 				addCommand("screenshot", T("menu.palette.cmd_screenshot", "Take screenshot"), [] { globals::features::screenshotFeature.captureRequested = true; }, hotkey(menuSettings.ScreenshotKey));
 			addCommand("logs", T("menu.palette.cmd_logs", "Open logs folder"), [] {

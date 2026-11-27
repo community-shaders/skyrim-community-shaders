@@ -930,9 +930,10 @@ void State::Save()
 
 	// Serialize fully before touching the file: a throwing feature must not truncate the config.
 	json settings;
+	std::unordered_map<std::string, json> savedEdits;
 	try {
 		SaveToJson(settings);
-		KeepOnlyUserEdits(settings);
+		savedEdits = KeepOnlyUserEdits(settings);
 		// The catalog writes its own section whenever it changes; this keeps it from being dropped here.
 		const auto& catalog = UnifiedPresetCatalog::GetSingleton();
 		settings[UnifiedPresetCatalog::kUserSettingsKey] = catalog.SerializeActiveState();
@@ -943,6 +944,7 @@ void State::Save()
 
 	if (Util::FileHelpers::WriteJsonAtomically(configPath, settings, 1, "config")) {
 		logger::info("Saving settings to {}", configPath);
+		userFeatureEdits = std::move(savedEdits);
 		MarkSettingsSaved();
 	}
 }
@@ -978,8 +980,9 @@ json State::DiffFromFeatureBase(const std::string& featureName, const json& curr
 	return DiffFromBase(current, base ? *base : empty);
 }
 
-void State::KeepOnlyUserEdits(json& settings)
+std::unordered_map<std::string, json> State::KeepOnlyUserEdits(json& settings) const
 {
+	auto edits = userFeatureEdits;
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (!feature->UsesMainSettings())
 			continue;
@@ -987,14 +990,15 @@ void State::KeepOnlyUserEdits(json& settings)
 		// A feature that never loaded holds defaults, not the user's values, so its stored edits carry over.
 		if (feature->loaded) {
 			const auto current = settings.find(name);
-			userFeatureEdits[name] = current == settings.end() ? json::object() : DiffFromFeatureBase(name, *current);
+			edits[name] = current == settings.end() ? json::object() : DiffFromFeatureBase(name, *current);
 		}
-		const auto edits = userFeatureEdits.find(name);
-		if (edits == userFeatureEdits.end() || edits->second.empty())
+		const auto found = edits.find(name);
+		if (found == edits.end() || found->second.empty())
 			settings.erase(name);
 		else
-			settings[name] = edits->second;
+			settings[name] = found->second;
 	}
+	return edits;
 }
 
 void State::ReapplySettingsLayers()
