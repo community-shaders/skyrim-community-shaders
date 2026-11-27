@@ -365,6 +365,12 @@ namespace SIE
 
 	namespace SShaderCache
 	{
+		/** @brief Extracts the technique field (bits 24-29) from a shader descriptor. */
+		constexpr uint32_t GetTechnique(uint32_t a_descriptor)
+		{
+			return 0x3F & (a_descriptor >> 24);
+		}
+
 		struct VertexShaderDeleter
 		{
 			void operator()(RE::BSGraphics::VertexShader* shader) const noexcept
@@ -719,6 +725,21 @@ namespace SIE
 			LODLandNoise = 18,
 			MTLandLODBlend = 19,
 		};
+
+		/** @brief Lighting pass enum of the first technique (None, no flags). */
+		static constexpr uint32_t LightingTechniqueStart = 0x4800002D;
+
+		/** @brief Decodes the lighting technique from a Lighting shader descriptor. */
+		static constexpr LightingShaderTechniques GetLightingTechnique(uint32_t a_descriptor)
+		{
+			return static_cast<LightingShaderTechniques>(SShaderCache::GetTechnique(a_descriptor));
+		}
+
+		/** @brief Decodes the lighting technique from a Lighting shader pass enum. */
+		static constexpr LightingShaderTechniques GetLightingPassTechnique(uint32_t a_passEnum)
+		{
+			return GetLightingTechnique(a_passEnum - LightingTechniqueStart);
+		}
 
 		enum class LightingShaderFlags
 		{

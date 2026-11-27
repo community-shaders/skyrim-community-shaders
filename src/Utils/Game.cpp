@@ -262,6 +262,63 @@ namespace Util
 		return { dispatchX, dispatchY };
 	}
 
+	void ScreenRect::Include(const ScreenRect& a_other)
+	{
+		if (a_other.Empty())
+			return;
+		if (Empty()) {
+			*this = a_other;
+			return;
+		}
+		left = std::min(left, a_other.left);
+		top = std::min(top, a_other.top);
+		right = std::max(right, a_other.right);
+		bottom = std::max(bottom, a_other.bottom);
+	}
+
+	ScreenRect ProjectBoxToScreenRect(const float3& a_center, const float3& a_halfExtent, float2 a_size)
+	{
+		const auto& frameBuffer = globals::game::frameBufferCached;
+		const auto camera = frameBuffer.GetCameraPosAdjust();
+		const auto matrix = frameBuffer.GetCameraViewProjUnjittered().Transpose();
+
+		// Planes sit one pixel outside the view so jitter cannot move a rejected box on screen.
+		const float marginX = 1.f + 2.f / a_size.x, marginY = 1.f + 2.f / a_size.y;
+		uint32_t outside = 31u;
+		bool crossesEye = false;
+		float2 lower{ 1.f, 1.f }, upper{};
+		for (uint32_t corner = 0; corner < 8; ++corner) {
+			const float4 point{
+				a_center.x + (corner & 1u ? a_halfExtent.x : -a_halfExtent.x) - camera.x,
+				a_center.y + (corner & 2u ? a_halfExtent.y : -a_halfExtent.y) - camera.y,
+				a_center.z + (corner & 4u ? a_halfExtent.z : -a_halfExtent.z) - camera.z, 1.f
+			};
+			const auto clip = float4::Transform(point, matrix);
+			crossesEye |= clip.w <= 0.f;
+			if (clip.w > 0.f) {
+				const float x = clip.x / clip.w * .5f + .5f, y = .5f - clip.y / clip.w * .5f;
+				lower = { std::min(lower.x, x), std::min(lower.y, y) };
+				upper = { std::max(upper.x, x), std::max(upper.y, y) };
+			}
+			// Corner flags by plane; a plane that every corner is beyond rejects the box.
+			outside &= (clip.x < -clip.w * marginX ? 1u : 0u) | (clip.x > clip.w * marginX ? 2u : 0u) |
+			           (clip.y < -clip.w * marginY ? 4u : 0u) | (clip.y > clip.w * marginY ? 8u : 0u) | (clip.w <= 0.f ? 16u : 0u);
+		}
+		if (outside)
+			return {};
+		const float width = std::ceil(a_size.x), height = std::ceil(a_size.y);
+		if (crossesEye)
+			return { 0, 0, (uint)width, (uint)height };
+
+		// A pixel of slack covers the projection jitter.
+		return {
+			(uint)std::max(0.f, std::floor(lower.x * a_size.x) - 1.f),
+			(uint)std::max(0.f, std::floor(lower.y * a_size.y) - 1.f),
+			(uint)std::min(width, std::ceil(upper.x * a_size.x) + 1.f),
+			(uint)std::min(height, std::ceil(upper.y * a_size.y) + 1.f)
+		};
+	}
+
 	bool IsDynamicResolution()
 	{
 		const static auto address = REL::RelocationID{ 508794, 380760 }.address();

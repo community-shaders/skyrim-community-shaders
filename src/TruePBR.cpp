@@ -932,10 +932,9 @@ struct BSLightingShaderProperty_GetRenderPasses
 		auto currentPass = renderPasses->head;
 		while (currentPass != nullptr) {
 			if (currentPass->shader->shaderType == RE::BSShader::Type::Lighting) {
-				constexpr uint32_t LightingTechniqueStart = 0x4800002D;
-				auto lightingTechnique = currentPass->passEnum - LightingTechniqueStart;
+				auto lightingTechnique = currentPass->passEnum - SIE::ShaderCache::LightingTechniqueStart;
 				auto lightingFlags = lightingTechnique & ~(~0u << 24);
-				auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((lightingTechnique >> 24) & 0x3F);
+				auto lightingType = SIE::ShaderCache::GetLightingPassTechnique(currentPass->passEnum);
 				lightingFlags &= ~(static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr) | static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::Deferred));
 				if (isPbr) {
 					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr);
@@ -957,7 +956,7 @@ struct BSLightingShaderProperty_GetRenderPasses
 					lightingFlags |= static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::ShadowDir) | static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::DefShadow);
 
 				lightingTechnique = (static_cast<uint32_t>(lightingType) << 24) | lightingFlags;
-				currentPass->passEnum = lightingTechnique + LightingTechniqueStart;
+				currentPass->passEnum = lightingTechnique + SIE::ShaderCache::LightingTechniqueStart;
 			}
 			currentPass = currentPass->next;
 		}
@@ -1016,7 +1015,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 	const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
 
 	auto lightingFlags = shader->currentRawTechnique & ~(~0u << 24);
-	auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((shader->currentRawTechnique >> 24) & 0x3F);
+	auto lightingType = SIE::ShaderCache::GetLightingTechnique(shader->currentRawTechnique);
 	if (!(lightingType == LODLand || lightingType == LODLandNoise) && (lightingFlags & static_cast<uint32_t>(SIE::ShaderCache::LightingShaderFlags::TruePbr))) {
 		auto shadowState = globals::game::shadowState;
 		auto renderer = globals::game::renderer;

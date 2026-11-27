@@ -21,6 +21,7 @@ cbuffer PerFrameSSS : register(b1)
 	uint pad;
 	float4 MeanFreePathBase;
 	float4 MeanFreePathHuman;
+	uint2 DispatchOrigin;
 };
 
 float3 SSSDecodeAlbedo(float3 encodedAlbedo)

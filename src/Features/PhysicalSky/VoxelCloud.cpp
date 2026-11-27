@@ -347,54 +347,20 @@ void VoxelCloudManager::UpdateLighting(ID3D11ComputeShader* shader, float3 direc
 	context->CSSetShaderResources(85, 1, &view);
 }
 
-std::array<uint32_t, 4> VoxelCloudManager::ScreenRect(float bottomZ, uint32_t width, uint32_t height) const
+Util::ScreenRect VoxelCloudManager::ScreenRect(float bottomZ, uint32_t width, uint32_t height) const
 {
 	if (active.empty())
 		return {};
 	if (REL::Module::IsVR())
 		return { 0, 0, width, height };
-	const auto camera = globals::game::frameBufferCached.GetCameraPosAdjust();
-	const auto matrix = globals::game::frameBufferCached.GetCameraViewProjUnjittered().Transpose();
-	float2 lower{ 1.f, 1.f }, upper{};
+	Util::ScreenRect rect;
 	for (const auto& cloud : active) {
 		// Match the longest local lighting probe, as for storm screen rectangles.
-		const float3 extent = HalfBounds(cloud) + float3{ 240.f, 240.f, 240.f };
-		uint32_t outside = 31u;
-		bool crossesEye = false;
-		float2 boxLower{ 1.f, 1.f }, boxUpper{};
-		for (uint32_t corner = 0; corner < 8; ++corner) {
-			const float4 point{
-				(cloud.centerWeight.x + (corner & 1u ? extent.x : -extent.x)) / Util::Units::GAME_UNIT_TO_M - camera.x,
-				(cloud.centerWeight.y + (corner & 2u ? extent.y : -extent.y)) / Util::Units::GAME_UNIT_TO_M - camera.y,
-				(cloud.centerWeight.z + (corner & 4u ? extent.z : -extent.z)) / Util::Units::GAME_UNIT_TO_M + bottomZ - camera.z, 1.f
-			};
-			const auto clip = float4::Transform(point, matrix);
-			crossesEye |= clip.w <= 0.f;
-			if (clip.w > 0.f) {
-				const float x = clip.x / clip.w * .5f + .5f, y = .5f - clip.y / clip.w * .5f;
-				boxLower.x = std::min(boxLower.x, x);
-				boxLower.y = std::min(boxLower.y, y);
-				boxUpper.x = std::max(boxUpper.x, x);
-				boxUpper.y = std::max(boxUpper.y, y);
-			}
-			outside &= (clip.x < -clip.w ? 1u : 0u) | (clip.x > clip.w ? 2u : 0u) |
-			           (clip.y < -clip.w ? 4u : 0u) | (clip.y > clip.w ? 8u : 0u) | (clip.w <= 0.f ? 16u : 0u);
-		}
-		if (outside)
-			continue;
-		if (crossesEye)
-			return { 0, 0, width, height };
-		lower.x = std::min(lower.x, boxLower.x);
-		lower.y = std::min(lower.y, boxLower.y);
-		upper.x = std::max(upper.x, boxUpper.x);
-		upper.y = std::max(upper.y, boxUpper.y);
+		const float3 extent = (HalfBounds(cloud) + float3{ 240.f, 240.f, 240.f }) / Util::Units::GAME_UNIT_TO_M;
+		const float3 center = float3{ cloud.centerWeight.x, cloud.centerWeight.y, cloud.centerWeight.z } / Util::Units::GAME_UNIT_TO_M + float3{ 0.f, 0.f, bottomZ };
+		rect.Include(Util::ProjectBoxToScreenRect(center, extent, { (float)width, (float)height }));
 	}
-	if (upper.x <= lower.x || upper.y <= lower.y)
-		return {};
-	return { static_cast<uint32_t>(std::max(0.f, std::floor(lower.x * width) - 1.f)),
-		static_cast<uint32_t>(std::max(0.f, std::floor(lower.y * height) - 1.f)),
-		static_cast<uint32_t>(std::min(float(width), std::ceil(upper.x * width) + 1.f)),
-		static_cast<uint32_t>(std::min(float(height), std::ceil(upper.y * height) + 1.f)) };
+	return rect;
 }
 
 void VoxelCloudManager::DrawSettings(SceneBlend& selection, const std::string& worldspace, float3 cameraMeters)

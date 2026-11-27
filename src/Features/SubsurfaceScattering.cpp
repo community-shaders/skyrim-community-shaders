@@ -153,7 +153,7 @@ void SubsurfaceScattering::CalculateKernel(DiffusionProfile& a_profile, Kernel& 
 {
 	uint nSamples = SSSS_N_SAMPLES;
 
-	const float RANGE = nSamples > 20 ? 3.0f : 2.0f;
+	const float RANGE = kKernelRange;
 	const float EXPONENT = 2.0f;
 
 	// Calculate the offsets:
@@ -208,17 +208,60 @@ void SubsurfaceScattering::CalculateKernel(DiffusionProfile& a_profile, Kernel& 
 	}
 }
 
+void SubsurfaceScattering::SkinBounds::Add(RE::BSGeometry* a_geometry)
+{
+	if (fullScreen)
+		return;
+
+	const auto& bound = a_geometry->worldBound;
+	if (a_geometry->GetFlags().any(RE::NiAVObject::Flag::kFixedBound) || !(bound.radius > 0.0f) || !std::isfinite(bound.radius + bound.center.x + bound.center.y + bound.center.z)) {
+		fullScreen = true;
+		return;
+	}
+
+	spheres.push_back(bound);
+}
+
+float SubsurfaceScattering::GetDispatchPadding() const
+{
+	if (settings.SSMode != 0)
+		return 0.0f;
+
+	// SSSS_FOVY is horizontal: reach is exact in x and scales by height/width in y
+	const auto* graphicsState = globals::game::graphicsState;
+	const float aspect = std::max(1.0f, (float)graphicsState->screenHeight / (float)graphicsState->screenWidth);
+	const float blur = std::max(settings.BaseProfile.BlurRadius, settings.HumanProfile.BlurRadius);
+	return 2.0f * kKernelRange * blur * aspect;
+}
+
+Util::ScreenRect SubsurfaceScattering::GetDispatchRect() const
+{
+	const auto size = Util::ConvertToDynamic({ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight }, true);
+	if (skinBounds.fullScreen || REL::Module::IsVR())
+		return { 0, 0, (uint)std::ceil(size.x), (uint)std::ceil(size.y) };
+
+	Util::ScreenRect rect;
+	const float pad = GetDispatchPadding();
+	for (const auto& sphere : skinBounds.spheres) {
+		const float radius = sphere.radius + pad;
+		rect.Include(Util::ProjectBoxToScreenRect({ sphere.center.x, sphere.center.y, sphere.center.z }, { radius, radius, radius }, size));
+	}
+	return rect;
+}
+
 void SubsurfaceScattering::DrawSSS()
 {
-	if (!validMaterials)
+	if (skinBounds.Empty())
+		return;
+
+	const auto rect = GetDispatchRect();
+	if (rect.Empty())
 		return;
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering");
 
-	validMaterials = false;
-
-	auto dispatchCount = Util::GetScreenDispatchCount();
+	const Util::DispatchCount dispatchCount{ (rect.Width() + 7) / 8, (rect.Height() + 7) / 8 };
 
 	{
 		auto cameraData = globals::game::shadowState->GetRuntimeData().cameraData.getEye();
@@ -234,6 +277,9 @@ void SubsurfaceScattering::DrawSSS()
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;
+
+		blurCBData.DispatchOrigin[0] = rect.left;
+		blurCBData.DispatchOrigin[1] = rect.top;
 
 		blurCB->Update(blurCBData);
 	}
@@ -385,6 +431,8 @@ void SubsurfaceScattering::SetupResources()
 
 void SubsurfaceScattering::Reset()
 {
+	skinBounds.Clear();
+
 	auto shaderManager = globals::game::smState;
 	auto shaderCache = globals::shaderCache;
 	shaderManager->characterLightEnabled = shaderCache->IsEnabled() ? settings.EnableCharacterLighting : true;
@@ -505,6 +553,11 @@ void SubsurfaceScattering::BSLightingShader_SetupSkin(RE::BSRenderPass* a_pass)
 	auto state = globals::state;
 
 	if (deferred->deferredPass) {
+		// Same predicate as the shader's mask write
+		const auto technique = SIE::ShaderCache::GetLightingPassTechnique(a_pass->passEnum);
+		if (technique == SIE::ShaderCache::LightingShaderTechniques::Facegen || technique == SIE::ShaderCache::LightingShaderTechniques::FacegenRGBTint)
+			skinBounds.Add(a_pass->geometry);
+
 		if (a_pass->shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kFace, RE::BSShaderProperty::EShaderPropertyFlag::kFaceGenRGBTint)) {
 			bool isBeastRace = true;
 
@@ -514,8 +567,6 @@ void SubsurfaceScattering::BSLightingShader_SetupSkin(RE::BSRenderPass* a_pass)
 					if (auto actor = userData->As<RE::Actor>())
 						if (auto race = actor->GetRace())
 							isBeastRace = race->HasKeyword(isBeastRaceKeyword);
-
-			validMaterials = true;
 
 			if (isBeastRace)
 				state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::IsBeastRace;

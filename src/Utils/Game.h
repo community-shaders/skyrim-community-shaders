@@ -129,6 +129,30 @@ namespace Util
 	};
 	DispatchCount GetScreenDispatchCount(bool a_dynamic = true);
 
+	/** @brief Pixel rectangle with an inclusive minimum and an exclusive maximum. */
+	struct ScreenRect
+	{
+		uint left = 0;
+		uint top = 0;
+		uint right = 0;
+		uint bottom = 0;
+
+		[[nodiscard]] bool Empty() const { return right <= left || bottom <= top; }
+		[[nodiscard]] uint Width() const { return right - left; }
+		[[nodiscard]] uint Height() const { return bottom - top; }
+		/** @brief Grows to also cover a rectangle; empty rectangles are ignored. */
+		void Include(const ScreenRect& a_other);
+	};
+
+	/**
+	 * @brief Projects a world-space box to the pixel rectangle it covers, widened by one pixel.
+	 * @param a_center Box center in world space.
+	 * @param a_halfExtent Box half extents in world space.
+	 * @param a_size Target size in pixels; a fractional size is clamped to its ceiling.
+	 * @return The clamped rectangle, empty when the box is outside the view, or the whole target when it crosses the eye plane.
+	 */
+	ScreenRect ProjectBoxToScreenRect(const float3& a_center, const float3& a_halfExtent, float2 a_size);
+
 	/**
 	 * @brief Checks if dynamic resolution is currently enabled.
 	 *
