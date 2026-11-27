@@ -2494,6 +2494,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dirDetailedShadow = dirVSMDetailedShadow;
 	}
 #	endif
+#	if defined(SKYLIGHTING_SHADOW_VIS)
+	const float dirMapShadow = dirDetailedShadow;
+#	endif
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior) {
@@ -2550,15 +2553,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(SKYLIGHTING_SHADOW_VIS)
+	// Probes are coarse and lagged, so the shadow map caps them to keep shaded foliage from reading as lit
 	if (UseSkylightingShadowVisibility())
-		dirSoftShadow = skylightingShadowVisibility;
+		dirSoftShadow = min(skylightingShadowVisibility, dirMapShadow);
 #	endif
 
 #	if defined(TRUE_PBR)
 	[branch] if (isFoliage && (PBRFlags & PBR::Flags::Subsurface) != 0)
 	{
-		dirDetailedShadow = PBR::GetFoliageShadowVisibility(dirDetailedShadow, material.Thickness);
-		dirSoftShadow = PBR::GetFoliageShadowVisibility(dirSoftShadow, material.Thickness);
+		// Thin leaves pass light only where the probes also see the sun
+		float foliageLeakCap = 1.0;
+#		if defined(SKYLIGHTING_SHADOW_VIS)
+		foliageLeakCap = skylightingShadowVisibility;
+#		endif
+		dirDetailedShadow = min(PBR::GetFoliageShadowVisibility(dirDetailedShadow, material.Thickness), max(dirDetailedShadow, foliageLeakCap));
+		dirSoftShadow = min(PBR::GetFoliageShadowVisibility(dirSoftShadow, material.Thickness), max(dirSoftShadow, foliageLeakCap));
 	}
 #	endif
 

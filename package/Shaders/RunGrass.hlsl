@@ -662,7 +662,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(SKYLIGHTING)
 	sh2 skylightingSH = Skylighting::Sample(input.WorldPosition.xyz, normal, skylightingShadowVisibility);
 	if (!SharedData::InInterior)
-		dirSoftShadow = skylightingShadowVisibility;
+		dirSoftShadow = min(skylightingShadowVisibility, dirDetailedShadow);
 #				endif
 
 #				if defined(WETNESS_EFFECTS)
