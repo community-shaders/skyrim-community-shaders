@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ndf.h"
+#include "Utils/Game.h"
 
 // Scene endpoints hold placements, rather than interpolating the volume transform.
 struct VoxelCloudPlacement
@@ -58,7 +59,7 @@ struct VoxelCloudManager
 	void DrawSettings(SceneBlend& selection, const std::string& worldspace, float3 cameraMeters);
 	uint32_t Count() const { return static_cast<uint32_t>(active.size()); }
 	float2 Altitude() const { return altitude; }
-	std::array<uint32_t, 4> ScreenRect(float bottomZ, uint32_t width, uint32_t height) const;
+	Util::ScreenRect ScreenRect(float bottomZ, uint32_t width, uint32_t height) const;
 
 private:
 	struct Resource

@@ -402,7 +402,7 @@ void PhysicalSky::SetupVolumetricResources()
 	// Volumetric cloud constants
 	{
 		volCloudCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<VolumetricCloudCB>());
-		cloudDispatchCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<std::array<uint32_t, 4>>(), "PhysicalSky::CloudDispatch");
+		cloudDispatchCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<Util::ScreenRect>(), "PhysicalSky::CloudDispatch");
 	}
 
 	// Static low-cloud cross-section shown in the Clouds page.
@@ -1632,7 +1632,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		context->PSSetShaderResources(109, 1, nullOutputs);
 		texVolCubeTr.swap(texVolCubeHistoryTr);
 		const auto voxelRect = voxelCloudManager.ScreenRect(cloudData.bottomZ, lowW, lowH);
-		const bool voxelVisible = voxelRect[2] > voxelRect[0] && voxelRect[3] > voxelRect[1] && !state->isMapMenuOpen;
+		const bool voxelVisible = !voxelRect.Empty() && !state->isMapMenuOpen;
 		texVolCubeLum.swap(texVolCubeHistoryLum);
 		texVolCubeAux.swap(texVolCubeHistoryAux);
 		texLightningCubeMask.swap(texLightningCubeHistory);
@@ -1685,7 +1685,7 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 			context->CSSetUnorderedAccessViews(6, 1, &stormMotionOutput, nullptr);
 			auto stormRect = cloudStormManager.ScreenRect(cloudData.bottomZ, lowW, lowH,
 				{ cloudData.lowCloudTraceBottomAltitude, cloudData.lowCloudTraceTopAltitude }, cloudData.cloudCurvatureRadius);
-			const bool stormVisible = stormRect[2] > stormRect[0] && stormRect[3] > stormRect[1];
+			const bool stormVisible = !stormRect.Empty();
 			cloudDispatchCb->Update(stormRect);
 			auto* dispatchConstants = cloudDispatchCb->CB();
 			context->CSSetConstantBuffers(3, 1, &dispatchConstants);
@@ -1714,8 +1714,8 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 				context->CSSetShader(singleConstants ? csVolMainSingleVolcanic.get() : (volcanic ? csVolMainVolcanic.get() : csVolMainView.get()), nullptr, 0);
 				const uint32_t groupWidth = volcanic ? 16u : 8u;
 				const uint32_t groupHeight = volcanic && !singleConstants ? 4u : 8u;
-				context->Dispatch((stormRect[2] - stormRect[0] + groupWidth - 1u) / groupWidth,
-					(stormRect[3] - stormRect[1] + groupHeight - 1u) / groupHeight, 1);
+				context->Dispatch((stormRect.Width() + groupWidth - 1u) / groupWidth,
+					(stormRect.Height() + groupHeight - 1u) / groupHeight, 1);
 				if (singleConstants) {
 					auto* previous = previousConstants.get();
 					context->CSSetConstantBuffers(0, 1, &previous);

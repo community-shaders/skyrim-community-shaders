@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ndf.h"
+#include "Utils/Game.h"
 
 struct CloudStormSettings
 {
@@ -83,7 +84,7 @@ struct CloudStormManager
 	void DrawSceneSettings();
 	bool Replaces(const RE::BSGeometry* geometry) const;
 	/// Conservative low-resolution pixel rectangle, including local light probes.
-	std::array<uint32_t, 4> ScreenRect(float bottomZ, uint32_t width, uint32_t height, float2 weatherAltitude, float curvatureRadius) const;
+	Util::ScreenRect ScreenRect(float bottomZ, uint32_t width, uint32_t height, float2 weatherAltitude, float curvatureRadius) const;
 	bool VolcanicOnly() const
 	{
 		return !active.empty() && std::ranges::all_of(active, [](const auto& storm) { return (static_cast<uint32_t>(storm.generation.w) & 4u) != 0u; });

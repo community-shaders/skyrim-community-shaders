@@ -511,13 +511,12 @@ bool CloudStormManager::Replaces(const RE::BSGeometry* geometry) const
 	return false;
 }
 
-std::array<uint32_t, 4> CloudStormManager::ScreenRect(float bottomZ, uint32_t width, uint32_t viewHeight, float2 weatherAltitude, float curvatureRadius) const
+Util::ScreenRect CloudStormManager::ScreenRect(float bottomZ, uint32_t width, uint32_t viewHeight, float2 weatherAltitude, float curvatureRadius) const
 {
 	if (REL::Module::IsVR())
-		return active.empty() ? std::array<uint32_t, 4>{} : std::array<uint32_t, 4>{ 0, 0, width, viewHeight };
+		return active.empty() ? Util::ScreenRect{} : Util::ScreenRect{ 0, 0, width, viewHeight };
 	const auto camera = globals::game::frameBufferCached.GetCameraPosAdjust();
-	const auto matrix = globals::game::frameBufferCached.GetCameraViewProjUnjittered().Transpose();
-	float2 screenMin{ 1.f, 1.f }, screenMax{};
+	Util::ScreenRect rect;
 	for (const auto& storm : active) {
 		// Include the longest local light probe, so an off-screen storm can still
 		// shadow a visible cloud. Distant lighting and reflections use the full path.
@@ -538,41 +537,13 @@ std::array<uint32_t, 4> CloudStormManager::ScreenRect(float bottomZ, uint32_t wi
 			lower.z = std::min(lower.z, weatherAltitude.x * 0.01428f - curvature - 270.f);
 			upper.z = std::max(upper.z, weatherAltitude.y * 0.01428f + 270.f);
 		}
-		uint32_t outside = 31u;
-		bool crossesEye = false;
-		float2 lowerScreen{ 1.f, 1.f }, upperScreen{};
-		for (uint32_t corner = 0; corner < 8; ++corner) {
-			const float4 point{ ((corner & 1u) ? upper.x : lower.x) / 0.01428f - camera.x,
-				((corner & 2u) ? upper.y : lower.y) / 0.01428f - camera.y,
-				((corner & 4u) ? upper.z : lower.z) / 0.01428f + bottomZ - camera.z, 1.f };
-			const auto clip = float4::Transform(point, matrix);
-			crossesEye |= clip.w <= 0.f;
-			if (clip.w > 0.f) {
-				const float x = clip.x / clip.w * 0.5f + 0.5f;
-				const float y = 0.5f - clip.y / clip.w * 0.5f;
-				lowerScreen.x = std::min(lowerScreen.x, x);
-				lowerScreen.y = std::min(lowerScreen.y, y);
-				upperScreen.x = std::max(upperScreen.x, x);
-				upperScreen.y = std::max(upperScreen.y, y);
-			}
-			outside &= (clip.x < -clip.w ? 1u : 0u) | (clip.x > clip.w ? 2u : 0u) |
-			           (clip.y < -clip.w ? 4u : 0u) | (clip.y > clip.w ? 8u : 0u) | (clip.w <= 0.f ? 16u : 0u);
-		}
-		if (outside != 0u)
-			continue;
-		if (crossesEye)
-			return { 0, 0, width, viewHeight };
-		screenMin.x = std::min(screenMin.x, lowerScreen.x);
-		screenMin.y = std::min(screenMin.y, lowerScreen.y);
-		screenMax.x = std::max(screenMax.x, upperScreen.x);
-		screenMax.y = std::max(screenMax.y, upperScreen.y);
+		const float3 center = (lower + upper) * 0.5f / 0.01428f + float3{ 0.f, 0.f, bottomZ };
+		rect.Include(Util::ProjectBoxToScreenRect(center, (upper - lower) * 0.5f / 0.01428f, { (float)width, (float)viewHeight }));
 	}
-	if (screenMax.x <= screenMin.x || screenMax.y <= screenMin.y)
+	if (rect.Empty())
 		return {};
-	// Round out to whole groups, with one pixel for the temporal sample phase.
-	const auto lowerPixel = [](float v, uint32_t size) { return static_cast<uint32_t>(std::max(std::floor(v * size) - 1.f, 0.f)) & ~7u; };
-	const auto upperPixel = [](float v, uint32_t size) { return std::min((static_cast<uint32_t>(std::max(std::ceil(v * size) + 1.f, 0.f)) + 7u) & ~7u, size); };
-	return { lowerPixel(screenMin.x, width), lowerPixel(screenMin.y, viewHeight), upperPixel(screenMax.x, width), upperPixel(screenMax.y, viewHeight) };
+	// Round out to whole groups.
+	return { rect.left & ~7u, rect.top & ~7u, std::min((rect.right + 7u) & ~7u, width), std::min((rect.bottom + 7u) & ~7u, viewHeight) };
 }
 
 void PhysicalSky::UpdateCloudStorm(const std::string& worldspace)
