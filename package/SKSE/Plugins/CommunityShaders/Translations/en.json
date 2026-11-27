@@ -689,6 +689,7 @@
     "cs_editor.scene_page_clear_title": "Clear page",
     "cs_editor.scene_page_clear_tooltip": "Removes every override this page holds.",
     "cs_editor.scene_page_copy": "Copy",
+    "cs_editor.scene_page_copy_cleared": "Override removed",
     "cs_editor.scene_page_copy_column_change": "Change",
     "cs_editor.scene_page_copy_column_setting": "Setting",
     "cs_editor.scene_page_copy_disabled": "Disabled",

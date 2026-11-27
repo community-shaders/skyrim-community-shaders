@@ -690,6 +690,7 @@ namespace
 							.name = candidate->displayName,
 							.value = candidate->deleted ? T(TKEY("scene_page_copy_removed"), "Mod value removed") :
 							         candidate->paused  ? T(TKEY("scene_page_copy_disabled"), "Disabled") :
+							         candidate->removes ? T(TKEY("scene_page_copy_cleared"), "Override removed") :
 							                              FormatValue(candidate->value),
 							.previous = std::move(previous),
 							.rejection = candidate->rejection,

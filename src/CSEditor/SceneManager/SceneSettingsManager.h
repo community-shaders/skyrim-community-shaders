@@ -668,6 +668,8 @@ public:
 		bool deleted = false;
 		/// A disabled source entry: only offered over an enabled destination entry, which it disables.
 		bool paused = false;
+		/// The source leaves this destination user entry's address unset, so an overwrite removes it.
+		bool removes = false;
 	};
 
 	/// Aggregate result of one transactional copy.

@@ -40,13 +40,13 @@ namespace
 		return std::format("{} / {}", name, GetCopyPeriodName(period));
 	}
 
-	/** @brief Compatible candidates, total and per feature. */
+	/** @brief Compatible candidates, total and per feature; removals carry nothing over, so they do not count. */
 	template <class Candidates>
 	std::pair<size_t, std::map<std::string, size_t>> CountCompatible(const Candidates& candidates)
 	{
 		std::pair<size_t, std::map<std::string, size_t>> counts;
 		for (const auto& candidate : candidates)
-			if (candidate.compatible) {
+			if (candidate.compatible && !candidate.removes) {
 				++counts.first;
 				++counts.second[candidate.setting.featureShortName];
 			}
@@ -73,11 +73,6 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 	if (!destinationEntries)
 		destinationEntries = &empty;
 
-	auto effectiveEntries = BuildEffectiveContextEntries(*sourceEntries, source, true);
-	// A disabled user entry with nothing beneath it copies as disabled, so an overwrite can switch the destination's off.
-	for (const auto& entry : *sourceEntries)
-		if (entry.source == EntrySource::User && entry.paused && !entry.deleted && EntryBelongsToContext(entry, source))
-			effectiveEntries.try_emplace({ entry.featureShortName, entry.settingPath, entry.settingKey }, &entry);
 	// Mod overwrites do not block a copy: a user entry outranks them, as when the box is ticked by hand.
 	std::map<SettingIdentity, const SettingEntry*> destinationUserSettings;
 	std::set<SettingIdentity> destinationOverwrites;
@@ -94,6 +89,24 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 			destinationUserSettings.try_emplace(std::move(identity), &entry);
 	}
 
+	auto effectiveEntries = BuildEffectiveContextEntries(*sourceEntries, source, true);
+	std::set<SettingIdentity> sourcePaused;
+	// A disabled user entry copies as disabled over an enabled destination one, outranking any mod value beneath it.
+	for (const auto& entry : *sourceEntries) {
+		if (entry.source != EntrySource::User || !entry.paused || entry.deleted || !EntryBelongsToContext(entry, source))
+			continue;
+		SettingIdentity identity{ entry.featureShortName, entry.settingPath, entry.settingKey };
+		sourcePaused.insert(identity);
+		if (const auto destinationIt = destinationUserSettings.find(identity);
+			destinationIt != destinationUserSettings.end() && !destinationIt->second->paused)
+			effectiveEntries.insert_or_assign(std::move(identity), &entry);
+	}
+
+	const auto displayName = [](const SettingIdentity& identity, const SettingEntry& entry) {
+		return entry.displayName.empty() ?
+		           GetSceneSettingDisplayName(identity.featureShortName, identity.settingPath, identity.settingKey) :
+		           entry.displayName;
+	};
 	const auto destinationRules = GetSceneContextRules(destination);
 	for (const auto& [identity, entry] : effectiveEntries) {
 		// A tombstone only lands where a mod value is left to suppress.
@@ -101,9 +114,6 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 			continue;
 		const auto destinationIt = destinationUserSettings.find(identity);
 		const bool conflicts = destinationIt != destinationUserSettings.end();
-		// A disabled entry only lands on an enabled one.
-		if (entry->paused && (!conflicts || destinationIt->second->paused))
-			continue;
 		auto* setting = FindAllowedCatalogSetting(
 			identity.featureShortName, identity.settingPath, identity.settingKey, destinationRules.requireNumeric);
 		auto rejection = CopyRejection::None;
@@ -121,9 +131,7 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 		const bool compatible = rejection == CopyRejection::None;
 		candidates.push_back({
 			.setting = identity,
-			.displayName = entry->displayName.empty() ?
-			                   GetSceneSettingDisplayName(identity.featureShortName, identity.settingPath, identity.settingKey) :
-			                   entry->displayName,
+			.displayName = displayName(identity, *entry),
 			.value = entry->value,
 			.destinationValue = conflicts ? std::optional{ destinationIt->second->value } : std::nullopt,
 			.rejection = rejection,
@@ -131,6 +139,24 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 			.conflicts = compatible && conflicts,
 			.deleted = entry->deleted,
 			.paused = entry->paused,
+		});
+	}
+
+	// An overwrite mirrors the source's user layer, so a destination entry the source could hold but leaves unset goes.
+	const auto sourceRules = GetSceneContextRules(source);
+	for (const auto& [identity, entry] : destinationUserSettings) {
+		if (sourcePaused.contains(identity) || std::ranges::contains(candidates, identity, &CopyCandidate::setting) ||
+			!IsSettingAllowedForType(sourceRules.sceneType, identity.featureShortName, identity.settingPath,
+				identity.settingKey, sourceRules.requireNumeric))
+			continue;
+		candidates.push_back({
+			.setting = identity,
+			.displayName = displayName(identity, *entry),
+			.value = entry->value,
+			.destinationValue = entry->value,
+			.compatible = true,
+			.conflicts = true,
+			.removes = true,
 		});
 	}
 
@@ -498,7 +524,14 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 		}
 	}
 
+	std::vector<size_t> removedIndices;
 	for (auto& copy : pending) {
+		if (copy.candidate->removes) {
+			assert(copy.destinationIndex);
+			removedIndices.push_back(*copy.destinationIndex);
+			++result.overwritten;
+			continue;
+		}
 		if (copy.destinationIndex) {
 			auto& destinationEntry = (*destinationEntries)[*copy.destinationIndex];
 			// The copy carries the source's state: value, tombstone and disabled flag alike.
@@ -529,6 +562,10 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 		});
 		++result.copied;
 	}
+	// Back to front, so an erase never shifts an index still to come.
+	std::ranges::sort(removedIndices, std::greater{});
+	for (const auto index : removedIndices)
+		destinationEntries->erase(destinationEntries->begin() + static_cast<ptrdiff_t>(index));
 	if (!result.Changed() || deferCommit)
 		return result;
 

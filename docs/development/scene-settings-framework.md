@@ -336,10 +336,14 @@ colour behind.
 **Tombstones copy too**, but only into a destination with an `Overwrite` at the same address and no tombstone
 there yet; elsewhere there is nothing for them to suppress, so they are left out of the candidates.
 
-**Disabled entries copy too**, when nothing else in the source supplies the address, but only onto an enabled
-destination `User` entry. They are always conflicts, so `SkipExisting` leaves them out and `OverwriteExisting`
-disables the destination entry. An overwrite carries the source's disabled flag either way, so it also
-re-enables a disabled destination entry when the source's is enabled.
+**Disabled entries copy too**, but only onto an enabled destination `User` entry, where they outrank any
+`Overwrite` beneath them in the source. They are always conflicts, so `SkipExisting` leaves them out and
+`OverwriteExisting` disables the destination entry. An overwrite carries the source's disabled flag either
+way, so it also re-enables a disabled destination entry when the source's is enabled.
+
+**Overwrite mirrors the source's user layer.** A destination `User` entry whose address the source could hold
+but leaves unset becomes a removal candidate (`removes`): a conflict that `OverwriteExisting` erases and
+`SkipExisting` keeps. Removals do not count towards a source's or destination's copyable total.
 
 **Conflicts** are compatible settings the destination already holds as a `User` entry.
 `CopyConflictPolicy::SkipExisting` leaves the whole conflicting group alone, `OverwriteExisting` replaces
