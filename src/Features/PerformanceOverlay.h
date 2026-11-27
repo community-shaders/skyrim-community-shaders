@@ -373,6 +373,9 @@ private:
 	std::vector<SettingsDiffEntry> settingsDiff;
 	bool settingsDiffLoaded = false;
 
+	/// Where the window was put while no position is saved; cleared once one is.
+	std::optional<ImVec2> defaultPlacement;
+
 	/** @brief The settings' render pass picker: a filter chip per profiler group, with Show All / Hide All. */
 	void DrawProfilerGroupFilter();
 
