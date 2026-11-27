@@ -1567,6 +1567,12 @@ VolumetricCloudResult RenderVolumetricCloudRay(float3 direction, float3 eye, flo
 groupshared float g_density[2 * NTHREADS];
 groupshared uint g_density_segment[NTHREADS];
 
+/** @brief Delta-scaled shadow extinction, so forward-scattered sunlight still reaches receivers under thin cloud. */
+float ShadowExtinction(float lowExtinction, NDFInfo ndf, float middleExtinction)
+{
+	return lowExtinction * CloudTransportExtinction(ndf) + middleExtinction * VolumetricCloudBuffer[0].msTransportExtinction;
+}
+
 // Accumulate the low-cloud extinction column along the light direction into the
 // camera-centred shadow volume. Each thread group walks one light ray through the
 // volume with a parallel prefix sum.
@@ -1629,10 +1635,10 @@ groupshared uint g_density_segment[NTHREADS];
 		// start with zero extinction at the boundary instead of assuming a uniform
 		// cloud shell outside the represented domain.
 		CloudDensityContext densityContext;
-		localExtinction = sampleCloudDensity(pos, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
+		const float lowExtinction = sampleCloudDensity(pos, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
 		float4 middleModel;
 		float2 middleDepth;
-		localExtinction += MiddleCloudDensity(pos, middleModel, middleDepth, info.shadowVolumeRange / min(dims.x, dims.y));
+		localExtinction = ShadowExtinction(lowExtinction, densityContext.ndf, MiddleCloudDensity(pos, middleModel, middleDepth, info.shadowVolumeRange / min(dims.x, dims.y)));
 		density = localExtinction * length(ray_uv_increment * scale);
 
 		accumulated_density = density;
@@ -1715,15 +1721,19 @@ groupshared uint g_density_segment[NTHREADS];
 		previousSegment = segment;
 		const float3 position = float3(center + (uv.xy - 0.5) * info.shadowVolumeRange, info.shadowVolumeBottom + thickness * uv.z);
 		CloudDensityContext densityContext;
-		float extinction = sampleCloudDensity(position, layer, 2.0, 2000.0, 0.0, densityContext);
+		const float lowExtinction = sampleCloudDensity(position, layer, 2.0, 2000.0, 0.0, densityContext);
 		float4 middleModel;
 		float2 middleDepth;
-		extinction += MiddleCloudDensity(position, middleModel, middleDepth, info.shadowVolumeRange / min(dims.x, dims.y));
+		const float extinction = ShadowExtinction(lowExtinction, densityContext.ndf, MiddleCloudDensity(position, middleModel, middleDepth, info.shadowVolumeRange / min(dims.x, dims.y)));
 		const float density = extinction * stepLength;
 		accumulated += density;
 		RWShadowVolume[pixel] = exp(-max(accumulated - 0.5 * density, 0.0) * info.sunExtinction * GAME_UNIT_TO_M);
 	}
 }
+
+Texture3D<float> TexShadowVolumeHistory : register(t38);
+// Spreads a shadow change over ~10 frames so a cloud crossing a voxel fades instead of popping.
+static const float SHADOW_HISTORY_WEIGHT = 0.1;
 
 [numthreads(8, 8, 4)] void resampleShadowVolume(uint3 pixel : SV_DispatchThreadID) {
 	uint3 dims;
@@ -1739,7 +1749,8 @@ groupshared uint g_density_segment[NTHREADS];
 	const float rayStep = increment[axis] > 0.0 ? float(pixel[axis]) : float(dims[axis] - 1u - pixel[axis]);
 	float3 offset = frac(0.5 + rayStep * increment) - 0.5;
 	offset = float3(axis == 0u ? 0.0 : offset.x, axis == 1u ? 0.0 : offset.y, axis == 2u ? 0.0 : offset.z);
-	RWShadowVolume[pixel] = TexShadowVolume.SampleLevel(TransmittanceSampler, (float3(pixel) + 0.5 - offset) / float3(dims), 0);
+	const float current = TexShadowVolume.SampleLevel(TransmittanceSampler, (float3(pixel) + 0.5 - offset) / float3(dims), 0);
+	RWShadowVolume[pixel] = info.historyValid != 0u ? lerp(TexShadowVolumeHistory[pixel], current, SHADOW_HISTORY_WEIGHT) : current;
 }
 
 RWTexture2D<float4> RWCloudShadowMean : register(u0);
@@ -1793,11 +1804,10 @@ groupshared float ShadowMeanSamples[64];
 				const float distanceInCloud = (step + 0.5) * stepLength;
 				const float distanceAlongRay = distanceInCloud < nearLength ? start + distanceInCloud : farStart + distanceInCloud - nearLength;
 				CloudDensityContext densityContext;
-				float density = sampleCloudDensity(pos + direction * distanceAlongRay, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
+				const float lowDensity = sampleCloudDensity(pos + direction * distanceAlongRay, GetCloudLayer(info), 2.0, 2000.0, 0.0, densityContext);
 				float4 middleModel;
 				float2 middleDepth;
-				density += MiddleCloudDensity(pos + direction * distanceAlongRay, middleModel, middleDepth,
-					max(stepLength * length(direction.xy), info.shadowVolumeRange / min(dims.x, dims.y)));
+				const float density = ShadowExtinction(lowDensity, densityContext.ndf, MiddleCloudDensity(pos + direction * distanceAlongRay, middleModel, middleDepth, max(stepLength * length(direction.xy), info.shadowVolumeRange / min(dims.x, dims.y))));
 				opticalDepth += density * stepLength * info.sunExtinction * GAME_UNIT_TO_M;
 			}
 			transmittance = exp(-max(opticalDepth, 0.0));
