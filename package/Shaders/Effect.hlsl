@@ -704,6 +704,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = PropertyColor.xyz;
 	float unlitScale = 1.0;
+	bool sceneLit = false;
 	float shadowVariance = 1.0;
 
 	bool isFire = false;
@@ -868,6 +869,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// Light only pixels that survive the alpha test.
 #	if defined(SCENE_LIT)
+#		if defined(LIGHT_LIMIT_FIX)
+	uint lightCount = 0;
+#		endif
 #		if !defined(LIGHTING)
 	[branch] if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && lightingInfluence > 0.0)
 #		endif
@@ -880,8 +884,6 @@ PS_OUTPUT main(PS_INPUT input)
 		propertyColor = GetLightingColor(msPosition, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
 
 #		if defined(LIGHT_LIMIT_FIX)
-		uint lightCount = 0;
-
 		bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
 #			if defined(EFFECTS11)
@@ -916,6 +918,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		endif
 		unlitScale = GetAuthoredColorScale(propertyColor);
+		sceneLit = true;
 	}
 #	elif defined(MEMBRANE)
 	propertyColor *= 0;
@@ -939,7 +942,8 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0;
+	// Scene-lit colour already holds the shadowed sun, ambient and point lights; the ratio below is for authored colour
+	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0 && !sceneLit;
 #		if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
 	// The fog block above already shadowed it
 	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
