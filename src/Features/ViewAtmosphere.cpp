@@ -430,8 +430,12 @@ void ViewAtmosphere::RenderReflection()
 			texture->CreateUAV(uav);
 			return texture;
 		};
-		reflectionLum = makeVolume("ViewAtmosphere::ReflectionLuminance");
-		reflectionTr = makeVolume("ViewAtmosphere::ReflectionTransmittance");
+		constexpr const char* lumNames[] = { "ViewAtmosphere::ReflectionLuminance0", "ViewAtmosphere::ReflectionLuminance1" };
+		constexpr const char* trNames[] = { "ViewAtmosphere::ReflectionTransmittance0", "ViewAtmosphere::ReflectionTransmittance1" };
+		for (uint32_t i = 0; i < 2; ++i) {
+			reflectionLum[i] = makeVolume(lumNames[i]);
+			reflectionTr[i] = makeVolume(trNames[i]);
+		}
 		D3D11_TEXTURE2D_DESC desc{};
 		desc.Width = 3;
 		desc.Height = 2;  // Sky SH plus the cloud/clear-sky diffuse transport ratio.
@@ -474,6 +478,13 @@ void ViewAtmosphere::RenderReflection()
 	reflection.grids[0].depth = { 0, distance, offset, std::log2(1.0f + distance / offset) };
 	reflection.atlas = { 32, 32, 32, 0 };
 	reflection.flags = { 1u, uint32_t(useFog), (useIBL ? 4u : 0u) | (skylighting.loaded && skylighting.texProbeArray ? 8u : 0u) | (terrainReady ? 256u : 0u) | (cloudLayer ? 512u : 0u), 1u };
+	// History smooths camera-relative point sampling; it is only valid across consecutive updates of the same inputs.
+	const uint32_t frameCount = globals::state->frameCount;
+	const bool historyValid = reflectionFrame != UINT32_MAX && frameCount - reflectionFrame <= 1u && !globals::state->ShouldResetHistory() &&
+	                          std::memcmp(&reflectionFlags, &reflection.flags, sizeof(reflection.flags)) == 0;
+	reflection.history = { historyValid ? std::clamp(settings.historyWeight, 0.0f, 0.99f) : 0.0f, 0.0f, 0.0f, 0.0f };
+	reflectionFrame = frameCount;
+	reflectionFlags = reflection.flags;
 	reflectionParameters->Update(&reflection, sizeof(reflection));
 	auto bind = [&](UINT slot, ID3D11ShaderResourceView* srv) { context->CSSetShaderResources(slot, 1, &srv); };
 	ID3D11Buffer* shared[] = { globals::state->sharedDataCB->CB(), globals::state->featureDataCB->CB() };
@@ -508,21 +519,25 @@ void ViewAtmosphere::RenderReflection()
 	globals::profiler->EndPass();
 	bind(77, reflectionSkySH->srv.get());
 	bind(70, CloudDiffuseTransport());
-	outputs[0] = reflectionLum->uav.get();
-	outputs[1] = reflectionTr->uav.get();
+	const uint32_t previous = reflectionIndex ^ 1u;
+	bind(125, reflectionLum[previous]->srv.get());
+	bind(126, reflectionTr[previous]->srv.get());
+	outputs[0] = reflectionLum[reflectionIndex]->uav.get();
+	outputs[1] = reflectionTr[reflectionIndex]->uav.get();
 	globals::profiler->BeginPass("ViewAtmosphere::ReflectionMedium");
 	context->CSSetUnorderedAccessViews(0, 2, outputs, nullptr);
 	context->CSSetShader(reflectionCS.get(), nullptr, 0);
 	context->Dispatch(16, 32, 1);
 	context->CSSetUnorderedAccessViews(0, 2, nullOutputs, nullptr);
 	globals::profiler->EndPass();
-	for (UINT slot : { 2u, 25u, 50u, 60u, 61u, 62u, 63u, 67u, 69u, 70u, 76u, 77u, 112u, 114u, 115u, 127u })
+	for (UINT slot : { 2u, 25u, 50u, 60u, 61u, 62u, 63u, 67u, 69u, 70u, 76u, 77u, 112u, 114u, 115u, 125u, 126u, 127u })
 		bind(slot, nullptr);
 	sampler = nullptr;
 	context->CSSetSamplers(0, 1, &sampler);
 	context->CSSetShader(nullptr, nullptr, 0);
-	ID3D11ShaderResourceView* result[] = { reflectionLum->srv.get(), reflectionTr->srv.get(), reflectionParameters->SRV() };
+	ID3D11ShaderResourceView* result[] = { reflectionLum[reflectionIndex]->srv.get(), reflectionTr[reflectionIndex]->srv.get(), reflectionParameters->SRV() };
 	context->PSSetShaderResources(125, 3, result);
+	reflectionIndex = previous;
 	auto* tail = sky.texSkyTail->srv.get();
 	context->PSSetShaderResources(66, 1, &tail);
 }
@@ -546,6 +561,7 @@ void ViewAtmosphere::ClearShaderCache()
 	integrateCS = nullptr;
 	prepared = ready = false;
 	lastFrame = UINT32_MAX;
+	reflectionFrame = UINT32_MAX;
 }
 
 bool ViewAtmosphere::CompositeEnabled()

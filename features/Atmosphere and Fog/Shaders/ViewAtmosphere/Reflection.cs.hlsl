@@ -88,13 +88,20 @@ groupshared float3 SegmentL[128], SegmentT[128];
 groupshared float3 AngularRayleigh[2], AngularMie[2];
 groupshared float AngularFog[2];
 
+/** @brief Direction z at the top (x) and bottom (y) edges of a medium texel row. */
+float2 RowZBounds(uint row)
+{
+	return float2(PhysSky::InvSkyViewLutUv(float2(0.0, float(row) / 32.0), 32u).z, PhysSky::InvSkyViewLutUv(float2(0.0, float(row + 1u) / 32.0), 32u).z);
+}
+
 void BuildAngularPhase(uint2 pixel, uint ray)
 {
 	const SharedData::PhysSkyData sky = SharedData::physSkyData;
 	float3 rayleigh = 0.0, mie = 0.0;
 	float fogPhase = 0.0;
-	const float top = PhysSky::InvSkyViewLutUv(float2(0.0, float(pixel.y) / 32.0), 32u).z;
-	const float bottom = PhysSky::InvSkyViewLutUv(float2(0.0, float(pixel.y + 1u) / 32.0), 32u).z;
+	const float2 rowZ = RowZBounds(pixel.y);
+	const float top = rowZ.x;
+	const float bottom = rowZ.y;
 	// Average phase over the texel's solid angle: a coarse ray must not miss or
 	// over-amplify the forward peak. This is shared by all 31 distance intervals.
 	[unroll] for (uint y = 0u; y < 4u; ++y)
@@ -122,12 +129,13 @@ void BuildAngularPhase(uint2 pixel, uint ray)
 	AngularFog[ray] = fogPhase;
 }
 
-float DirectVisibility(float3 position)
+/** @brief Sun visibility at a cell's sample point; terrainBlur widens terrain shadow edges to the cell's height. */
+float DirectVisibility(float3 position, float terrainBlur)
 {
 	float visibility = dot(PhysSky::GetDirlightTransmittance(position + FrameBuffer::CameraPosAdjust.xyz, LinearSampler, true), 1.0 / 3.0);
 #	ifdef TERRAIN_SHADOWS
 	if (ViewAtmosphere::Data[0].flags.z & 256u)
-		visibility *= TerrainShadows::GetTerrainShadow(position + FrameBuffer::CameraPosAdjust.xyz, LinearSampler);
+		visibility *= TerrainShadows::GetTerrainShadow(position + FrameBuffer::CameraPosAdjust.xyz, LinearSampler, terrainBlur);
 #	endif
 #	ifdef CLOUD_SHADOWS
 	if (ViewAtmosphere::Data[0].flags.z & 512u)
@@ -244,7 +252,10 @@ float3 FogSource(float3 position, float3 direction, float visibility, float phas
 	const float stepKm = max(farDistance - nearDistance, 0.0) * GAME_UNIT_TO_M / 1000.0;
 	float3 rayleigh, mie, extinction;
 	PhysSky::GetMediumCoefficients(position, rayleigh, mie, extinction);
-	const float directVisibility = DirectVisibility(position);
+	// One point stands for the whole cell, so terrain shadow edges are spread over half its vertical extent.
+	const float2 rowZ = RowZBounds(pixel.y);
+	const float terrainBlur = 0.5 * (length(position) * abs(rowZ.x - rowZ.y) + (farDistance - nearDistance) * abs(direction.z));
+	const float directVisibility = DirectVisibility(position, terrainBlur);
 	const float3 diffuseVisibility = SkyVisibility(position, direction, 0.0) * PhysSky::GetCloudDiffuseTransmittance(position + FrameBuffer::CameraPosAdjust.xyz);
 	const SharedData::PhysSkyData sky = SharedData::physSkyData;
 	// Existing world shadow data follows the active directional caster only.
@@ -285,8 +296,15 @@ float3 FogSource(float3 position, float3 direction, float visibility, float phas
 		ReflectionTransmittance[uint3(pixel, 0)] = 1.0;
 	}
 	if (thread.x < 31u) {
-		ReflectionLuminance[uint3(pixel, thread.x + 1u)] = float4(min(lum, 65504.0), 0.0);
-		ReflectionTransmittance[uint3(pixel, thread.x + 1u)] = float4(tr, 1.0);
+		const uint3 cell = uint3(pixel, thread.x + 1u);
+		// Compositing is linear in luminance and transmittance, so blending each is a blend of the composited results.
+		const float historyWeight = ViewAtmosphere::Data[0].history.x;
+		if (historyWeight > 0.0) {
+			lum = lerp(lum, ViewAtmosphere::Luminance.Load(int4(cell, 0)).rgb, historyWeight);
+			tr = lerp(tr, ViewAtmosphere::Transmittance.Load(int4(cell, 0)).rgb, historyWeight);
+		}
+		ReflectionLuminance[cell] = float4(min(lum, 65504.0), 0.0);
+		ReflectionTransmittance[cell] = float4(tr, 1.0);
 	}
 }
 #endif
