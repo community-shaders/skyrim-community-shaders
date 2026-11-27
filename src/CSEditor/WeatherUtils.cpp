@@ -462,6 +462,18 @@ std::string ColorTypeLabel(const int i)
 	return label;
 }
 
+const char* ColorTypeId(const int i)
+{
+	// English labels, so forms saved before ids existed keep their keys.
+	static constexpr std::array<const char*, RE::TESWeather::ColorTypes::kTotal> kIds = {
+		"Sky Upper", "Fog Near", "Unknown", "Ambient", "Sunlight", "Sun", "Stars", "Sky Lower", "Horizon",
+		"Effect Lighting", "Cloud LOD Diffuse", "Cloud LOD Ambient", "Fog Far", "Sky Statics",
+		"Water Multiplier", "Sun Glare", "Moon Glare"
+	};
+	assert(i >= 0 && i < static_cast<int>(kIds.size()));
+	return kIds[i];
+}
+
 namespace WeatherUtils
 {
 	void SetCurrentWidget(Widget* widget)
