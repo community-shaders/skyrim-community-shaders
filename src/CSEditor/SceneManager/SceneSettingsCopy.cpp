@@ -76,7 +76,7 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 	// Mod overwrites do not block a copy: a user entry outranks them, as when the box is ticked by hand.
 	std::map<SettingIdentity, const SettingEntry*> destinationUserSettings;
 	std::set<SettingIdentity> destinationOverwrites;
-	std::set<SettingIdentity> destinationTombstones;
+	std::map<SettingIdentity, const SettingEntry*> destinationTombstones;
 	for (const auto& entry : *destinationEntries) {
 		if (!EntryBelongsToContext(entry, destination))
 			continue;
@@ -84,7 +84,7 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 		if (entry.source == EntrySource::Overwrite)
 			destinationOverwrites.insert(std::move(identity));
 		else if (entry.deleted)
-			destinationTombstones.insert(std::move(identity));
+			destinationTombstones.try_emplace(std::move(identity), &entry);
 		else
 			destinationUserSettings.try_emplace(std::move(identity), &entry);
 	}
@@ -144,21 +144,28 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 
 	// An overwrite mirrors the source's user layer, so a destination entry the source could hold but leaves unset goes.
 	const auto sourceRules = GetSceneContextRules(source);
-	for (const auto& [identity, entry] : destinationUserSettings) {
+	const auto addRemoval = [&](const SettingIdentity& identity, const SettingEntry& entry) {
 		if (sourcePaused.contains(identity) || std::ranges::contains(candidates, identity, &CopyCandidate::setting) ||
 			!IsSettingAllowedForType(sourceRules.sceneType, identity.featureShortName, identity.settingPath,
 				identity.settingKey, sourceRules.requireNumeric))
-			continue;
+			return;
 		candidates.push_back({
 			.setting = identity,
-			.displayName = displayName(identity, *entry),
-			.value = entry->value,
-			.destinationValue = entry->value,
+			.displayName = displayName(identity, entry),
+			.value = entry.value,
+			// A tombstone's value is not what the destination shows, so there is no prior value to render.
+			.destinationValue = entry.deleted ? std::nullopt : std::optional{ entry.value },
 			.compatible = true,
 			.conflicts = true,
 			.removes = true,
 		});
-	}
+	};
+	for (const auto& [identity, entry] : destinationUserSettings)
+		addRemoval(identity, *entry);
+	// A source tombstone matching the destination's is no candidate, so presence is checked on the source itself.
+	for (const auto& [identity, entry] : destinationTombstones)
+		if (!effectiveEntries.contains(identity))
+			addRemoval(identity, *entry);
 
 	// An aggregate is all-or-nothing: one unusable component disqualifies the whole control.
 	std::map<CopyGroupKey, std::vector<size_t>> candidateGroups;
