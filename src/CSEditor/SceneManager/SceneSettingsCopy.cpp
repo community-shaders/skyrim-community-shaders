@@ -73,9 +73,13 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 	if (!destinationEntries)
 		destinationEntries = &empty;
 
-	const auto effectiveEntries = BuildEffectiveContextEntries(*sourceEntries, source, true);
+	auto effectiveEntries = BuildEffectiveContextEntries(*sourceEntries, source, true);
+	// A disabled user entry with nothing beneath it copies as disabled, so an overwrite can switch the destination's off.
+	for (const auto& entry : *sourceEntries)
+		if (entry.source == EntrySource::User && entry.paused && !entry.deleted && EntryBelongsToContext(entry, source))
+			effectiveEntries.try_emplace({ entry.featureShortName, entry.settingPath, entry.settingKey }, &entry);
 	// Mod overwrites do not block a copy: a user entry outranks them, as when the box is ticked by hand.
-	std::map<SettingIdentity, json> destinationUserSettings;
+	std::map<SettingIdentity, const SettingEntry*> destinationUserSettings;
 	std::set<SettingIdentity> destinationOverwrites;
 	std::set<SettingIdentity> destinationTombstones;
 	for (const auto& entry : *destinationEntries) {
@@ -87,13 +91,18 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 		else if (entry.deleted)
 			destinationTombstones.insert(std::move(identity));
 		else
-			destinationUserSettings.try_emplace(std::move(identity), entry.value);
+			destinationUserSettings.try_emplace(std::move(identity), &entry);
 	}
 
 	const auto destinationRules = GetSceneContextRules(destination);
 	for (const auto& [identity, entry] : effectiveEntries) {
 		// A tombstone only lands where a mod value is left to suppress.
 		if (entry->deleted && (!destinationOverwrites.contains(identity) || destinationTombstones.contains(identity)))
+			continue;
+		const auto destinationIt = destinationUserSettings.find(identity);
+		const bool conflicts = destinationIt != destinationUserSettings.end();
+		// A disabled entry only lands on an enabled one.
+		if (entry->paused && (!conflicts || destinationIt->second->paused))
 			continue;
 		auto* setting = FindAllowedCatalogSetting(
 			identity.featureShortName, identity.settingPath, identity.settingKey, destinationRules.requireNumeric);
@@ -110,19 +119,18 @@ std::vector<SceneSettingsManager::CopyCandidate> SceneSettingsManager::BuildCopy
 			rejection = CopyRejection::ValueRejected;
 
 		const bool compatible = rejection == CopyRejection::None;
-		const auto destinationIt = destinationUserSettings.find(identity);
-		const bool conflicts = destinationIt != destinationUserSettings.end();
 		candidates.push_back({
 			.setting = identity,
 			.displayName = entry->displayName.empty() ?
 			                   GetSceneSettingDisplayName(identity.featureShortName, identity.settingPath, identity.settingKey) :
 			                   entry->displayName,
 			.value = entry->value,
-			.destinationValue = conflicts ? std::optional{ destinationIt->second } : std::nullopt,
+			.destinationValue = conflicts ? std::optional{ destinationIt->second->value } : std::nullopt,
 			.rejection = rejection,
 			.compatible = compatible,
 			.conflicts = compatible && conflicts,
 			.deleted = entry->deleted,
+			.paused = entry->paused,
 		});
 	}
 
@@ -493,12 +501,11 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 	for (auto& copy : pending) {
 		if (copy.destinationIndex) {
 			auto& destinationEntry = (*destinationEntries)[*copy.destinationIndex];
-			// The copy carries the source's state: a value clears a tombstone, a tombstone replaces a value.
+			// The copy carries the source's state: value, tombstone and disabled flag alike.
 			const bool wasDeleted = destinationEntry.deleted;
 			destinationEntry.value = copy.candidate->value;
 			destinationEntry.deleted = copy.candidate->deleted;
-			// A paused tombstone suppresses nothing.
-			destinationEntry.paused &= !copy.candidate->deleted;
+			destinationEntry.paused = copy.candidate->paused;
 			if (destination.type == SceneContextType::Location) {
 				destinationEntry.transitionSeconds = copy.transitionSeconds;
 				destinationEntry.retainSerializedTransition = false;
@@ -506,6 +513,7 @@ SceneSettingsManager::CopyResult SceneSettingsManager::CopySettingsToContext(con
 			wasDeleted ? ++result.copied : ++result.overwritten;
 			continue;
 		}
+		assert(!copy.candidate->paused);
 		destinationEntries->push_back({
 			.featureShortName = copy.candidate->setting.featureShortName,
 			.settingPath = copy.candidate->setting.settingPath,

@@ -691,6 +691,7 @@
     "cs_editor.scene_page_copy": "Copy",
     "cs_editor.scene_page_copy_column_change": "Change",
     "cs_editor.scene_page_copy_column_setting": "Setting",
+    "cs_editor.scene_page_copy_disabled": "Disabled",
     "cs_editor.scene_page_copy_reject_blendable": "Only blendable values can vary by time of day or weather.",
     "cs_editor.scene_page_copy_reject_catalog": "Not a setting a scene can override.",
     "cs_editor.scene_page_copy_reject_companion": "Another part of the same control cannot be copied.",

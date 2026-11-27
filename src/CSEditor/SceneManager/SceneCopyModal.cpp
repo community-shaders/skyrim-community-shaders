@@ -688,7 +688,9 @@ namespace
 						summary.details.push_back({ .feature = SceneSettingsManager::GetFeatureDisplayName(featureShortName),
 							.featureShortName = featureShortName,
 							.name = candidate->displayName,
-							.value = candidate->deleted ? T(TKEY("scene_page_copy_removed"), "Mod value removed") : FormatValue(candidate->value),
+							.value = candidate->deleted ? T(TKEY("scene_page_copy_removed"), "Mod value removed") :
+							         candidate->paused  ? T(TKEY("scene_page_copy_disabled"), "Disabled") :
+							                              FormatValue(candidate->value),
 							.previous = std::move(previous),
 							.rejection = candidate->rejection,
 							.outcome = outcome,
