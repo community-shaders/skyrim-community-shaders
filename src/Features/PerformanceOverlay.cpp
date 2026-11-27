@@ -115,7 +115,6 @@ static std::tuple<float, float, float> CalculateSummaryData(float smoothedFrameT
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PerformanceOverlay::Settings,
-	ShowInOverlay,
 	ShowWeatherPicker,
 	ShowDrawCalls,
 	ShowVRAM,
@@ -160,7 +159,7 @@ void PerformanceOverlay::DrawSettings()
 		}
 	};
 
-	if (!this->settings.ShowInOverlay) {
+	if (!IsOverlayVisible()) {
 		weatherPicker();
 		return;
 	}
@@ -221,7 +220,6 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::SameLine();
 		if (Util::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
 			RestoreDefaultSettings();
-			this->settings.ShowInOverlay = true;  // resets how the overlay looks, not whether it is shown
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T(TKEY("restore_defaults_tooltip"), "Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals."));
@@ -250,16 +248,19 @@ void PerformanceOverlay::SetProfilerGroupShown(std::string_view group, bool show
 	globals::state->InvalidateEditsUnderBaselines(this);
 }
 
+bool PerformanceOverlay::IsOverlayVisible() const
+{
+	return globals::menu->GetSettings().ShowPerformanceOverlay;
+}
+
 void PerformanceOverlay::SetShowInOverlay(bool shown)
 {
-	if (this->settings.ShowInOverlay == shown)
+	auto& menuSettings = globals::menu->GetSettings();
+	if (menuSettings.ShowPerformanceOverlay == shown)
 		return;
-	this->settings.ShowInOverlay = shown;
-
-	// Reached from the Profiling page's card, where nothing tracks this feature's edits.
-	globals::sceneSettingsManager->CaptureExternalFeatureChanges(this, true);
-	globals::state->CheckFeatureSettingsChanged(this);
-	globals::state->InvalidateEditsUnderBaselines(this);
+	menuSettings.ShowPerformanceOverlay = shown;
+	// The hotkey works with the menu closed, so don't wait for it to close.
+	globals::state->SaveCoreSettings(::State::SELF_SAVING_SETTINGS);
 }
 
 void PerformanceOverlay::DrawProfilerGroupFilter()
@@ -375,7 +376,7 @@ void PerformanceOverlay::DrawOverlay()
 	if (!ImGui::GetCurrentContext()) {
 		return;
 	}
-	if (!this->settings.ShowInOverlay) {
+	if (!IsOverlayVisible()) {
 		return;
 	}
 
@@ -410,14 +411,15 @@ void PerformanceOverlay::DrawOverlay()
 
 	const float scale = Util::GetUIScale();
 
-	// Set initial position if not already set
-	if (!this->settings.PositionSet) {
-		const float defaultPad = Settings::kDefaultWindowPadding * scale;
-		ImGui::SetNextWindowPos(ImVec2(defaultPad, defaultPad));
-		this->settings.Position = ImVec2(defaultPad, defaultPad);
-		this->settings.PositionSet = true;
-	} else {
+	// Default placement is not a user edit: only a drag saves a position.
+	if (this->settings.PositionSet) {
+		defaultPlacement.reset();
 		ImGui::SetNextWindowPos(this->settings.Position, ImGuiCond_FirstUseEver);
+	} else if (!defaultPlacement) {
+		// Whole pixels, as ImGui truncates window positions.
+		const float defaultPad = std::floor(Settings::kDefaultWindowPadding * scale);
+		defaultPlacement = ImVec2(defaultPad, defaultPad);
+		ImGui::SetNextWindowPos(*defaultPlacement);
 	}
 
 	// Set window size based on whether graphs are shown, was rapidly changing size based on text
@@ -453,15 +455,15 @@ void PerformanceOverlay::DrawOverlay()
 	// Create the window
 	Util::BeginWithRoundedClose(std::format("{}{}", T(TKEY("overlay_title"), "Performance Overlay"), kWindowId).c_str(), nullptr, windowFlags);
 
-	// Remember window position for next frame
+	const ImVec2 placedPos = this->settings.PositionSet ? this->settings.Position : *defaultPlacement;
 	if (ImGui::IsWindowAppearing()) {
-		ImGui::SetWindowPos(this->settings.Position);
+		ImGui::SetWindowPos(placedPos);
 	}
 
-	// Track if window has been moved
 	ImVec2 currentPos = ImGui::GetWindowPos();
-	if (currentPos.x != this->settings.Position.x || currentPos.y != this->settings.Position.y) {
+	if (currentPos.x != placedPos.x || currentPos.y != placedPos.y) {
 		this->settings.Position = currentPos;
+		this->settings.PositionSet = true;
 	}
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, 1.0f * scale));

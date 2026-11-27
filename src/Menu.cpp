@@ -199,6 +199,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
+	ShowPerformanceOverlay,
 	AutoHideFeatureList,
 	ReduceUIAnimations,
 	AnimationSpeed,
@@ -1230,7 +1231,7 @@ void Menu::ProcessInputEventQueue()
 					{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 					{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 					{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
-					{ settings.OverlayToggleKey, []() { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.settings.ShowInOverlay); } },
+					{ settings.OverlayToggleKey, []() { auto& overlay = globals::features::performanceOverlay; if (overlay.loaded) overlay.SetShowInOverlay(!overlay.IsOverlayVisible()); } },
 					{ settings.CSEditorToggleKey, []() {
 						 auto* ew = EditorWindow::GetSingleton();
 						 if (!ew)

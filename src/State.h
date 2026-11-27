@@ -226,9 +226,9 @@ public:
 
 	/** @brief Core settings, as JSON pointers into the user config, that save themselves when the menu closes and
 	 *  never count as unsaved. */
-	static constexpr std::array<std::string_view, 5> SELF_SAVING_SETTINGS = {
+	static constexpr std::array<std::string_view, 6> SELF_SAVING_SETTINGS = {
 		"/Menu/RecentFeatures", "/Menu/LastSettingsSection", "/Menu/FeatureListSort", "/Menu/SkipConstraintWarning",
-		"/Menu/SkipClearCacheConfirmation"
+		"/Menu/SkipClearCacheConfirmation", "/Menu/ShowPerformanceOverlay"
 	};
 
 	/**

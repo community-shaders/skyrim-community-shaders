@@ -463,6 +463,7 @@ public:
 		bool EnableShaderBlocking = false;                                                                                   // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                                                                // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                                                             // Skip confirmation dialog when clearing shader cache
+		bool ShowPerformanceOverlay = false;                                                                                 // Performance overlay window shown
 		bool AutoHideFeatureList = false;                                                                                    // Auto-hide left feature list panel, show on hover
 		float AnimationSpeed = 1.0f;                                                                                         // Menu animation speed multiplier (Util::Anim::Speed clamps it to the supported range)
 		bool ReduceUIAnimations = false;                                                                                     // Snap menu animations (hover fades, slides, expanding search) instead of easing
