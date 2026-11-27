@@ -57,8 +57,6 @@ namespace
 	constexpr const char* kDefaultPacksSeenKey = "defaultPacksSeen";
 	/// Packs shipped with features, best first; each is a candidate only with its requiredFeatures installed.
 	constexpr std::array<std::string_view, 2> kDefaultPackIds = { "Default Physical Sky", "Default Post Processing" };
-	/// Where an Effects 11 Legacy install or a real ENB keeps enbseries.ini, relative to the game folder.
-	constexpr std::array<const char*, 2> kEnbSeriesRoots = { ".", "Data" };
 
 	/** @brief Whether a pack id names one of the shipped default packs. */
 	bool IsDefaultPackId(const std::string& id)
@@ -77,15 +75,6 @@ namespace
 			return std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(shortName), ec);
 		});
 		return installed ? std::optional(std::move(manifest)) : std::nullopt;
-	}
-
-	/** @brief Whether an enbseries.ini sits in the game or Data folder, meaning the user already runs an ENB-style preset. */
-	bool HasEnbSeriesInstall()
-	{
-		std::error_code ec;
-		return std::ranges::any_of(kEnbSeriesRoots, [&](const char* root) {
-			return std::filesystem::exists(std::filesystem::path(root) / PresetManager::kEnbSeriesIniName, ec);
-		});
 	}
 
 	/** @brief The Effects 11 preset id a pack switches to, read off the form of its id. */
@@ -803,7 +792,8 @@ std::optional<json> UnifiedPresetCatalog::ApplyDefaultPackIfNew()
 
 	// Another default pack in use is replaced by a better one; anything the user picked is left alone.
 	const bool otherPresetInUse = (!activePackId.empty() && !IsDefaultPackId(activePackId)) ||
-	                              !std::ranges::all_of(baselinePackIds, IsDefaultPackId) || HasEnbSeriesInstall();
+	                              !std::ranges::all_of(baselinePackIds, IsDefaultPackId) ||
+	                              PresetManager::GetSingleton().HasLegacyInstall();
 	if (!bestIsNew || otherPresetInUse) {
 		SaveActiveState();
 		return std::nullopt;
