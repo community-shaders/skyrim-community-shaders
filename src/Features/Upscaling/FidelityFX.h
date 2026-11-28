@@ -82,4 +82,11 @@ private:
 
 	// Flag to prevent spamming the log with FSR3 dispatch crash messages
 	Util::OnceFlag fsrDispatchCrashLogged;
+
+	static constexpr uint32_t StaleCameraLogInterval = 600;
+	uint32_t staleCameraFrames = 0;
+	uint32_t trackedCameraFrames = 0;
+
+	/** @brief Counts frame generation frames whose present-time PerFrame camera differs from a_worldCamera, logging a summary at debug level every StaleCameraLogInterval frames. */
+	void TrackStaleCamera(const globals::FrameBufferCache& a_worldCamera);
 };
