@@ -10,6 +10,9 @@ private:
 	struct RuntimeCache;
 
 public:
+	/** @brief Largest plausible worldspace extent in cells; plugins can set bounds far past any landscape. */
+	static constexpr int32_t kMaxWorldspaceCells = 512;
+
 	/** @brief Describes a single water tile placement with position, size, and water form data. */
 	struct Instruction
 	{

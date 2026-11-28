@@ -3,6 +3,7 @@
 #include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "UnifiedWater/LoadWatchdog.h"
 #include "Util.h"
 #include "Utils/VersionedRelocation.h"
 
@@ -244,6 +245,8 @@ void UnifiedWater::DataLoaded()
 
 	flowmap = new Flowmap();
 	waterCache = new WaterCache();
+
+	const LoadWatchdog watchdog;
 
 	if (LoadOrderChanged()) {
 		logger::info("[Unified Water] Load order or plugin version changed, regenerating flowmap and caches");
