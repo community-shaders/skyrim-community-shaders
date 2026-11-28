@@ -37,6 +37,8 @@ namespace WaterEffects
 	float3 ComputeCaustics(float4 waterData, float3 worldPosition, float2 pixelPos)
 	{
 		float3 result = 1.0.xxx;
+		if (SharedData::waterEffectsSettings.Params.x < 0.5)
+			return result;
 		float causticsDistToWater = waterData.w - worldPosition.z;
 		float shoreFactorCaustics = saturate(causticsDistToWater / 64.0);
 
