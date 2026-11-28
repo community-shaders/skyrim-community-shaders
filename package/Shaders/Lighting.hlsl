@@ -20,6 +20,9 @@
 #	define SKIN
 #endif
 
+// Snow on bodies reads the bind pose's tangent frame, which the coat's vertex shader passes down. A
+// model-space-normal skin's coat (a corpse's) reads its model's own axes and keeps the plain vertex shader.
+
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
@@ -972,6 +975,10 @@ bool UseSkylightingShadowVisibility()
 #		include "Common/LightingLandscape.hlsli"
 #	endif
 
+#	if defined(SNOW_DEFORMATION)
+#		include "SnowDeformation/SnowDeformation.hlsli"
+#	endif
+
 #	if defined(TERRAIN_VARIATION) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
 #		define TERRAIN_VARIATION_MESH
 #	endif
@@ -1011,9 +1018,16 @@ bool UseSkylightingShadowVisibility()
 
 #	include "Common/LightingEval.hlsli"
 
+#	if defined(SNOW_DEFORMATION)
+#		include "SnowDeformation/SnowLighting.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
+#	if defined(SNOW_DEFORMATION)
+	SnowLighting::State snowState = (SnowLighting::State)0;
+#	endif
 
 	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
 	float3 viewDirection = -normalize(input.WorldPosition.xyz);
@@ -1299,10 +1313,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			if (envMaskSample.w > kMaskEpsilon && envMaskSample.w < (1.0 - kMaskEpsilon)) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler);
+#			if defined(SNOW_FLATTEN_PARALLAX)
+				const float snowHeightScale = displacementParams.HeightScale;
+				const float snowParallaxKeep = SnowLighting::ParallaxUnderSnow(input.WorldPosition.xyz, vertexNormal, input.TexProj, input.Color.w);
+				displacementParams.HeightScale *= snowParallaxKeep;
+#			endif
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, applyMeshTV, meshOffset, parallaxSurfaceHeight);
 				if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0) {
 					MESH_TV_HEIGHT(sh0, TexEnvMaskSampler, SampEnvMaskSampler, uv, mipLevel, 3);
+#			if defined(SNOW_FLATTEN_PARALLAX)
+					sh0 = lerp(1.0, sh0, snowParallaxKeep);
+#			endif
 				}
+#			if defined(SNOW_FLATTEN_PARALLAX)
+				displacementParams.HeightScale = snowHeightScale;
+#			endif
 				MESH_TV_SAMPLE(complexMaterialColor, TexEnvMaskSampler, SampEnvMaskSampler, uv);
 			} else {
 				complexMaterialColor = envMaskSample;
@@ -1348,10 +1373,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
+#				if defined(SNOW_FLATTEN_PARALLAX)
+		const float snowHeightScale = displacementParams.HeightScale;
+		const float snowParallaxKeep = SnowLighting::ParallaxUnderSnow(input.WorldPosition.xyz, vertexNormal, input.TexProj, input.Color.w);
+		displacementParams.HeightScale *= snowParallaxKeep;
+#				endif
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, applyMeshTV, meshOffset, parallaxSurfaceHeight);
 		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0) {
 			MESH_TV_HEIGHT(sh0, TexParallaxSampler, SampParallaxSampler, uv, mipLevel, 0);
+#				if defined(SNOW_FLATTEN_PARALLAX)
+			sh0 = lerp(1.0, sh0, snowParallaxKeep);
+#				endif
 		}
+#				if defined(SNOW_FLATTEN_PARALLAX)
+		displacementParams.HeightScale = snowHeightScale;
+#				endif
 	}
 #			endif  // !FACEGEN
 #		endif      // TRUE_PBR
@@ -1433,6 +1469,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		[branch] if (doTerrainPom)
 		{
 			uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, terrainMaxTexDim, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, parallaxSurfaceHeight, weights);
+#			if defined(SNOW_DEFORMATION) && defined(DEFERRED)
+			SnowLighting::LandSnowEdgeBlend(input, viewPosition.z, screenNoise, uv, mipLevels, displacementParams, sharedOffset, weights);
+#			endif
 		}
 		else if (SharedData::extendedMaterialSettings.EnableHeightBlending)
 		{
@@ -1524,6 +1563,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(LANDSCAPE)
+#		if defined(SNOW_DEFORMATION)
+	SnowLighting::LandRecolorBegin(snowState, input.WorldPosition.xyz);
+#		endif
 #		if defined(TERRAIN_VARIATION)
 #			define SampleTerrain(TEX, SAMP, UV, OFFSET) StochasticEffectBias(TEX, SAMP, UV, OFFSET, SharedData::MipBias)
 #			define SampleTerrainColor(TEX, SAMP, UV, OFFSET, PBR) StochasticEffectBias(TEX, SAMP, UV, OFFSET, SharedData::MipBias, true, PBR)
@@ -1658,6 +1700,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	normal.xyz = TransformNormal(normal.xyz);
 	glossiness = normal.w;
 #	endif  // MODELSPACENORMALS
+
+#	if defined(SNOW_DEFORMATION) && (defined(LODLANDSCAPE) || defined(LODLANDNOISE) || defined(LODOBJECTS) || defined(LODOBJECTSHD)) && !defined(WORLD_MAP) && !defined(TRUE_PBR)
+	// The recolor faces by the world normal: a tangent-space map reads up on every face.
+#		if defined(MODELSPACENORMALS)
+	SnowLighting::LODRecolor(snowState, sampledBaseColor.rgb, diffuseUv, input.WorldPosition.xy, normal.xyz);
+#		else
+	SnowLighting::LODRecolor(snowState, sampledBaseColor.rgb, diffuseUv, input.WorldPosition.xy, normalize(mul(tbn, normal.xyz)));
+#		endif
+#	endif
 
 #	if defined(WORLD_MAP)
 	normal.xyz = GetWorldMapNormal(input, normal.xyz, sampledBaseColor.xyz);
@@ -1846,6 +1897,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3x3 tbnTr = ReconstructTBN(input.WorldPosition.xyz, worldNormal, screenUV);
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
+#		if defined(SNOW_DEFORMATION) && defined(LANDSCAPE)
+	SnowLighting::LandRecolorNormal(snowState, worldNormal);
+#		endif
 #		if defined(TREE_ANIM) && !defined(TRUE_PBR)
 	float3 viewNormal = normalize(FrameBuffer::WorldToView(worldNormal, false));
 	viewNormal = float3(viewNormal.xy, -abs(viewNormal.z));
@@ -1926,18 +1980,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float projWeight = 0;
 
+#	if defined(SNOW_DEFORMATION) && !defined(LANDSCAPE)
+	SnowLighting::BeginObject(snowState, input.WorldPosition.xyz);
+#	endif
+
 #	if defined(PROJECTED_UV)
 	float3 projWorldPos = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
 	float3 triFaceNormal = normalize(-cross(ddx(input.WorldPosition.xyz), ddy(input.WorldPosition.xyz)));
 	float3 triWeights = Triplanar::GetWeights(tbnTr[2], triFaceNormal);
 	float projNoise = Triplanar::Sample(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z).x;
+#		if defined(SNOW_DEFORMATION) && defined(EMAT) && !defined(LANDSCAPE) && !defined(SKINNED) && !defined(FACEGEN) && !defined(EYE)
+	projNoise = SnowLighting::ParallaxProjNoise(snowState, projNoise, input.WorldPosition.xyz, triWeights, uv, uvOriginal);
+#		endif
 	float3 texProj = normalize(input.TexProj);
 #		if defined(TREE_ANIM) || defined(LODOBJECTSHD)
 	float vertexAlpha = 1;
 #		else
 	float vertexAlpha = input.Color.w;
 #		endif  // defined (TREE_ANIM) || defined (LODOBJECTSHD)
-	projWeight = -ProjectedUVParams.x * projNoise + (dot(worldNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
+	float projDot = dot(worldNormal.xyz, texProj);
+#		if defined(SNOW_DEFORMATION)
+	vertexAlpha = SnowLighting::ProjectionAlpha(snowState, vertexAlpha, projDot);
+#		endif
+	projWeight = -ProjectedUVParams.x * projNoise + (projDot * vertexAlpha - ProjectedUVParams.w);
 #		if defined(LODOBJECTSHD)
 	projWeight += (-0.5 + input.Color.w) * 2.5;
 #		endif  // LODOBJECTSHD
@@ -2012,7 +2077,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		useSnowSpecular = useSnowDecalSpecular;
 #		endif      // SPARKLE
 
+#		if defined(SNOW_DEFORMATION) && !defined(FACEGEN) && !defined(MULTI_LAYER_PARALLAX) && !defined(PARALLAX)
+	SnowLighting::ProjectedRecolor(snowState, projWeight, tbnTr[2], projWorldPos, screenNoise, projectedMaterialWeight, baseColor.xyz, rawRMAOS, worldNormal);
+#		endif
+
 #	endif  // SNOW
+
+#	if defined(SNOW_DEFORMATION) && !defined(WORLD_MAP) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE) && !defined(LODLANDNOISE) && !defined(LODOBJECTS) && !defined(LODOBJECTSHD)
+	SnowLighting::SnowTexturedRecolor(snowState, sampledBaseColor.rgb, tbnTr[2], input.WorldPosition.xyz, screenNoise, baseColor.xyz, rawRMAOS, worldNormal);
+#	endif
 
 #	if defined(WORLD_MAP)
 	baseColor.xyz = GetWorldMapBaseColor(sampledBaseColor.xyz, baseColor.xyz, projWeight);
@@ -3037,6 +3110,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz += diffuseColor * material.BaseColor;
 #	endif
 
+#	if defined(SNOW_DEFORMATION) && defined(PROJECTED_UV) && !defined(TRUE_PBR) && !defined(WORLD_MAP)
+	snowState.projLightTotal = diffuseColor;
+#	endif
+
 	color.xyz += indirectLobeWeights.diffuse * directionalAmbientColor;
 	color.xyz += transmissionColor;
 
@@ -3106,6 +3183,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
+
+#	if defined(SNOW_DEFORMATION) && (defined(LODLANDSCAPE) || defined(LODLANDNOISE) || defined(LODOBJECTS) || defined(LODOBJECTSHD) || defined(LANDSCAPE)) && !defined(WORLD_MAP) && !defined(TRUE_PBR)
+	SnowLighting::RelightLOD(snowState, dirLightContext, indirectContext, directionalAmbientColor,
+		color.xyz, outputAlbedo, specularColor, indirectLobeWeights.specular, material.Roughness);
+#	endif
+
+#	if defined(SNOW_DEFORMATION) && defined(PROJECTED_UV) && !defined(TRUE_PBR) && !defined(WORLD_MAP)
+	SnowLighting::RelightProjected(snowState, projectedMaterialWeight, dirLightContext, indirectContext, directionalAmbientColor,
+		dirLightColor, worldNormal.xyz, dirDetailedShadow,
+		color.xyz, outputAlbedo, specularColor, indirectLobeWeights.specular, material.Roughness);
+#	endif
 
 	directionalAmbientColor *= outputAlbedo;
 
@@ -3405,8 +3493,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		skinSSSAmount *= skinData.sssParams.z;
 #			endif
 	psout.Masks = float4(saturate(skinSSSAmount), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), masksZ, psout.Diffuse.w);
+#		elif defined(LANDSCAPE) && defined(SNOW_DEFORMATION)
+	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
+	SnowLighting::WriteLandSnowOdds(input.LandBlendWeights1, input.LandBlendWeights2.xy, psout.Masks);
 #		else
 	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
+#			if defined(SNOW_DEFORMATION)
+	SnowLighting::WriteMasksY(snowState, projWeight, psout.Masks.y);
+#			endif
 #		endif
 
 	// Stored as 1 - vertexAO so the cleared default (0) means no occlusion

@@ -63,6 +63,18 @@ public:
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
+	/** @brief Faces the reflections camera captures per frame and frames per full cube. */
+	static constexpr uint32_t kCaptureFacesPerFrame = 2;
+	static constexpr uint32_t kCaptureFramesPerCube = 6 / kCaptureFacesPerFrame;
+
+	static constexpr uint32_t kNeverCaptured = UINT32_MAX;
+	/** @brief Frame of the last capture; the occlusion is bound only while it is at most one cube old. */
+	uint32_t lastCaptureFrame = kNeverCaptured;
+	/** @brief Frame the capture resumed after a gap; the occlusion is bound again once a full cube has been redrawn since. */
+	uint32_t captureResumeFrame = kNeverCaptured;
+	/** @brief Set when a face of the layer chain was written since the occlusion was last copied for binding. */
+	bool occlusionChanged = true;
+
 private:
 	Util::FrameChecker frameChecker;
 	Util::FrameChecker frame_checker[6];
@@ -95,7 +107,7 @@ public:
 
 	/** @brief Copies the cloud occlusion cubemap and binds it as a shader resource for the reflections prepass. */
 	virtual void ReflectionsPrepass() override;
-	/** @brief Binds the cloud occlusion cubemap as a shader resource for the early prepass. */
+	/** @brief Completes the captured faces and binds the cloud occlusion for this frame's draws while a capture is current. */
 	virtual void EarlyPrepass() override;
 
 	/** @brief Installs the BSSkyShader hooks after all plugins have loaded. */

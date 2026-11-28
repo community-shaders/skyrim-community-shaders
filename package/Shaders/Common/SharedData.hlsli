@@ -640,6 +640,58 @@ namespace SharedData
 		float3 BodyDisplayColor;  // main curtain color in display space
 	};
 
+	struct SnowDeformationSettings
+	{
+		float2 WindowOrigin;
+		float InvWorldSize;
+		float padParallaxFollow;
+
+		uint DebugTerrainOverlay;
+		// Horizon snow (LOD terrain recolor): distance ramp start and 1/band,
+		// aligned to the shell's edge so the geometry hands off seamlessly.
+		float LODReplaceStart;
+		float LODReplaceFadeInv;
+		float padLODSnowSensitivity;
+
+		// Snow albedo (t33) color space + material response for the recolor.
+		float SnowIsLinear;
+		float SnowRoughnessScale;
+		float LODReplaceEnable;
+		// Snow normal map bound at t23 (0 = legacy set without one).
+		float SnowHasNormal;
+		float padSnowTexturedEnable;
+		// The object recolors (projected snow, snow-textured meshes) are on and
+		// the snow set is bound at t33.
+		float ProjSnowEnable;
+		float padLODObjectEnable;
+		float padProjUnauthoredThreshold;
+
+		// Toroidal deformation-map addressing: physical position of logical
+		// texel (0,0); every map Load adds this and masks by dim-1.
+		int2 DeformMapOrigin;
+		float padLandWetPrint;
+		float padPrintFullDepth;
+
+		// Water raster (t75) frame: world xy of texel (0,0), texel size;
+		// Dim 0 = no raster this frame. Mirror in SnowDeformation.h.
+		float2 WaterWindowOrigin;
+		float WaterWindowTexel;
+		float WaterWindowDim;
+
+		float padLandIce;
+		float padProjSnowNormalEnable;
+		// The snow set's specular level (its F0 scale), for the land recolor.
+		float SnowSpecularLevel;
+		// Land Snow Recolor: luminance where a snow layer's texel starts to
+		// read as snow. Mirror in SnowDeformation.h.
+		float LandRecolorLumLo;
+
+		int4 padPrintRect;
+
+		float padParallaxFlatten;
+		float3 padIceClock;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -667,6 +719,7 @@ namespace SharedData
 		ViewAtmosphereSettings viewAtmosphereSettings;
 		ProceduralSunSettings proceduralSunSettings;
 		ProceduralAuroraSettings proceduralAuroraSettings;
+		SnowDeformationSettings snowDeformationSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

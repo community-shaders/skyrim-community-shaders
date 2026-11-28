@@ -989,11 +989,12 @@ namespace Util
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
 
-	/** @brief Loads a DDS file into a shader resource view; same ownership rules as LoadTextureFromFile. */
+	/** @brief Loads a DDS file into a shader resource view; same ownership rules as LoadTextureFromFile. With quietIfMissing, a file that does not exist is not a warning. */
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
 		const char* filename,
 		ID3D11ShaderResourceView** out_srv,
-		ImVec2& out_size);
+		ImVec2& out_size,
+		bool quietIfMissing = false);
 
 	/** @brief Loads the menu icon textures; forwards to IconLoader. */
 	bool InitializeMenuIcons(Menu* menu);
