@@ -481,8 +481,10 @@ void SkySync::ApplyLightColor(const RE::Sky* sky) const
 	const auto [source, target] = GetLightBodies();
 	auto bodyLight = [&](Caster body) {
 		const int idx = static_cast<int>(body);
-		// Only a moon's fade alpha: Physical Sky bakes in its phase, and its horizon dim comes through currentDim
-		return (*workingLightColors)[idx] * (body == Caster::Sun ? 1.0f : colors[idx].w);
+		// Only a moon's fade alpha: Physical Sky bakes in its phase, and its horizon dim comes through currentDim.
+		// A set sun gives none, as currentDim follows the swing to the moon rather than the sun's own elevation.
+		const float bodyScale = body == Caster::Sun ? (sunBelowHorizon ? 0.0f : 1.0f) : colors[idx].w;
+		return (*workingLightColors)[idx] * bodyScale;
 	};
 	const float sourceShare = shadowFader.sourceShare;
 	const RE::NiColor color = bodyLight(source) * sourceShare + bodyLight(target) * (1.0f - sourceShare);
