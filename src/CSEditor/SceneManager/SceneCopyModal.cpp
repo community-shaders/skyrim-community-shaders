@@ -658,7 +658,7 @@ namespace
 		auto* manager = SceneSettingsManager::GetSingleton();
 		CopySummary summary;
 		// A setting that fares alike in several destinations is one row, so its key holds everything the row shows.
-		using RowKey = std::tuple<SceneSettingsManager::SettingIdentity, CopyOutcome, std::optional<std::string>, CopyRejection>;
+		using RowKey = std::tuple<SceneSettingsManager::SettingIdentity, CopyOutcome, std::string, std::optional<std::string>, CopyRejection>;
 		std::map<RowKey, size_t> rowIndices;
 		for (const auto& destination : plan.destinations) {
 			const auto candidates = manager->GetCopyCandidates(plan.source, destination.context);
@@ -682,13 +682,17 @@ namespace
 					auto previous = outcome == CopyOutcome::AlreadySet && candidate->destinationValue ?
 					                    std::optional{ FormatValue(*candidate->destinationValue) } :
 					                    std::nullopt;
+					std::string value = candidate->deleted ? T(TKEY("scene_page_copy_removed"), "Mod value removed") :
+					                    candidate->paused  ? T(TKEY("scene_page_copy_disabled"), "Disabled") :
+					                    candidate->removes ? T(TKEY("scene_page_copy_cleared"), "Override removed") :
+					                                         FormatValue(candidate->value);
 					const auto [indexIt, inserted] = rowIndices.try_emplace(
-						RowKey{ candidate->setting, outcome, previous, candidate->rejection }, summary.details.size());
+						RowKey{ candidate->setting, outcome, value, previous, candidate->rejection }, summary.details.size());
 					if (inserted)
 						summary.details.push_back({ .feature = SceneSettingsManager::GetFeatureDisplayName(featureShortName),
 							.featureShortName = featureShortName,
 							.name = candidate->displayName,
-							.value = candidate->deleted ? T(TKEY("scene_page_copy_removed"), "Mod value removed") : FormatValue(candidate->value),
+							.value = std::move(value),
 							.previous = std::move(previous),
 							.rejection = candidate->rejection,
 							.outcome = outcome,
