@@ -485,8 +485,7 @@ namespace PBR
 #if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
-				float2 coatSpecularBRDF = BRDF::EnvBRDF(material.CoatRoughness, NdotV);
-				float3 coatSpecularLobeSpecular = material.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
+				float3 coatSpecularLobeSpecular = SpecularDirectionalAlbedo(material.CoatF0, material.CoatRoughness, NdotV);
 
 				float3 layerAttenuation = 1 - coatSpecularLobeSpecular * material.CoatStrength;
 				lobeWeights.diffuse *= layerAttenuation;

@@ -56,6 +56,7 @@ class RenderDoc;
 class RemoteControl;
 class Menu;
 class SceneSettingsManager;
+class TerrainHeightMap;
 class HiZPyramid;
 
 namespace SIE
@@ -225,6 +226,7 @@ namespace globals
 		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::PlayerCharacter* player;
+		extern RE::BGSGrassManager* grassManager;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
@@ -265,6 +267,7 @@ namespace globals
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 	extern Profiler* profiler;
+	extern TerrainHeightMap* terrainHeightMap;
 	extern HiZPyramid* hiZPyramid;
 	extern SceneSettingsManager* sceneSettingsManager;
 
