@@ -41,8 +41,30 @@ namespace WaterEffects
 		return mipLevel;
 	}
 
-	// Caps the ray march so large amplitude multipliers cannot drive unbounded per-pixel work
+	// Caps the flowmap ray march so large amplitude multipliers cannot drive unbounded per-pixel work
 	static const uint MaxParallaxSteps = 64;
+
+	// The heights never exceed the summed amplitudes, so the normal maps' march spans that range: in steps of 1/16 for
+	// low amplitudes, in at most this many steps for tall ones, then refines the crossing (GetParallaxOffset).
+	// A fixed 1/16 step took 16+ dependent steps per pixel, the costliest part of the water shader.
+	static const uint CoarseParallaxSteps = 8;
+	static const uint ParallaxRefineSteps = 2;
+
+	/** @brief Step count and size that march [0, maxHeight] in steps of at most 1/16, capped at CoarseParallaxSteps. */
+	float GetParallaxStepSize(float maxHeight, out uint stepCount)
+	{
+		stepCount = clamp(uint(ceil(maxHeight * 16.0)), 1, CoarseParallaxSteps);
+		return maxHeight / stepCount;
+	}
+
+	/** @brief Where the ray's bound meets the height field between two marched points (secant). */
+	float GetParallaxCrossing(float lowBound, float lowHeight, float highBound, float highHeight)
+	{
+		float delta2 = lowBound - lowHeight;
+		float delta1 = highBound - highHeight;
+		float denominator = delta2 - delta1;
+		return denominator != 0.0 ? (highBound * delta2 - lowBound * delta1) / denominator : highBound;
+	}
 
 	/** @brief Intersects the last marched segment with the height field, or returns the last bound if the march hit MaxParallaxSteps. */
 	float GetParallaxAmount(float currBound, float currHeight, float prevHeight, float stepSize)
@@ -106,19 +128,40 @@ namespace WaterEffects
 		// The water plane is the mean surface, so march relative to the mean height
 		float meanHeight = GetMeanHeight(normalsAmplitude);
 
-		float stepSize = rcp(16.0);
+		uint stepCount;
+		float stepSize = GetParallaxStepSize(dot(abs(normalsAmplitude), 1.0), stepCount);
 		float currBound = 0.0;
 		float currHeight = GetHeight(input, -meanHeight * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		float prevHeight = currHeight;
 
-		[loop] for (uint i = 0; i < MaxParallaxSteps && currHeight > currBound; i++)
+		[loop] for (uint i = 0; i < stepCount && currHeight > currBound; i++)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
 			currHeight = GetHeight(input, (currBound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		}
 
-		return parallaxOffsetTS.xy * (GetParallaxAmount(currBound, currHeight, prevHeight, stepSize) - meanHeight);
+		// The coarse steps only bracket the crossing: a few secant steps inside the bracket find it about as
+		// closely as a fine march would.
+		if (currHeight <= currBound) {
+			float lowBound = currBound - stepSize, lowHeight = prevHeight;
+			float highBound = currBound, highHeight = currHeight;
+			[unroll] for (uint k = 0; k < ParallaxRefineSteps; k++)
+			{
+				float bound = GetParallaxCrossing(lowBound, lowHeight, highBound, highHeight);
+				float height = GetHeight(input, (bound - meanHeight) * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
+				if (height > bound) {
+					lowBound = bound;
+					lowHeight = height;
+				} else {
+					highBound = bound;
+					highHeight = height;
+				}
+			}
+			return parallaxOffsetTS.xy * (GetParallaxCrossing(lowBound, lowHeight, highBound, highHeight) - meanHeight);
+		}
+
+		return parallaxOffsetTS.xy * (currBound - meanHeight);
 	}
 
 #if defined(FLOWMAP)
