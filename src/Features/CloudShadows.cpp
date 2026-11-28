@@ -80,6 +80,7 @@ void CloudShadows::CheckResourcesSide(int side)
 	context->ClearRenderTargetView(cloudShadowLayerRTVs[0][side], black);
 	globals::profiler->EndPass();
 	renderedLayersMask[side] = 0;
+	occlusionChanged = true;
 }
 
 void CloudShadows::PropagateToCompletion(int side)
@@ -123,6 +124,7 @@ void CloudShadows::PropagateToCompletion(int side)
 			texCloudShadowLayers[fromLayer]->resource.get(), subresource, nullptr);
 	}
 	globals::profiler->EndPass();
+	occlusionChanged = true;
 }
 
 void CloudShadows::SkyShaderHacks()
@@ -195,6 +197,11 @@ void CloudShadows::SkyShaderHacks()
 		context->PSSetShaderResources(17, 1, &cubemapDepth.depthSRV);
 
 		renderedLayersMask[side] |= (1u << layer);
+		// After a gap the faces not yet redrawn still hold the previous sky
+		if (globals::state->frameCount - lastCaptureFrame > kCaptureFramesPerCube)
+			captureResumeFrame = globals::state->frameCount;
+		lastCaptureFrame = globals::state->frameCount;
+		occlusionChanged = true;
 	}
 
 	// Release the references OMGetRenderTargets added
@@ -262,12 +269,14 @@ void CloudShadows::ReflectionsPrepass()
 				for (auto* rtv : cloudShadowLayerRTVs[kMaxCloudLayers - 1])
 					context->ClearRenderTargetView(rtv, black);
 				occlusionClearedWithoutClouds = true;
+				occlusionChanged = true;
 			}
 		} else {
 			occlusionClearedWithoutClouds = false;
 		}
 
-		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
+		if (std::exchange(occlusionChanged, false))
+			context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
 		globals::profiler->EndPass();
 
 		ID3D11ShaderResourceView* srv = texCubemapCloudOccCopy->srv.get();
@@ -283,6 +292,22 @@ void CloudShadows::EarlyPrepass()
 		previouslyRenderedSide = -1;
 	}
 	globalRenderedMask = 0;
+
+	// Draws outside the reflections pass read t25 too; an occlusion older than one cube of captures belongs to another sky,
+	// and so do the faces not yet redrawn in the first cube after a gap
+	auto context = globals::d3d::context;
+	const uint frame = globals::state->frameCount;
+	const bool current = lastCaptureFrame != kNeverCaptured && frame - lastCaptureFrame <= kCaptureFramesPerCube &&
+	                     frame - captureResumeFrame >= kCaptureFramesPerCube;
+	if (current && std::exchange(occlusionChanged, false)) {
+		globals::profiler->BeginPass("CloudShadows::OcclusionCopy");
+		context->CopyResource(texCubemapCloudOccCopy->resource.get(), texCloudShadowLayers[kMaxCloudLayers - 1]->resource.get());
+		globals::profiler->EndPass();
+	}
+
+	ID3D11ShaderResourceView* srv = current ? texCubemapCloudOccCopy->srv.get() : nullptr;
+	context->PSSetShaderResources(25, 1, &srv);
+	context->CSSetShaderResources(25, 1, &srv);
 }
 
 void CloudShadows::SetupResources()
