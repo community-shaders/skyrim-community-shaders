@@ -1070,6 +1070,7 @@ namespace Hooks
 				auto state = globals::state;
 				auto shaderCache = globals::shaderCache;
 				auto& vl = globals::features::volumetricLighting;
+				bool isVLGenerate = false;
 
 				if (shaderCache->IsEnabled() && state->ShaderEnabled(RE::BSShader::Type::ImageSpace)) {
 					RE::BSImagespaceShader* isShader = CurrentlyDispatchedShader;
@@ -1079,6 +1080,8 @@ namespace Hooks
 							techniqueId = 0;
 							if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingGenerateCS"sv) {
 								isShader = vl.GetOrCreateGenerateCS(CurrentlyDispatchedComputeShader);
+								isVLGenerate = true;
+								vl.SetGenerateResources(true);
 							} else if (CurrentlyDispatchedComputeShader->name == "ISVolumetricLightingRaymarchCS"sv) {
 								isShader = vl.GetOrCreateRaymarchCS(CurrentlyDispatchedComputeShader);
 							}
@@ -1101,6 +1104,8 @@ namespace Hooks
 					}
 				}
 				func(renderer, shader, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+				if (isVLGenerate)
+					vl.SetGenerateResources(false);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};

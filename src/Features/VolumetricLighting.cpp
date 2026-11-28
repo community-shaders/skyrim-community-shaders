@@ -2,6 +2,7 @@
 
 #include "I18n/I18n.h"
 #include "InteriorSun.h"
+#include "PhysicalSky.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/Game.h"
@@ -299,6 +300,25 @@ void VolumetricLighting::SetDimensionsCB() const
 {
 	auto cb = vlDataCB->CB();
 	globals::d3d::context->CSSetConstantBuffers(1, 1, &cb);
+}
+
+void VolumetricLighting::SetGenerateResources(const bool bind) const
+{
+	const auto& physicalSky = globals::features::physicalSky;
+	if (!physicalSky.loaded)
+		return;
+
+	auto* context = globals::d3d::context;
+	// The game binds no per-frame buffer for this dispatch, but the shadow volume lookup reads the camera position from it
+	if (bind) {
+		ID3D11Buffer* perFrame = *globals::game::perFrame.get();
+		context->CSSetConstantBuffers(PerFrameSlot, 1, &perFrame);
+	}
+	// Last frame's volume, since Physical Sky renders it after this pass; cleared after so its UAV bind doesn't conflict
+	ID3D11ShaderResourceView* shadowVolume = bind && physicalSky.texShadowVolume ? physicalSky.texShadowVolume->srv.get() : nullptr;
+	ID3D11ShaderResourceView* shadowMean = bind && physicalSky.texCloudShadowMean ? physicalSky.texCloudShadowMean->srv.get() : nullptr;
+	context->CSSetShaderResources(CloudShadowVolumeSlot, 1, &shadowVolume);
+	context->CSSetShaderResources(CloudShadowMeanSlot, 1, &shadowMean);
 }
 
 void VolumetricLighting::SetGroupCountsHCS(uint32_t& threadGroupCountX, uint32_t& threadGroupCountY) const
