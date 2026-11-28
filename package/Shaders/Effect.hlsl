@@ -486,15 +486,23 @@ cbuffer PerGeometry : register(b2)
 
 #	include "Common/ShadowSampling.hlsli"
 
-#	if defined(LIGHTING)
+/** @brief Share of an authored, unlit colour kept under the given light: all of it from unit luminance up, proportionally less below. */
+float GetAuthoredColorScale(float3 light)
+{
+	return saturate(Color::RGBToLuminance(light));
+}
+
+// Alpha-blended particles without LIGHTING still carry a lighting influence, but the engine's PropertyColor holds no light
+#	if defined(LIGHTING) || (defined(PARTICLES) && !defined(ADDBLEND) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL) && \
+								 !defined(MEMBRANE) && !defined(BLOOD) && !defined(PROJECTED_UV))
+#		define SCENE_LIT
+#	endif
+
+#	if defined(SCENE_LIT)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, inout float shadowVariance)
 {
-	float3 color = DLightColor.xyz * Color::EffectLightingScale;
 	const float3 sceneAmbientColor = ShadowSampling::GetAmbientLighting(worldPosition);
 	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
-	if (suppressExternalEmittance) {
-		color = sceneAmbientColor + ShadowSampling::GetDirectionalLighting();
-	}
 
 #		if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
@@ -506,9 +514,10 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	}
 #		endif
 
-	float3 dirColor;
-	float3 ambientColor;
-	ShadowSampling::ExtractLightingWithAmbient(color, sceneAmbientColor, dirColor, ambientColor);
+	// Scene lighting, not the engine's DLightColor, so features that change the sun or ambient (IBL, Physical Sky) reach effects
+	const float sceneLightingScale = suppressExternalEmittance ? 1.0 : Color::EffectLightingScale;
+	float3 dirColor = ShadowSampling::GetDirectionalLighting() * sceneLightingScale;
+	float3 ambientColor = sceneAmbientColor * sceneLightingScale;
 
 #		if defined(EFFECTS11)
 	if (SharedData::enbSettings.Enable) {
@@ -540,8 +549,10 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #		endif
 
 #		if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled)
+	if (SharedData::physSkyData.enabled) {
 		dirColor *= PhysSky::SampleDirLightTr(SampDepthSampler);
+		dirColor *= PhysSky::GetDirlightTransmittance(worldPosition + FrameBuffer::CameraPosAdjust.xyz, SampDepthSampler, true);
+	}
 #		endif
 
 #		if defined(SKYLIGHTING)
@@ -553,30 +564,35 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	}
 #		endif
 
-	color = dirColor + ambientColor;
+	float3 color = dirColor + ambientColor;
 
-#		if defined(LIGHT_LIMIT_FIX)
+	// The engine fills the geometry point lights only for LIGHTING
+#		if defined(LIGHTING)
+#			if defined(LIGHT_LIMIT_FIX)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
-#		endif
+#			endif
 	{
 		float4 lightDistanceSquared = (PLightPositionX[0] - msPosition.xxxx) * (PLightPositionX[0] - msPosition.xxxx) + (PLightPositionY[0] - msPosition.yyyy) * (PLightPositionY[0] - msPosition.yyyy) + (PLightPositionZ[0] - msPosition.zzzz) * (PLightPositionZ[0] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
-#		if defined(ENABLE_LL)
+#			if defined(ENABLE_LL)
 		lightFadeMul = pow(lightFadeMul, TransferFunctions::GAME_GAMMA);
-#		endif
-#		if defined(EFFECTS11)
+#			endif
+#			if defined(EFFECTS11)
 		float pointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
-#		else
+#			else
 		float pointScale = 1.0;
-#		endif
+#			endif
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingScale, 1.0.xxxx) * pointScale;
 		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingScale, 1.0.xxxx) * pointScale;
 		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingScale, 1.0.xxxx) * pointScale;
 	}
+#		endif
 
 	return color;
 }
-#	else
+#	endif
+
+#	if !defined(LIGHTING)
 /** @brief Average sun shadow along the view ray through the particle, 1 outside the world or in interiors. */
 float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 {
@@ -614,8 +630,8 @@ float GetViewRayShadow(float3 worldPosition, float2 screenPosition, float depth)
 	return shadow;
 }
 
-/** @brief Takes the shadowed share of the sun out of a lit colour; unshadowed, the colour is unchanged. */
-float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
+/** @brief Scene light with the view-ray shadowed share of the directional light removed; unshadowed, it equals sceneLight. */
+float3 GetShadowedSceneLight(float3 sceneLight, float3 worldPosition, float2 screenPosition, float depth, inout float shadowVariance)
 {
 	float shadow = GetViewRayShadow(worldPosition, screenPosition, depth);
 
@@ -633,9 +649,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 		sunlightTransmission *= PhysSky::SampleDirLightTr(SampDepthSampler);
 #		endif
 
-	float3 dirLight = ShadowSampling::GetDirectionalLighting();
-	float3 sceneLight = ShadowSampling::GetSceneLightingColor(worldPosition);
-	return color * (1.0 - saturate(dirLight * (1.0 - sunlightTransmission) / max(sceneLight, EPSILON_DIVISION)));
+	return max(sceneLight - ShadowSampling::GetDirectionalLighting() * (1.0 - sunlightTransmission), 0.0);
 }
 #	endif
 
@@ -689,6 +703,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = PropertyColor.xyz;
+	float unlitScale = 1.0;
+	bool sceneLit = false;
 	float shadowVariance = 1.0;
 
 	bool isFire = false;
@@ -852,45 +868,58 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 
 	// Light only pixels that survive the alpha test.
-#	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
-
+#	if defined(SCENE_LIT)
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
+#		endif
+#		if !defined(LIGHTING)
+	[branch] if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject) && lightingInfluence > 0.0)
+#		endif
+	{
+#		if defined(LIGHTING)
+		const float3 msPosition = input.MSPosition.xyz;
+#		else
+		const float3 msPosition = 0.0;
+#		endif
+		propertyColor = GetLightingColor(msPosition, input.WorldPosition.xyz, input.Position.xy, shadowVariance);
 
-	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
+#		if defined(LIGHT_LIMIT_FIX)
+		bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
 #			if defined(EFFECTS11)
-	float clusteredPointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+		float clusteredPointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
 #			else
-	float clusteredPointScale = 1.0;
+		float clusteredPointScale = 1.0;
 #			endif
 
-	uint clusterIndex = 0;
-	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
-		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
-		uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
-		[loop] for (uint i = 0; i < lightCount; i++)
-		{
-			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
-			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-			const bool localShadow = light.lightFlags & LightLimitFix::LightFlags::LocalShadow;
-			if (LightLimitFix::IsLightIgnored(light) || ((light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) && !localShadow)) {
-				continue;
+		uint clusterIndex = 0;
+		if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
+			lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+			uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+			[loop] for (uint i = 0; i < lightCount; i++)
+			{
+				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
+				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+				const bool localShadow = light.lightFlags & LightLimitFix::LightFlags::LocalShadow;
+				if (LightLimitFix::IsLightIgnored(light) || ((light.lightFlags & LightLimitFix::LightFlags::ShadowCaster) && !localShadow)) {
+					continue;
+				}
+				float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
+				float lightDist = length(lightDirection);
+
+				float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
+				[branch] if (intensityMultiplier > 1e-5 && localShadow)
+					intensityMultiplier *= LightLimitFix::GetLocalShadowWithLightFade(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, LightLimitFix::FirstPerson ? LightLimitFix::WorldEyePosition.xyz : FrameBuffer::CameraPosAdjust.xyz, lightDirection / max(lightDist, 1e-5), false, Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount));
+
+				float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
+				propertyColor += lightColor * clusteredPointScale;
 			}
-			float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
-			float lightDist = length(lightDirection);
-
-			float intensityMultiplier = LightLimitFix::GetAttenuation(lightDist, light);
-			[branch] if (intensityMultiplier > 1e-5 && localShadow)
-				intensityMultiplier *= LightLimitFix::GetLocalShadowWithLightFade(LinearSampler, light.localShadowIndex, input.WorldPosition.xyz, LightLimitFix::FirstPerson ? LightLimitFix::WorldEyePosition.xyz : FrameBuffer::CameraPosAdjust.xyz, lightDirection / max(lightDist, 1e-5), false, Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount));
-
-			float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingScale;
-			propertyColor += lightColor * clusteredPointScale;
 		}
-	}
 
 #		endif
+		unlitScale = GetAuthoredColorScale(propertyColor);
+		sceneLit = true;
+	}
 #	elif defined(MEMBRANE)
 	propertyColor *= 0;
 	lightingInfluence = 0;
@@ -902,7 +931,7 @@ PS_OUTPUT main(PS_INPUT input)
 		propertyColor *= Color::ParticleEffectMult();
 #	endif
 
-	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence);
+	float3 lightColor = lerp(baseColor.xyz * unlitScale, propertyColor * baseColor.xyz, lightingInfluence);
 
 #	if defined(ENABLE_LL) && !defined(DEFERRED) && !defined(MEMBRANE) && !defined(BLOOD) && !defined(MULTBLEND) && !defined(MULTBLEND_DECAL)
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SourceAlphaBlend) &&
@@ -913,24 +942,23 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0;
+	// Scene-lit colour already holds the shadowed sun, ambient and point lights; the ratio below is for authored colour
+	bool applyViewRayShadow = Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0 && !sceneLit;
 #		if defined(EFFECTS11) && defined(IS_VOLUMETRIC_FOG)
 	// The fog block above already shadowed it
 	applyViewRayShadow = applyViewRayShadow && !isEnbVolumetricFog;
 #		endif
 	if (applyViewRayShadow) {
-		// One call site: each GetLightingShadow inlines the whole view-ray shadow loop.
-		float3 unshadowedColor = lightColor;
+		// One call site: each GetShadowedSceneLight inlines the whole view-ray shadow loop.
+		const float3 sceneLight = ShadowSampling::GetSceneLightingColor(input.WorldPosition.xyz);
+		const float3 shadowedLight = GetShadowedSceneLight(sceneLight, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
 #		if defined(PHYSICAL_SKY)
-		const bool lightSkyStatics = SharedData::physSkyData.enabled && SharedData::physSkyData.lightSkyStatics;
-		if (lightSkyStatics)
-			unshadowedColor = ShadowSampling::GetSceneLightingColor(input.WorldPosition.xyz);
+		if (SharedData::physSkyData.enabled && SharedData::physSkyData.lightSkyStatics)
+			lightColor = baseColor.xyz * shadowedLight * SharedData::physSkyData.skyStaticsBrightness / Math::PI;
+		else
 #		endif
-		lightColor = GetLightingShadow(unshadowedColor, input.WorldPosition.xyz, input.Position.xy, depth, shadowVariance);
-#		if defined(PHYSICAL_SKY)
-		if (lightSkyStatics)
-			lightColor = baseColor.xyz * lightColor * SharedData::physSkyData.skyStaticsBrightness / Math::PI;
-#		endif
+			// Authored colours keep their hue: a per-channel ratio would tint them opposite a coloured light
+			lightColor *= Color::RGBToLuminance(shadowedLight) / max(Color::RGBToLuminance(sceneLight), EPSILON_DIVISION) * GetAuthoredColorScale(sceneLight);
 	}
 #	endif
 
