@@ -67,7 +67,7 @@ Presets/MyModpack/
 
 ## Default packs
 
-`Default Physical Sky` ships with Physical Sky and `Default Post Processing` with Post Processing. At startup, the first of these whose `requiredFeatures` are all installed is applied (made active, its Baseline enabled and its `disableAtBoot` saved) the first time it becomes available, unless another preset or an `enbseries.ini` install is in use. A better default replaces a lesser one in use. Each pack is applied at most once, so turning it off sticks; the packs already seen are kept as `defaultPacksSeen` in the `Presets` section of `SettingsUser.json`.
+`Default Physical Sky` ships with Physical Sky and `Default Post Processing` with Post Processing. At startup, the first of these whose `requiredFeatures` are all installed is applied (made active, its Baseline enabled and its `disableAtBoot` saved) the first time it becomes available, unless another preset or an Effects 11 Legacy install (`enbseries.ini` plus an `enbseries` folder) is in use. A better default replaces a lesser one in use. Each pack is applied at most once, so turning it off sticks; the packs already seen are kept as `defaultPacksSeen` in the `Presets` section of `SettingsUser.json`.
 
 ## Discovery
 
