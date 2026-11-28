@@ -650,15 +650,17 @@ void PhysicalSky::SetupVolumetricResources()
 			.Texture3D = { .MipSlice = 0, .FirstWSlice = 0, .WSize = kShadowVolD }
 		};
 
-		texShadowVolume = eastl::make_unique<Texture3D>(tex3d_desc, "PhysicalSky::VolumetricCloudShadowVolume");
-		texShadowVolume->CreateSRV(srv_desc);
-		texShadowVolume->CreateUAV(uav_desc);
-		texShadowVolumeRaw = eastl::make_unique<Texture3D>(tex3d_desc, "PhysicalSky::CloudShadowIntegration");
-		texShadowVolumeRaw->CreateSRV(srv_desc);
-		texShadowVolumeRaw->CreateUAV(uav_desc);
-
-		context->ClearUnorderedAccessViewFloat(texShadowVolume->uav.get(), kClearShadowVolume);
-		context->ClearUnorderedAccessViewFloat(texShadowVolumeRaw->uav.get(), kClearShadowVolume);
+		const auto createShadowVolume = [&](const char* name) {
+			auto texture = eastl::make_unique<Texture3D>(tex3d_desc, name);
+			texture->CreateSRV(srv_desc);
+			texture->CreateUAV(uav_desc);
+			context->ClearUnorderedAccessViewFloat(texture->uav.get(), kClearShadowVolume);
+			return texture;
+		};
+		// The filtered volume and its history swap every frame, so their names alternate.
+		texShadowVolume = createShadowVolume("PhysicalSky::VolumetricCloudShadowVolume A");
+		texShadowVolumeHistory = createShadowVolume("PhysicalSky::VolumetricCloudShadowVolume B");
+		texShadowVolumeRaw = createShadowVolume("PhysicalSky::CloudShadowIntegration");
 		// Metadata row plus endpoint-inclusive vertical mean transmittance profile.
 		texCloudShadowMean = CreateCloudTexture(1, kShadowMeanHeights + 1u, DXGI_FORMAT_R32G32B32A32_FLOAT, "PhysicalSky::CloudShadowMean");
 		context->ClearUnorderedAccessViewFloat(texCloudShadowMean->uav.get(), kClearLuminance);
@@ -1415,14 +1417,18 @@ void PhysicalSky::RenderVolumetricClouds(VolumetricCloudPass a_pass)
 		}
 		ID3D11UnorderedAccessView* nullUav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
+		texShadowVolume.swap(texShadowVolumeHistory);
 		auto* rawShadow = texShadowVolumeRaw->srv.get();
+		auto* shadowHistory = texShadowVolumeHistory->srv.get();
 		context->CSSetShaderResources(14, 1, &rawShadow);
+		context->CSSetShaderResources(38, 1, &shadowHistory);
 		auto* filteredShadow = texShadowVolume->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &filteredShadow, nullptr);
 		context->CSSetShader(csVolShadowResample.get(), nullptr, 0);
 		context->Dispatch((kShadowVolW + 7u) / 8u, (kShadowVolH + 7u) / 8u, (kShadowVolD + 3u) / 4u);
 		context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
 		context->CSSetShaderResources(14, 1, &nullPsShadowSrv);
+		context->CSSetShaderResources(38, 1, &nullPsShadowSrv);
 		globals::profiler->EndPass();
 
 		context->CSSetShaderResources(69, 1, &nullPsShadowSrv);

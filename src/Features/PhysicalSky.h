@@ -412,6 +412,7 @@ struct PhysicalSky final : public Feature
 	winrt::com_ptr<ID3D11ComputeShader> csLightningQuery, csLightningComposite, csLightningCubeComposite;
 	eastl::unique_ptr<Texture3D> texShadowVolume = nullptr;  // cloud shadow volume 3D
 	eastl::unique_ptr<Texture3D> texShadowVolumeRaw = nullptr;
+	eastl::unique_ptr<Texture3D> texShadowVolumeHistory = nullptr;  // previous frame's texShadowVolume, swapped each shadow pass
 	eastl::unique_ptr<Texture2D> texCloudShadowMean = nullptr;
 
 	// ImGui::Image cannot sample a cubemap or a volume texture, so those are shown
