@@ -14,6 +14,7 @@
 #include "Features/ExponentialHeightFog.h"
 #include "Features/IBL.h"
 #include "Features/PhysicalSky.h"
+#include "Features/ProceduralGrass.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -348,6 +349,11 @@ void Deferred::DeferredPasses()
 	bool interior = Util::IsInterior();
 
 	auto& skylighting = globals::features::skylighting;
+	auto& proceduralGrass = globals::features::proceduralGrass;
+	if (proceduralGrass.loaded) {
+		proceduralGrass.DeferredRendering();
+		context->CopyResource(finalDepthCopy.texture, depth.texture);
+	}
 
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)

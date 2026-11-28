@@ -26,6 +26,7 @@
 #include "Features/PhysicalSky.h"
 #include "Features/PostProcessing.h"
 #include "Features/ProceduralAurora.h"
+#include "Features/ProceduralGrass.h"
 #include "Features/ProceduralSun.h"
 #include "Features/RainRefraction.h"
 #include "Features/ScreenSpaceGI.h"
@@ -287,6 +288,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::hdrDisplay,
 		&globals::features::physicalSky,
 		&globals::features::skin,
+		&globals::features::proceduralGrass,
 		&globals::features::postProcessing,
 		&globals::features::proceduralAurora
 	};

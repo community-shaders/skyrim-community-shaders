@@ -218,14 +218,32 @@ void GrassCollision::Update()
 
 		prevCellID = cellID;
 		prevEyePosNI = eyePosNI;
-
-		ID3D11Buffer* buffers[1];
-		buffers[0] = perFrame->CB();
-		context->VSSetConstantBuffers(5, ARRAYSIZE(buffers), buffers);
-
-		ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
-		context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
 	}
+
+	BindGrassShaderResources(globals::d3d::context);
+}
+
+void GrassCollision::BindGrassShaderResources(ID3D11DeviceContext* context) const
+{
+	if (!context || !perFrame || !collisionTexture)
+		return;
+
+	ID3D11Buffer* buffer = perFrame->CB();
+	context->VSSetConstantBuffers(5, 1, &buffer);
+	ID3D11ShaderResourceView* srv = collisionTexture->srv.get();
+	context->VSSetShaderResources(100, 1, &srv);
+}
+
+void GrassCollision::BindProceduralGrassGenerationResources(ID3D11DeviceContext* context) const
+{
+	if (!context || !perFrame || !collisionTexture)
+		return;
+
+	// b5 is occupied by SharedData in the generator.
+	ID3D11Buffer* buffer = perFrame->CB();
+	context->CSSetConstantBuffers(11, 1, &buffer);
+	ID3D11ShaderResourceView* srv = collisionTexture->srv.get();
+	context->CSSetShaderResources(100, 1, &srv);
 }
 
 void GrassCollision::LoadSettings(json& o_json)
@@ -278,7 +296,7 @@ void GrassCollision::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		collisionTexture = new Texture2D(texDesc);
+		collisionTexture = new Texture2D(texDesc, "GrassCollision::Collision");
 		collisionTexture->CreateSRV(srvDesc);
 		collisionTexture->CreateUAV(uavDesc);
 	}

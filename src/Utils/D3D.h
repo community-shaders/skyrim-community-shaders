@@ -1,13 +1,29 @@
 #pragma once
 #include <array>
+#include <cstdint>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <filesystem>
 #include <fstream>
 #include <winrt/base.h>
 
+class Texture2D;
+
 namespace Util
 {
+	/** @brief Releases a COM reference and sets the pointer to null. */
+	template <class T>
+	void ReleaseAndNull(T*& resource)
+	{
+		if (resource) {
+			resource->Release();
+			resource = nullptr;
+		}
+	}
+
+	/** @brief Creates a single-mip square texture with an SRV and optional UAV. The caller owns the result. */
+	Texture2D* CreateSquareTexture(uint32_t dim, DXGI_FORMAT format, bool unorderedAccess, const char* name);
+
 	/**
 	 * @brief ID3DInclude handler resolving #include paths under Data\Shaders,
 	 *        shared by every HLSL compile call site in this codebase.
