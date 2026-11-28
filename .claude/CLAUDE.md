@@ -97,6 +97,8 @@ Versioning (enforced by `tools/feature_version_audit.py`):
 - ImGui: always pair `BeginTable()` / `EndTable()`; use RAII for style changes.
 - UI components extracted from `Menu` (`src/Menu/*Renderer`) access its private methods via callbacks rather than making them public; UI state lives in `Menu` and is passed to components as parameters.
 - Doxygen comments on public methods.
+- Comments describe the code as it is now: what it does and why (physics, invariants, references, "Mirrors X" sync notes). Never write its history: no "used to", "before", "no longer", "instead of the old", "the former X", "was replaced", dated notes, or "done this way, it drew/left/broke Y" counterfactuals about approaches that were tried. That belongs in the commit message. When you change code, rewrite the comment to describe the new behaviour; do not append what changed.
+- No changelog-style or per-session docs for a feature (`docs/` write-ups of what was changed when). Document behaviour in the code's comments.
 - Minimize D3D state changes and restore state after modifying it. Respect the split between Skyrim's rendering thread and game logic thread.
 - Validate `.ini` files and user settings: malformed configs can crash Skyrim.
 - Features must disable cleanly on shader compilation failure.
